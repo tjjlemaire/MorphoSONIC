@@ -1,0 +1,1 @@
+ExSONIC: spatially Extended SONIC model implementation in Python+NEURON
