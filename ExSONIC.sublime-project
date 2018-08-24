@@ -1,0 +1,38 @@
+{
+	"build_systems":
+	[
+		{
+			"file_regex": "^[ ]*File \"(...*?)\", line ([0-9]*)",
+			"name": "Anaconda Python Builder",
+			"selector": "source.python",
+			"shell_cmd": "\"C:\\ProgramData\\Anaconda3\\python.exe\" -u \"$file\""
+		}
+	],
+	"folders":
+	[
+		{
+			"file_exclude_patterns":
+			[
+				"*.sublime-workspace",
+				"MANIFEST.in",
+				"LICENSE",
+				"conf.py",
+				"index.rst",
+				"*.gitignore",
+				"__init__.py",
+				"*.c"
+			],
+			"folder_exclude_patterns":
+			[
+				"deprecated",
+				"docs",
+				"lookups",
+				"graphs",
+				"templates",
+				"*.egg-info"
+			],
+			"path": "."
+		}
+	],
+	"translate_tabs_to_spaces": true
+}
