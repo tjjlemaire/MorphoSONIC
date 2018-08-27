@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 # @Author: Theo
 # @Date:   2018-08-21 19:48:04
-# @Last Modified by:   Theo
-# @Last Modified time: 2018-08-24 22:26:13
+# @Last Modified by:   Theo Lemaire
+# @Last Modified time: 2018-08-25 03:26:35
 
 
 ''' Utilities to manipulate HOC objects. '''
@@ -81,7 +81,7 @@ def attachIClamp(sec, dur, amp, delay=0, loc=0.5):
 
         :param sec: section to attach the current clamp.
         :param dur: duration of the stimulus (ms).
-        :param amp: magnitude of the current (mA/m2).
+        :param amp: magnitude of the current (nA).
         :param delay: onset of the injected current (ms)
         :param loc: location on the section where the stimulus is placed
         :return: IClamp object (must be returned to caller space to be effective)
@@ -89,7 +89,7 @@ def attachIClamp(sec, dur, amp, delay=0, loc=0.5):
     pulse = h.IClamp(sec(loc))
     pulse.delay = delay
     pulse.dur = dur
-    pulse.amp = amp * sec(0.5).area() * 1e-6  # nA
+    pulse.amp = amp  # nA
 
     return pulse
 
@@ -127,26 +127,37 @@ def setTimeProbe():
     return t
 
 
-def setStimProbe(cell):
+def setStimProbe(section, mechname):
     ''' Set recording vector for stimulation state.
 
-        :param cell: cell to record from
+        :param section: section to record from
+        :param mechname: variable parent mechanism
         :return: stimulation state recording vector
     '''
     states = h.Vector()
-    states.record(getattr(cell.sections[0](0.5), cell.mechname)._ref_stimon)
+    states.record(getattr(section(0.5), mechname)._ref_stimon)
     return states
 
 
-def setRangeProbes(sections, var):
+def setRangeProbe(section, var, loc=0.5):
+    ''' Set recording vector for a range variable in a specific section location.
+
+        :param section: section to record from
+        :param var: range variable to record
+        :return: list of recording vectors
+    '''
+    probe = h.Vector()
+    probe.record(getattr(section(loc), '_ref_{}'.format(var)))
+    return probe
+
+
+def setRangesProbes(sections, var, locs=None):
     ''' Set recording vectors for a range variable in different sections.
 
         :param sections: sections to record from
         :param var: range variable to record
         :return: list of recording vectors
     '''
-    probes = []
-    for sec in sections:
-        probes.append(h.Vector())
-        probes[-1].record(getattr(sec(0.5), '_ref_{}'.format(var)))
-    return probes
+    if locs is None:
+        locs = [0.5] * len(sections)
+    return map(setRangeProbe, sections, [var] * len(sections), locs)
