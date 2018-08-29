@@ -12,14 +12,12 @@ class SeriesConnector:
         :param mechname: name of the mechanism that compute axial current contribution
         :param vref: name of the reference voltage varibale to compute axial currents
         :param rmin (optional): lower bound for axial resistance density (Ohm.cm2)
-        :param verbose: boolean indicating whether to output details of the connection process
     '''
 
-    def __init__(self, mechname='Iax', vref='v', rmin=1e2, verbose=False):
+    def __init__(self, mechname='Iax', vref='v', rmin=2e2):
         self.mechname = mechname
         self.vref = vref
         self.rmin = rmin  # Ohm.cm2
-        self.verbose = verbose
 
     def __str__(self):
         return 'Series connector object: {} density mechanism, reference voltage variable = "{}"{}'\
@@ -39,8 +37,12 @@ class SeriesConnector:
         ''' Compute section axial resistance (in Ohm) '''
         return sec.Ra * (sec.L * 1e-4) / self.axialArea(sec)
 
-    def attach(self, sec):
-        ''' Insert density mechanism to section and set appropriate axial conduction parameters. '''
+    def attach(self, sec, verbose=False):
+        ''' Insert density mechanism to section and set appropriate axial conduction parameters.
+
+            :param sec: section to attach
+            :param verbose: boolean indicating whether to output details of the connection process
+        '''
 
         # Insert axial current density mechanism
         sec.insert(self.mechname)
@@ -50,13 +52,15 @@ class SeriesConnector:
         R = self.resistance(sec)  # section resistance (Ohm)
 
         # Optional: bound resistance to ensure (resistance * membrane area) is always above threshold,
-        # in order to limit the mangnitude of axial currents and thus ensure convergence of simulation
+        # in order to limit the magnitude of axial currents and thus ensure convergence of simulation
         if self.rmin is not None:
-            if R * Am < self.rmin:
-                if self.verbose:
-                    print('R*Am = {:.2e} Ohm.cm2 -> bounded to {:.2e} Ohm.cm2'
-                          .format(R * Am, self.rmin))
-            R = max(R, self.rmin / Am)
+            if R < self.rmin / Am:
+                if verbose:
+                    print('R*Am = {:.1e} Ohm.cm2 -> bounded to {:.1e} Ohm.cm2'.format(
+                        R * Am, self.rmin))
+                R = self.rmin / Am
+            elif verbose:
+                print('R*Am = {:.1e} Ohm.cm2 -> not bounded'.format(R * Am))
 
         # Set section propeties to Iax mechanism
         setattr(sec, 'R_{}'.format(self.mechname), R)
@@ -70,8 +74,6 @@ class SeriesConnector:
             setattr(sec, 'R{}_{}'.format(suffix, self.mechname), R)  # Ohm
             h.setpointer(getattr(sec(0.5), '_ref_{}'.format(self.vref)),
                          'V{}'.format(suffix), getattr(sec(0.5), self.mechname))
-
-        return sec
 
     def connect(self, sec1, sec2):
         ''' Connect two adjacent sections in series to enable trans-sectional axial current. '''

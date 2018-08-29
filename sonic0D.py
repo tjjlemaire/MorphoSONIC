@@ -2,7 +2,7 @@
 # @Author: Theo
 # @Date:   2018-08-15 15:08:23
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-08-27 22:04:25
+# @Last Modified time: 2018-08-29 14:51:26
 
 
 import os
@@ -213,6 +213,7 @@ class Sonic0D:
         else:
             self.cvode.active(1)
             if atol is not None:
+                def_atol = self.cvode.atol()
                 self.cvode.atol(atol)
                 print('adaptive time step integration (atol = {})'.format(self.cvode.atol()))
 
@@ -224,6 +225,10 @@ class Sonic0D:
         # Integrate
         while h.t < tstop:
             h.fadvance()
+
+        # Set absolute error tolerance back to default value if changed
+        if atol is not None:
+            self.cvode.atol(def_atol)
 
         return 0
 
@@ -372,7 +377,7 @@ def compareAStim(neuron, a, Fdrive, Adrive, tstim, toffset, PRF, DC, dt=None, at
                          .format(pow10_format(dt * 1e3))),
                  fontsize=18)
 
-    # Plot charge profiles
+    # Plot charge density profiles
     ax = axes[0]
     ax.plot(t_Python, Qm_Python, label='Python')
     ax.plot(t_NEURON, Qm_NEURON, label='NEURON')

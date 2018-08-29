@@ -2,7 +2,7 @@
 # @Author: Theo
 # @Date:   2018-08-15 15:08:23
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-08-27 22:14:59
+# @Last Modified time: 2018-08-29 19:02:26
 
 import time
 import logging
@@ -13,6 +13,8 @@ import matplotlib.gridspec as gridspec
 from PySONIC.neurons import *
 from PySONIC.utils import InputError, si_format, logger, pow10_format
 from PySONIC.plt import plotSignals
+from PySONIC.solvers import findPeaks
+from PySONIC.constants import *
 
 from pyhoc import *
 from sonic0D import Sonic0D
@@ -36,7 +38,7 @@ class Sonic1D(Sonic0D):
             :param Ra: cytoplasmic resistivity (Ohm.cm)
             :param connector: object used to connect sections together through a custom
                 axial current density mechanism
-            :param a: sonophore diameter (nm)
+            :param a: sonophore diameter (m)
             :param Fdrive: ultrasound frequency (Hz)
             :param verbose: boolean stating whether to print out details
         '''
@@ -71,7 +73,7 @@ class Sonic1D(Sonic0D):
 
     def __str__(self):
         ''' Explicit naming of the model instance. '''
-        return super(Sonic1D, self).__str__() + '_{}node{}_{}_connect'.format(
+        return 'SONIC1D_{}node{}_{}_connect'.format(
             self.nsec, 's' if self.nsec > 1 else '',
             'classic' if self.connector is None else 'custom')
 
@@ -96,20 +98,16 @@ class Sonic1D(Sonic0D):
 
     def buildTopology(self):
         ''' Connect the sections in series through classic NEURON implementation. '''
-        # for i in range(self.nsec - 1):
-        #     self.sections[i + 1].connect(self.sections[i], 1, 0)
         for sec1, sec2 in zip(self.sections[:-1], self.sections[1:]):
             sec2.connect(sec1, 1, 0)
 
     def buildCustomTopology(self):
-        self.sections = list(map(self.connector.attach, self.sections))
-        # for i in range(self.nsec - 1):
-        #     self.connector.connect(self.sections[i], self.sections[i + 1])
+        list(map(self.connector.attach, self.sections, [True] + [False] * (self.nsec - 1)))
         for sec1, sec2 in zip(self.sections[:-1], self.sections[1:]):
             self.connector.connect(sec1, sec2)
 
     def setUSAmps(self, amps):
-        ''' Set section specific US stimulation amplitudes '''
+        ''' Set section specific acoustic stimulation amplitudes '''
         if len(self.sections) != len(amps):
             raise InputError('Amplitude distribution vector does not match number of sections')
         if self.verbose:
@@ -120,6 +118,7 @@ class Sonic1D(Sonic0D):
         self.modality = 'US'
 
     def setElecAmps(self, amps):
+        ''' Set section specific electrical stimulation amplitudes '''
         if len(self.sections) != len(amps):
             raise InputError('Amplitude distribution vector does not match number of sections')
         if self.verbose:
@@ -183,57 +182,6 @@ class Sonic1D(Sonic0D):
         return t, stimon, vprobes, Vmeffprobes, statesprobes
 
 
-
-def runAStim(neuron, nnodes, diam, L, Ra, connector, a, Fdrive, Adrive, tstim, toffset, PRF, DC,
-             dt=None, atol=None):
-
-    # Create extended SONIC model with specific US frequency and connection scheme
-    model = Sonic1D(neuron, nnodes, diam, L, Ra, connector, a, Fdrive)
-    logger.debug('Creating model: %s (%s) - %s connect scheme', model, model.details(),
-                 'classic' if connector is None else 'custom')
-
-    # Set node-specifc acoustic amplitudes
-    amps = np.insert(np.zeros(nnodes - 1), 0, Adrive)
-    model.setUSAmps(amps * 1e-3)
-
-    # Run model simulation
-    tstart = time.time()
-    t, stimon, Qprobes, Vprobes, _ = model.simulate(tstim, toffset, PRF, DC, dt, atol)
-    logger.debug('Simulation completed in %.2f ms', (time.time() - tstart) * 1e3)
-
-    # Plot membrane potential and charge profiles
-    fig, axes = plt.subplots(1, 2, figsize=(16, 3))
-    tonset = -10.0
-    Vm0 = model.neuron.Vm0
-    fs = 10
-    lbls = ['node {} ({:.0f} kPa)'.format(i + 1, amps[i] * 1e-3) for i in range(nnodes)]
-
-    ax = axes[0]
-    plotSignals(t, Qprobes, states=stimon, ax=ax, onset=(tonset, Vm0), lbls=lbls, fs=fs)
-    ax.set_xlim(tonset, (tstim + toffset) * 1e3)
-    ax.set_xlabel('time (ms)', fontsize=fs)
-    ax.set_ylabel('Qm (nC/cm2)', fontsize=fs)
-    ax.set_title('membrane charge density', fontsize=fs + 2)
-
-    ax = axes[1]
-    plotSignals(t, Vprobes, states=stimon, ax=ax, onset=(tonset, Vm0), lbls=lbls, fs=fs)
-    ax.set_xlim(tonset, (tstim + toffset) * 1e3)
-    ax.set_xlabel('time (ms)', fontsize=fs)
-    ax.set_ylabel('Vm (mV)', fontsize=fs)
-    ax.set_title('membrane potential', fontsize=fs + 2)
-
-    for ax in axes:
-        ax.set_ylim(-150, 50)
-    fig.subplots_adjust(top=0.8)
-    fig.suptitle('{} neuron, {} node{}, diam = {}m, L = {}m, Ra = ${}$ ohm.cm - {}'
-                 .format(neuron.name, nnodes, 's' if nnodes > 1 else '',
-                         *si_format([model.diam, model.L], space=' '), Ra,
-                         'adaptive time step' if dt is None else 'dt = ${}$ ms'
-                         .format(pow10_format(dt * 1e3))),
-                 fontsize=18)
-    return fig
-
-
 def runEStim(neuron, nnodes, diam, L, Ra, connector, amps, tstim, toffset, PRF, DC,
              dt=None, atol=None):
     ''' Create extended SONIC model with adapted connection scheme and run electrical simulation. '''
@@ -243,7 +191,7 @@ def runEStim(neuron, nnodes, diam, L, Ra, connector, amps, tstim, toffset, PRF, 
 
 
 def compareEStim(neuron, nnodes, diam, L, Ra, connector, Astim, tstim, toffset, PRF, DC,
-                 dt=None, atol=None):
+                 dt=None, atol=None, cmode='qual'):
 
     # Set amplitude distribution vector
     amps = np.insert(np.zeros(nnodes - 1), 0, Astim)
@@ -269,7 +217,7 @@ def compareEStim(neuron, nnodes, diam, L, Ra, connector, Astim, tstim, toffset, 
     gs = gridspec.GridSpec(1, 3, width_ratios=[3, 3, 1])
     axes = list(map(plt.subplot, gs))
     fig.subplots_adjust(top=0.8, left=0.05, right=0.95)
-    fig.suptitle('{} neuron, {} node{}, diam = {}m, L = {}m, Ra = ${}$ ohm.cm - {}'
+    fig.suptitle('{} neuron, {} node{}, d = {}m, L = {}m, Ra = ${}$ ohm.cm - {}'
                  .format(neuron.name, nnodes, 's' if nnodes > 1 else '',
                          *si_format([diam, L], space=' '), pow10_format(Ra),
                          'adaptive time step' if dt is None else 'dt = ${}$ ms'
@@ -282,22 +230,22 @@ def compareEStim(neuron, nnodes, diam, L, Ra, connector, Astim, tstim, toffset, 
     # Plot V-traces for classic scheme
     ax = axes[0]
     plotSignals(t_classic, Vprobes_classic, states=stimon_classic, ax=ax, onset=(tonset, neuron.Vm0),
-                lbls=lbls, fs=fs)
+                lbls=lbls, fs=fs, cmode=cmode)
     ax.set_xlim(tonset, (tstim + toffset) * 1e3)
     ax.set_ylim(-100, 50)
     ax.set_xlabel('time (ms)', fontsize=fs)
     ax.set_ylabel('Vm (mV)', fontsize=fs)
-    ax.set_title('classic connect scheme', fontsize=12)
+    ax.set_title('classic v-based connect scheme', fontsize=12)
 
     # Plot V-traces for custom scheme
     ax = axes[1]
     plotSignals(t_custom, Vprobes_custom, states=stimon_custom, ax=ax, onset=(tonset, neuron.Vm0),
-                lbls=lbls, fs=fs)
+                lbls=lbls, fs=fs, cmode=cmode)
     ax.set_xlim(tonset, (tstim + toffset) * 1e3)
     ax.set_ylim(-100, 50)
     ax.set_xlabel('time (ms)', fontsize=fs)
     ax.set_ylabel('Vm (mV)', fontsize=fs)
-    ax.set_title('custom connect scheme', fontsize=12)
+    ax.set_title('custom {}-based connect scheme'.format(connector.vref, fontsize=12))
 
     # Plot comparative time histogram
     ax = axes[2]
@@ -320,16 +268,81 @@ def compareEStim(neuron, nnodes, diam, L, Ra, connector, Astim, tstim, toffset, 
     return fig
 
 
+def runAStim(neuron, nnodes, diam, L, Ra, connector, a, Fdrive, Adrive, tstim, toffset, PRF, DC,
+             dt=None, atol=None, cmode='qual'):
+
+    # Create extended SONIC model with specific US frequency and connection scheme
+    tstart = time.time()
+    model = Sonic1D(neuron, nnodes, diam, L, Ra, connector, a, Fdrive)
+
+    # Set node-specifc acoustic amplitudes
+    amps = np.insert(np.zeros(nnodes - 1), 0, Adrive)
+    model.setUSAmps(amps * 1e-3)
+
+    # Run model simulation
+    t, stimon, Qprobes, Vprobes, _ = model.simulate(tstim, toffset, PRF, DC, dt, atol)
+    tcomp = time.time() - tstart
+
+    # Plot membrane potential and charge profiles
+    fig = plt.figure(figsize=(16, 3))
+    gs = gridspec.GridSpec(1, 3, width_ratios=[4, 4, 1])
+    axes = list(map(plt.subplot, gs))
+    fig.subplots_adjust(top=0.8, left=0.05, right=0.95)
+    fig.suptitle('{} neuron, {} node{}, d = {}m, L = {}m, Ra = ${}$ ohm.cm - {}'
+                 .format(neuron.name, nnodes, 's' if nnodes > 1 else '',
+                         *si_format([diam, L], space=' '), pow10_format(Ra),
+                         'adaptive time step' if dt is None else 'dt = ${}$ ms'
+                         .format(pow10_format(dt * 1e3))),
+                 fontsize=18)
+    for ax in axes:
+        ax.set_ylim(-150, 50)
+    tonset = -10.0
+    Vm0 = model.neuron.Vm0
+    fs = 10
+    lbls = ['node {} ({:.0f} kPa)'.format(i + 1, amps[i] * 1e-3) for i in range(nnodes)]
+
+    # Plot charge density profiles
+    ax = axes[0]
+    plotSignals(t, Qprobes, states=stimon, ax=ax, onset=(tonset, Vm0), lbls=lbls, fs=fs, cmode=cmode)
+    ax.set_xlim(tonset, (tstim + toffset) * 1e3)
+    ax.set_xlabel('time (ms)', fontsize=fs)
+    ax.set_ylabel('Qm (nC/cm2)', fontsize=fs)
+    ax.set_title('membrane charge density', fontsize=fs + 2)
+
+    # Plot effective potential profiles
+    ax = axes[1]
+    plotSignals(t, Vprobes, states=stimon, ax=ax, onset=(tonset, Vm0), lbls=lbls, fs=fs, cmode=cmode)
+    ax.set_xlim(tonset, (tstim + toffset) * 1e3)
+    ax.set_xlabel('time (ms)', fontsize=fs)
+    ax.set_ylabel('$V_{m, eff}$ (mV)', fontsize=fs)
+    ax.set_title('effective membrane potential', fontsize=fs + 2)
+
+    # Plot comparative time histogram
+    ax = axes[2]
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    for item in ax.get_xticklabels() + ax.get_xticklabels():
+        item.set_fontsize(fs)
+    ax.set_ylabel('comp. time (s)', fontsize=fs)
+    ax.set_xticks([])
+    ax.bar(1, tcomp, align='center', color='dimgrey')
+    ax.text(1, 1.5 * tcomp, '{}s'.format(si_format(tcomp, 2, space=' ')),
+            horizontalalignment='center')
+    ax.set_yscale('log')
+    ax.set_ylim(1e-2, 1e2)
+
+    return fig
+
+
 if __name__ == '__main__':
 
     # Model parameters
     neuron = CorticalRS()
-    a = 32e-9  # sonophore diameter
-    nnodes = 2
+    a = 32e-9  # sonophore diameter (m)
+    nnodes = 11
     Ra = 1e2  # default order of magnitude found in litterature (Ohm.cm)
-    diam = 1e-6  # order of magnitude of axon node diameter (m)
-    L = 1e-5  # typical in-plane diameter of sonophore structure (m)
-    a = 32e-9  # sonophore diameter
+    d = 1e-6  # order of magnitude of axon node diameter (m)
+    L = 1e-5  # between order of magnitude of axon node length (1 um) and internode length (100 um - 1 mm)
 
     # Stimulation parameters
     Fdrive = 500e3  # Hz
@@ -341,12 +354,14 @@ if __name__ == '__main__':
     DC = 1.0
 
     # SeriesConnector object to connect sections in series through custom implementation
-    connector = SeriesConnector(mechname='Iax', vref='Vmeff_{}'.format(neuron.name))
+    # connector = SeriesConnector(vref='v')
+    # print(connector)
+    # fig1 = compareEStim(neuron, nnodes, d, L, Ra, connector, Astim, tstim, toffset, PRF, DC)
+
+    connector = SeriesConnector(vref='Vmeff_{}'.format(neuron.name))
     print(connector)
 
-    # fig1 = compareEStim(neuron, nnodes, diam, L, Ra, connector, Astim, tstim, toffset, PRF, DC, dt=1e-5)
-
-    fig2 = runAStim(neuron, nnodes, diam, L, 1e11, connector, a, Fdrive, Adrive, tstim, toffset,
-                    PRF, DC)
+    fig2 = runAStim(neuron, nnodes, d, L, Ra, connector, a, Fdrive, Adrive, tstim, toffset,
+                    PRF, DC, cmode='seq')
 
     plt.show()
