@@ -2,10 +2,9 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 16:41:08
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-08-30 12:05:28
+# @Last Modified time: 2018-08-30 14:21:07
 
 import time
-import logging
 import pickle
 import numpy as np
 import pandas as pd
@@ -13,13 +12,11 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
 from PySONIC.utils import logger, si_format, pow10_format
-from PySONIC.solvers import findPeaks, SolverUS
+from PySONIC.solvers import findPeaks, SolverUS, xlslog
 from PySONIC.constants import *
 from PySONIC.plt import getPatchesLoc
 
 from .sonic0D import Sonic0D
-
-logger.setLevel(logging.INFO)
 
 
 def runPlotEStim(neuron, Astim, tstim, toffset, PRF, DC, dt=None, atol=None):
@@ -166,6 +163,126 @@ def compareAStim(neuron, a, Fdrive, Adrive, tstim, toffset, PRF, DC, dt=None, at
     return fig
 
 
+
+class EStimWorker():
+    ''' Worker class that runs a single E-STIM simulation a given neuron for specific
+        stimulation parameters, and save the results in a PKL file. '''
+
+    def __init__(self, wid, batch_dir, log_filepath, neuron, Astim, tstim, toffset,
+                 PRF, DC, dt=None, atol=None, nsims=1):
+        ''' Class constructor.
+
+            :param wid: worker ID
+            :param neuron: neuron object
+            :param Astim: electrical stimulus amplitude (mA/m2)
+            :param tstim: duration of US stimulation (s)
+            :param toffset: duration of the offset (s)
+            :param PRF: pulse repetition frequency (Hz)
+            :param DC: pulse duty cycle (-)
+            :param nsims: total number or simulations
+        '''
+
+        self.id = wid
+        self.batch_dir = batch_dir
+        self.log_filepath = log_filepath
+        self.neuron = neuron
+        self.Astim = Astim
+        self.tstim = tstim
+        self.toffset = toffset
+        self.PRF = PRF
+        self.DC = DC
+        self.dt = dt
+        self.atol = atol
+        self.nsims = nsims
+
+    def __call__(self):
+        ''' Method that runs the simulation. '''
+
+        # Determine simulation code
+        simcode = 'ESTIM_{}_{}_{:.1f}mA_per_m2_{:.0f}ms_{}NEURON'.format(
+            self.neuron.name,
+            'CW' if self.DC == 1 else 'PW',
+            self.Astim,
+            self.tstim * 1e3,
+            'PRF{:.2f}Hz_DC{:.2f}%_'.format(self.PRF, self.DC * 1e2) if self.DC < 1. else ''
+        )
+
+        # Get date and time info
+        date_str = time.strftime("%Y.%m.%d")
+        daytime_str = time.strftime("%H:%M:%S")
+
+        # Run simulation
+        tstart = time.time()
+        model = Sonic0D(self.neuron)
+        model.setAstim(self.Astim)
+        (t, y, stimon) = model.simulate(self.tstim, self.toffset, self.PRF, self.DC,
+                                        self.dt, self.atol)
+        Qm, Vm, *states = y
+        tcomp = time.time() - tstart
+        logger.debug('completed in %ss', si_format(tcomp, 2))
+
+        # Store dataframe and metadata
+        df = pd.DataFrame({'t': t, 'states': stimon, 'Qm': Qm, 'Vm': Vm})
+        for j in range(len(self.neuron.states_names)):
+            df[self.neuron.states_names[j]] = states[j]
+        meta = {'neuron': self.neuron.name, 'Astim': self.Astim, 'phi': np.pi,
+                'tstim': self.tstim, 'toffset': self.toffset, 'PRF': self.PRF, 'DC': self.DC,
+                'tcomp': tcomp}
+        if self.dt is not None:
+            meta['dt'] = self.dt
+        if self.atol is not None:
+            meta['atol'] = self.atol
+
+        # Export into to PKL file
+        output_filepath = '{}/{}.pkl'.format(self.batch_dir, simcode)
+        with open(output_filepath, 'wb') as fh:
+            pickle.dump({'meta': meta, 'data': df}, fh)
+        logger.debug('simulation data exported to "%s"', output_filepath)
+
+        # Detect spikes on Qm signal
+        dt = t[1] - t[0]
+        ipeaks, *_ = findPeaks(Qm, SPIKE_MIN_QAMP, int(np.ceil(SPIKE_MIN_DT / dt)),
+                               SPIKE_MIN_QPROM)
+        n_spikes = ipeaks.size
+        lat = t[ipeaks[0]] if n_spikes > 0 else 'N/A'
+        sr = np.mean(1 / np.diff(t[ipeaks])) if n_spikes > 1 else 'N/A'
+        logger.debug('%u spike%s detected', n_spikes, "s" if n_spikes > 1 else "")
+
+        # Export key metrics to log file
+        log = {
+            'A': date_str,
+            'B': daytime_str,
+            'C': self.neuron.name,
+            'D': self.Astim,
+            'E': self.tstim * 1e3,
+            'F': self.PRF * 1e-3 if self.DC < 1 else 'N/A',
+            'G': self.DC,
+            'H': t.size,
+            'I': round(tcomp, 4),
+            'J': n_spikes,
+            'K': lat * 1e3 if isinstance(lat, float) else 'N/A',
+            'L': sr * 1e-3 if isinstance(sr, float) else 'N/A'
+        }
+
+        if xlslog(self.log_filepath, 'Data', log) == 1:
+            logger.debug('log exported to "%s"', self.log_filepath)
+        else:
+            logger.error('log export to "%s" aborted', self.log_filepath)
+
+        return output_filepath
+
+    def __str__(self):
+        worker_str = 'E-STIM {} simulation {}/{}: {} neuron, A = {}A/m2, t = {}s'\
+            .format('NEURON', self.id, self.nsims, self.neuron.name,
+                    si_format(self.Astim * 1e-3, 2, space=' '),
+                    si_format(self.tstim, 1, space=' '))
+        if self.DC < 1.0:
+            worker_str += ', PRF = {}Hz, DC = {:.2f}%'\
+                .format(si_format(self.PRF, 2, space=' '), self.DC * 1e2)
+        return worker_str
+
+
+
 class AStimWorker():
     ''' Worker class that runs a single A-STIM simulation a given neuron for specific
         stimulation parameters, and save the results in a PKL file. '''
@@ -190,6 +307,7 @@ class AStimWorker():
         self.batch_dir = batch_dir
         self.log_filepath = log_filepath
         self.neuron = neuron
+        self.a = a
         self.Fdrive = Fdrive
         self.Adrive = Adrive
         self.tstim = tstim
@@ -204,7 +322,7 @@ class AStimWorker():
         ''' Method that runs the simulation. '''
 
         # Determine simulation code
-        simcode = 'ASTIM_{}_{}_{:.0f}nm_{:.0f}kHz_{:.1f}kPa_{:.0f}ms_{}_NEURON'.format(
+        simcode = 'ASTIM_{}_{}_{:.0f}nm_{:.0f}kHz_{:.1f}kPa_{:.0f}ms_{}NEURON'.format(
             self.neuron.name,
             'CW' if self.DC == 1 else 'PW',
             self.a * 1e9,
@@ -229,7 +347,7 @@ class AStimWorker():
         logger.debug('completed in %ss', si_format(tcomp, 2))
 
         # Store dataframe and metadata
-        df = pd.DataFrame({'t': t, 'stimon': stimon, 'Qm': Qm * 1e-5, 'Vm': Vm})
+        df = pd.DataFrame({'t': t, 'states': stimon, 'Qm': Qm, 'Vm': Vm})
         for j in range(len(self.neuron.states_names)):
             df[self.neuron.states_names[j]] = states[j]
         meta = {'neuron': self.neuron.name, 'a': self.a,
@@ -285,7 +403,7 @@ class AStimWorker():
 
     def __str__(self):
         worker_str = 'A-STIM {} simulation {}/{}: {} neuron, a = {}m, f = {}Hz, A = {}Pa, t = {}s'\
-            .format(self.int_method, self.id, self.nsims, self.neuron.name,
+            .format('NEURON', self.id, self.nsims, self.neuron.name,
                     *si_format([self.a, self.Fdrive], 1, space=' '),
                     si_format(self.Adrive, 2, space=' '), si_format(self.tstim, 1, space=' '))
         if self.DC < 1.0:
