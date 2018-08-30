@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-08-30 11:55:07
+# @Last Modified time: 2018-08-30 18:01:00
 
 
 import os
@@ -230,7 +230,7 @@ class Sonic0D:
 
         return 0
 
-    def simulate(self, tstim, toffset, PRF, DC, dt, atol):
+    def simulate(self, tstim, toffset, PRF, DC, dt=None, atol=None):
         ''' Set appropriate recording vectors, integrate and return output variables.
 
             :param tstim: stimulus duration (s)
@@ -254,12 +254,10 @@ class Sonic0D:
         # Retrieve output variables
         t = Vec2array(tprobe) * 1e-3  # s
         stimon = Vec2array(stimprobe)
-        vprobe = Vec2array(vprobe)  # mV or nC/cm2
-        if self.modality == 'US':
-            vprobe *= 1e-5  # C/m2
+        Qprobe = Vec2array(vprobe) * 1e-5  # nC/cm2
         Vmeffprobe = Vec2array(Vmeffprobe)  # mV
         statesprobes = list(map(Vec2array, statesprobes))
-        y = np.vstack([vprobe, Vmeffprobe, np.array(statesprobes)])
+        y = np.vstack([Qprobe, Vmeffprobe, np.array(statesprobes)])
 
         # return output variables
         return (t, y, stimon)

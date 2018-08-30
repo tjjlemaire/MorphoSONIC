@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-30 11:29:37
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-08-30 12:00:52
+# @Last Modified time: 2018-08-30 20:42:48
 
 import time
 import numpy as np
@@ -28,7 +28,8 @@ def compareEStim(neuron, nnodes, diam, L, Ra, connector, Astim, tstim, toffset, 
     tstart = time.time()
     model = Sonic1D(neuron, nsec=nnodes, diam=diam, L=L, Ra=Ra)
     model.setElecAmps(amps)
-    t_classic, stimon_classic, Vprobes_classic, *_ = model.simulate(tstim, toffset, PRF, DC, dt, atol)
+    t_classic, stimon_classic, _, Vmeffprobes_classic, *_ = model.simulate(
+        tstim, toffset, PRF, DC, dt, atol)
     tcomp_classic = time.time() - tstart
     stimon_classic[0] = 1
 
@@ -36,7 +37,8 @@ def compareEStim(neuron, nnodes, diam, L, Ra, connector, Astim, tstim, toffset, 
     tstart = time.time()
     model = Sonic1D(neuron, nsec=nnodes, diam=diam, L=L, Ra=Ra, connector=connector)
     model.setElecAmps(amps)
-    t_custom, stimon_custom, Vprobes_custom, *_ = model.simulate(tstim, toffset, PRF, DC, dt, atol)
+    t_custom, stimon_custom, _, Vmeffprobes_custom, *_ = model.simulate(
+        tstim, toffset, PRF, DC, dt, atol)
     tcomp_custom = time.time() - tstart
     stimon_custom[0] = 1
 
@@ -55,24 +57,24 @@ def compareEStim(neuron, nnodes, diam, L, Ra, connector, Astim, tstim, toffset, 
     fs = 10
     lbls = ['node {} ({:.0f} $mA/m^2$)'.format(i + 1, amps[i]) for i in range(nnodes)]
 
-    # Plot V-traces for classic scheme
+    # Plot Vmeff-traces for classic scheme
     ax = axes[0]
-    plotSignals(t_classic, Vprobes_classic, states=stimon_classic, ax=ax, onset=(tonset, neuron.Vm0),
-                lbls=lbls, fs=fs, cmode=cmode)
+    plotSignals(t_classic, Vmeffprobes_classic, states=stimon_classic, ax=ax,
+                onset=(tonset, neuron.Vm0), lbls=lbls, fs=fs, cmode=cmode)
     ax.set_xlim(tonset, (tstim + toffset) * 1e3)
     ax.set_ylim(-100, 50)
     ax.set_xlabel('time (ms)', fontsize=fs)
-    ax.set_ylabel('Vm (mV)', fontsize=fs)
+    ax.set_ylabel('$V_{m, eff}$ (mV)', fontsize=fs)
     ax.set_title('classic v-based connect scheme', fontsize=12)
 
     # Plot V-traces for custom scheme
     ax = axes[1]
-    plotSignals(t_custom, Vprobes_custom, states=stimon_custom, ax=ax, onset=(tonset, neuron.Vm0),
-                lbls=lbls, fs=fs, cmode=cmode)
+    plotSignals(t_custom, Vmeffprobes_custom, states=stimon_custom, ax=ax,
+                onset=(tonset, neuron.Vm0), lbls=lbls, fs=fs, cmode=cmode)
     ax.set_xlim(tonset, (tstim + toffset) * 1e3)
     ax.set_ylim(-100, 50)
     ax.set_xlabel('time (ms)', fontsize=fs)
-    ax.set_ylabel('Vm (mV)', fontsize=fs)
+    ax.set_ylabel('$V_{m, eff}$ (mV)', fontsize=fs)
     ax.set_title('custom {}-based connect scheme'.format(connector.vref, fontsize=12))
 
     # Plot comparative time histogram
@@ -109,7 +111,7 @@ def runPlotAStim(neuron, nnodes, diam, L, Ra, connector, a, Fdrive, Adrive, tsti
     model.setUSAmps(amps * 1e-3)
 
     # Run model simulation
-    t, stimon, Qprobes, Vprobes, _ = model.simulate(tstim, toffset, PRF, DC, dt, atol)
+    t, stimon, Qprobes, Vmeffprobes, _ = model.simulate(tstim, toffset, PRF, DC, dt, atol)
     tcomp = time.time() - tstart
 
     # Plot membrane potential and charge profiles
@@ -132,7 +134,8 @@ def runPlotAStim(neuron, nnodes, diam, L, Ra, connector, a, Fdrive, Adrive, tsti
 
     # Plot charge density profiles
     ax = axes[0]
-    plotSignals(t, Qprobes, states=stimon, ax=ax, onset=(tonset, Vm0), lbls=lbls, fs=fs, cmode=cmode)
+    plotSignals(t, Qprobes, states=stimon, ax=ax, onset=(tonset, Vm0),
+                lbls=lbls, fs=fs, cmode=cmode)
     ax.set_xlim(tonset, (tstim + toffset) * 1e3)
     ax.set_xlabel('time (ms)', fontsize=fs)
     ax.set_ylabel('Qm (nC/cm2)', fontsize=fs)
@@ -140,7 +143,8 @@ def runPlotAStim(neuron, nnodes, diam, L, Ra, connector, a, Fdrive, Adrive, tsti
 
     # Plot effective potential profiles
     ax = axes[1]
-    plotSignals(t, Vprobes, states=stimon, ax=ax, onset=(tonset, Vm0), lbls=lbls, fs=fs, cmode=cmode)
+    plotSignals(t, Vmeffprobes, states=stimon, ax=ax, onset=(tonset, Vm0),
+                lbls=lbls, fs=fs, cmode=cmode)
     ax.set_xlim(tonset, (tstim + toffset) * 1e3)
     ax.set_xlabel('time (ms)', fontsize=fs)
     ax.set_ylabel('$V_{m, eff}$ (mV)', fontsize=fs)

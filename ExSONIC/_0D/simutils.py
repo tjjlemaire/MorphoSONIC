@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 16:41:08
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-08-30 14:21:07
+# @Last Modified time: 2018-08-30 20:41:25
 
 import time
 import pickle
@@ -29,7 +29,7 @@ def runPlotEStim(neuron, Astim, tstim, toffset, PRF, DC, dt=None, atol=None):
     t, y, stimon = model.simulate(tstim, toffset, PRF, DC, dt, atol)
     tcomp = time.time() - tstart
     print('Simulation completed in {:.2f} ms'.format(tcomp * 1e3))
-    Vm = y[0, :]
+    Vmeff = y[1, :]
 
     # Rescale vectors to appropriate units
     t *= 1e3
@@ -40,9 +40,9 @@ def runPlotEStim(neuron, Astim, tstim, toffset, PRF, DC, dt=None, atol=None):
     # Add onset to signals
     t0 = -10.0
     t = np.hstack((np.array([t0, 0.]), t))
-    Vm = np.hstack((np.ones(2) * neuron.Vm0, Vm))
+    Vmeff = np.hstack((np.ones(2) * neuron.Vm0, Vmeff))
 
-    # Create figure and plot membrane potential profile
+    # Create figure and plot effective membrane potential profile
     fs = 10
     fig, ax = plt.subplots(figsize=(8, 3))
     ax.spines['top'].set_visible(False)
@@ -54,7 +54,7 @@ def runPlotEStim(neuron, Astim, tstim, toffset, PRF, DC, dt=None, atol=None):
         neuron.name, *si_format([Astim * 1e-3, tstim], space=' '),
         'adaptive time step' if dt is None else 'dt = ${}$ ms'.format(pow10_format(dt * 1e3))),
         fontsize=18)
-    ax.plot(t, Vm)
+    ax.plot(t, Vmeff)
     for i in range(npatches):
         ax.axvspan(tpatch_on[i], tpatch_off[i], edgecolor='none',
                    facecolor='#8A8A8A', alpha=0.2)
@@ -62,7 +62,7 @@ def runPlotEStim(neuron, Astim, tstim, toffset, PRF, DC, dt=None, atol=None):
     ax.set_ylim(-150, 70)
     ax.set_xlabel('time (ms)', fontsize=fs)
     ax.set_ylabel('$V_{m, eff}$ (mV)', fontsize=fs)
-    ax.set_title('membrane potential', fontsize=fs + 2)
+    ax.set_title('effective membrane potential', fontsize=fs + 2)
 
     return fig
 
@@ -78,14 +78,14 @@ def compareAStim(neuron, a, Fdrive, Adrive, tstim, toffset, PRF, DC, dt=None, at
     model.setAdrive(Adrive * 1e-3)
     t_NEURON, y_NEURON, stimon_NEURON = model.simulate(tstim, toffset, PRF, DC, dt, atol)
     tcomp_NEURON = time.time() - tstart
-    Qm_NEURON, Vm_NEURON = y_NEURON[0:2, :]
+    Qm_NEURON, Vmeff_NEURON = y_NEURON[0:2, :]
 
     # Run Python stimulation
     tstart = time.time()
     t_Python, y_Python, stimon_Python = SolverUS(a, neuron, Fdrive).run(neuron, Fdrive, Adrive,
                                                                         tstim, toffset, PRF, DC)
     tcomp_Python = time.time() - tstart
-    Qm_Python, Vm_Python = y_Python[2:4, :]
+    Qm_Python, Vmeff_Python = y_Python[2:4, :]
 
     # Rescale vectors to appropriate units
     t_Python, t_NEURON = [t * 1e3 for t in [t_Python, t_NEURON]]
@@ -99,7 +99,8 @@ def compareAStim(neuron, a, Fdrive, Adrive, tstim, toffset, PRF, DC, dt=None, at
     y0 = neuron.Vm0
     t_Python, t_NEURON = [np.hstack((np.array([t0, 0.]), t)) for t in [t_Python, t_NEURON]]
     Qm_Python, Qm_NEURON = [np.hstack((np.ones(2) * y0, Qm)) for Qm in [Qm_Python, Qm_NEURON]]
-    Vm_Python, Vm_NEURON = [np.hstack((np.ones(2) * y0, Vm)) for Vm in [Vm_Python, Vm_NEURON]]
+    Vmeff_Python, Vmeff_NEURON = [np.hstack((np.ones(2) * y0, Vm))
+                                  for Vm in [Vmeff_Python, Vmeff_NEURON]]
 
     # Create comparative figure
     fs = 10
@@ -132,10 +133,10 @@ def compareAStim(neuron, a, Fdrive, Adrive, tstim, toffset, PRF, DC, dt=None, at
     ax.set_ylabel('Qm (nC/cm2)', fontsize=fs)
     ax.set_title('membrane charge density', fontsize=fs + 2)
 
-    # Plot effective potential profiles
+    # Plot effective membrane potential profiles
     ax = axes[1]
-    ax.plot(t_Python, Vm_Python, label='Python')
-    ax.plot(t_NEURON, Vm_NEURON, label='NEURON')
+    ax.plot(t_Python, Vmeff_Python, label='Python')
+    ax.plot(t_NEURON, Vmeff_NEURON, label='NEURON')
     for i in range(npatches):
         ax.axvspan(tpatch_on[i], tpatch_off[i], edgecolor='none',
                    facecolor='#8A8A8A', alpha=0.2)
@@ -144,7 +145,7 @@ def compareAStim(neuron, a, Fdrive, Adrive, tstim, toffset, PRF, DC, dt=None, at
     ax.set_ylim(-150, 70)
     ax.set_xlabel('time (ms)', fontsize=fs)
     ax.set_ylabel('$V_{m, eff}$ (mV)', fontsize=fs)
-    ax.set_title('membrane potential', fontsize=fs + 2)
+    ax.set_title('effective membrane potential', fontsize=fs + 2)
 
     # Plot comparative time histogram
     ax = axes[2]
