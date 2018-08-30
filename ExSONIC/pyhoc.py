@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-# @Author: Theo
+# @Author: Theo Lemaire
 # @Date:   2018-08-21 19:48:04
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-08-25 03:26:35
+# @Last Modified time: 2018-08-30 11:55:30
 
 
 ''' Utilities to manipulate HOC objects. '''

@@ -1,23 +1,20 @@
 # -*- coding: utf-8 -*-
-# @Author: Theo
-# @Date:   2018-08-15 15:08:23
+# @Author: Theo Lemaire
+# @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-08-29 14:51:26
+# @Last Modified time: 2018-08-30 11:55:07
 
 
 import os
-import time
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
 from neuron import h
 
 from PySONIC.neurons import *
-from PySONIC.solvers import SolverUS
-from PySONIC.utils import getLookups2D, si_format, pow10_format
-from PySONIC.plt import getPatchesLoc
+from PySONIC.utils import getLookups2D, si_format
 
-from pyhoc import *
+from ..pyhoc import *
+from ..utils import getNmodlDir
+
 
 
 class Sonic0D:
@@ -42,9 +39,9 @@ class Sonic0D:
 
 
         # Load mechanisms DLL file
-        nmodl_dir = os.path.join(os.getcwd(), 'nmodl')
-        mod_file = nmodl_dir + '/{}.mod'.format(self.mechname)
-        dll_file = nmodl_dir + '/nrnmech.dll'
+        nmodl_dir = getNmodlDir()
+        mod_file = os.path.join(nmodl_dir, '{}.mod'.format(self.mechname))
+        dll_file = os.path.join(nmodl_dir, 'nrnmech.dll')
         if not os.path.isfile(dll_file) or os.path.getmtime(mod_file) > os.path.getmtime(dll_file):
             raise Warning('"{}.mod" file more recent than compiled dll'.format(self.mechname))
         if not isAlreadyLoaded(dll_file):
@@ -72,6 +69,7 @@ class Sonic0D:
             :param id: name of the section.
         '''
         return h.Section(name=id, cell=self)
+
 
     def setFuncTables(self, a, Fdrive):
         ''' Set neuron-specific, sonophore diameter and US frequency dependent 2D interpolation tables
@@ -265,179 +263,3 @@ class Sonic0D:
 
         # return output variables
         return (t, y, stimon)
-
-
-
-def runAStim(neuron, a, Fdrive, Adrive, tstim, toffset, PRF, DC, dt=None, atol=None):
-    ''' Create NEURON point-neuron SONIC model and run acoustic simulation. '''
-    model = Sonic0D(neuron, a=a, Fdrive=Fdrive)
-    model.setAdrive(Adrive * 1e-3)
-    return model.simulate(tstim, toffset, PRF, DC, dt, atol)
-
-
-def runEStim(neuron, Astim, tstim, toffset, PRF, DC, dt=None, atol=None):
-    ''' Create NEURON point-neuron SONIC model and run electrical simulation. '''
-    model = Sonic0D(neuron, a=a, Fdrive=Fdrive)
-    model.setAstim(Astim)
-    return model.simulate(tstim, toffset, PRF, DC, dt, atol)
-
-
-def runPlotEStim(neuron, Astim, tstim, toffset, PRF, DC, dt=None, atol=None):
-    ''' Plot results of NEURON point-neuron SONIC model electrical simulation. '''
-
-    # Create NEURON point-neuron SONIC model and run simulation
-    tstart = time.time()
-    t, y, stimon = runEStim(neuron, Astim, tstim, toffset, PRF, DC, dt, atol)
-    tcomp = time.time() - tstart
-    print('Simulation completed in {:.2f} ms'.format(tcomp * 1e3))
-    Vm = y[0, :]
-
-    # Rescale vectors to appropriate units
-    t *= 1e3
-
-    # Get pulses timing
-    npatches, tpatch_on, tpatch_off = getPatchesLoc(t, stimon)
-
-    # Add onset to signals
-    t0 = -10.0
-    t = np.hstack((np.array([t0, 0.]), t))
-    Vm = np.hstack((np.ones(2) * neuron.Vm0, Vm))
-
-    # Create figure and plot membrane potential profile
-    fs = 10
-    fig, ax = plt.subplots(figsize=(8, 3))
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    for item in ax.get_xticklabels() + ax.get_xticklabels():
-        item.set_fontsize(fs)
-    fig.subplots_adjust(top=0.8)
-    fig.suptitle('{} point-neuron, A = {}A/m2, {}s'.format(
-        neuron.name, *si_format([Astim * 1e-3, tstim], space=' '),
-        'adaptive time step' if dt is None else 'dt = ${}$ ms'.format(pow10_format(dt * 1e3))),
-        fontsize=18)
-    ax.plot(t, Vm)
-    for i in range(npatches):
-        ax.axvspan(tpatch_on[i], tpatch_off[i], edgecolor='none',
-                   facecolor='#8A8A8A', alpha=0.2)
-    ax.set_xlim(t0, (tstim + toffset) * 1e3)
-    ax.set_ylim(-150, 70)
-    ax.set_xlabel('time (ms)', fontsize=fs)
-    ax.set_ylabel('$V_{m, eff}$ (mV)', fontsize=fs)
-    ax.set_title('membrane potential', fontsize=fs + 2)
-
-    return fig
-
-
-
-def compareAStim(neuron, a, Fdrive, Adrive, tstim, toffset, PRF, DC, dt=None, atol=None):
-    ''' Compare NEURON and Python based simulations of the point-neuron SONIC model. '''
-
-    # Create NEURON point-neuron SONIC model and run simulation
-    tstart = time.time()
-    t_NEURON, y_NEURON, stimon_NEURON = runAStim(neuron, a, Fdrive, Adrive, tstim, toffset, PRF, DC,
-                                                 dt, atol)
-    tcomp_NEURON = time.time() - tstart
-    Qm_NEURON, Vm_NEURON = y_NEURON[0:2, :]
-
-    # Run Python stimulation
-    tstart = time.time()
-    t_Python, y_Python, stimon_Python = SolverUS(a, neuron, Fdrive).run(neuron, Fdrive, Adrive,
-                                                                        tstim, toffset, PRF, DC)
-    tcomp_Python = time.time() - tstart
-    Qm_Python, Vm_Python = y_Python[2:4, :]
-
-    # Rescale vectors to appropriate units
-    t_Python, t_NEURON = [t * 1e3 for t in [t_Python, t_NEURON]]
-    Qm_Python, Qm_NEURON = [Qm * 1e5 for Qm in [Qm_Python, Qm_NEURON]]
-
-    # Get pulses timing
-    npatches, tpatch_on, tpatch_off = getPatchesLoc(t_Python, stimon_Python)
-
-    # Add onset to signals
-    t0 = -10.0
-    y0 = neuron.Vm0
-    t_Python, t_NEURON = [np.hstack((np.array([t0, 0.]), t)) for t in [t_Python, t_NEURON]]
-    Qm_Python, Qm_NEURON = [np.hstack((np.ones(2) * y0, Qm)) for Qm in [Qm_Python, Qm_NEURON]]
-    Vm_Python, Vm_NEURON = [np.hstack((np.ones(2) * y0, Vm)) for Vm in [Vm_Python, Vm_NEURON]]
-
-    # Create comparative figure
-    fs = 10
-    fig = plt.figure(figsize=(16, 3))
-    gs = gridspec.GridSpec(1, 3, width_ratios=[3, 3, 1])
-    axes = list(map(plt.subplot, gs))
-    for ax in axes:
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        for item in ax.get_xticklabels() + ax.get_xticklabels():
-            item.set_fontsize(fs)
-    fig.subplots_adjust(top=0.8, left=0.05, right=0.95)
-    fig.suptitle('{} point-neuron, a = {}m, f = {}Hz, A = {}Pa, {}s'
-                 .format(neuron.name, *si_format([a, Fdrive, Adrive, tstim], space=' '),
-                         'adaptive time step' if dt is None else 'dt = ${}$ ms'
-                         .format(pow10_format(dt * 1e3))),
-                 fontsize=18)
-
-    # Plot charge density profiles
-    ax = axes[0]
-    ax.plot(t_Python, Qm_Python, label='Python')
-    ax.plot(t_NEURON, Qm_NEURON, label='NEURON')
-    for i in range(npatches):
-        ax.axvspan(tpatch_on[i], tpatch_off[i], edgecolor='none',
-                   facecolor='#8A8A8A', alpha=0.2)
-    ax.legend(fontsize=fs, frameon=False)
-    ax.set_xlim(t0, (tstim + toffset) * 1e3)
-    ax.set_ylim(-100, 50)
-    ax.set_xlabel('time (ms)', fontsize=fs)
-    ax.set_ylabel('Qm (nC/cm2)', fontsize=fs)
-    ax.set_title('membrane charge density', fontsize=fs + 2)
-
-    # Plot effective potential profiles
-    ax = axes[1]
-    ax.plot(t_Python, Vm_Python, label='Python')
-    ax.plot(t_NEURON, Vm_NEURON, label='NEURON')
-    for i in range(npatches):
-        ax.axvspan(tpatch_on[i], tpatch_off[i], edgecolor='none',
-                   facecolor='#8A8A8A', alpha=0.2)
-    ax.legend(fontsize=fs, frameon=False)
-    ax.set_xlim(t0, (tstim + toffset) * 1e3)
-    ax.set_ylim(-150, 70)
-    ax.set_xlabel('time (ms)', fontsize=fs)
-    ax.set_ylabel('$V_{m, eff}$ (mV)', fontsize=fs)
-    ax.set_title('membrane potential', fontsize=fs + 2)
-
-    # Plot comparative time histogram
-    ax = axes[2]
-    ax.set_ylabel('comp. time (s)', fontsize=fs)
-    indices = [1, 2]
-    tcomps = [tcomp_Python, tcomp_NEURON]
-    ax.set_xticks(indices)
-    ax.set_xticklabels(['Python', 'NEURON'])
-    for idx, tcomp in zip(indices, tcomps):
-        ax.bar(idx, tcomp, align='center')
-        ax.text(idx, 1.5 * tcomp, '{}s'.format(si_format(tcomp, 2, space=' ')),
-                horizontalalignment='center')
-    ax.set_yscale('log')
-    ax.set_ylim(1e-2, 1e2)
-
-    return fig
-
-
-if __name__ == '__main__':
-
-    # Model parameters
-    neuron = CorticalRS()
-    a = 32e-9  # sonophore diameter
-
-    # Stimulation parameters
-    Fdrive = 500e3  # Hz
-    Adrive = 50e3  # kPa
-    Astim = 25.0  # mA/m2
-    tstim = 150e-3  # s
-    toffset = 100e-3  # s
-    PRF = 100.  # Hz
-    DC = 0.7
-
-    # fig1 = compareAStim(neuron, a, Fdrive, Adrive, tstim, toffset, PRF, DC)
-    fig2 = runPlotEStim(neuron, Astim, tstim, toffset, PRF, DC)
-
-    plt.show()

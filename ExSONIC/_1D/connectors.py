@@ -1,3 +1,8 @@
+# -*- coding: utf-8 -*-
+# @Author: Theo Lemaire
+# @Date:   2018-08-25 02:00:26
+# @Last Modified by:   Theo Lemaire
+# @Last Modified time: 2018-08-30 10:38:53
 
 import numpy as np
 from neuron import h
