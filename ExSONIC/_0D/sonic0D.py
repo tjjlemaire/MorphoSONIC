@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-08-30 18:01:00
+# @Last Modified time: 2018-08-31 15:14:59
 
 
 import os
@@ -26,28 +26,17 @@ class Sonic0D:
             :param neuron: neuron object
             :param a: sonophore diameter (nm)
             :param Fdrive: ultrasound frequency (Hz)
-            :param Ra: cytoplasmic resistivity (Ohm.cm)
-            :param diam: section diameter (m)
-            :param L: section length (m)
             :param verbose: boolean stating whether to print out details
         '''
+        # Initialize arguments
         self.neuron = neuron
         self.a = a  # m
         self.Fdrive = Fdrive  # Hz
         self.verbose = verbose
         self.mechname = neuron.name
 
-
-        # Load mechanisms DLL file
-        nmodl_dir = getNmodlDir()
-        mod_file = os.path.join(nmodl_dir, '{}.mod'.format(self.mechname))
-        dll_file = os.path.join(nmodl_dir, 'nrnmech.dll')
-        if not os.path.isfile(dll_file) or os.path.getmtime(mod_file) > os.path.getmtime(dll_file):
-            raise Warning('"{}.mod" file more recent than compiled dll'.format(self.mechname))
-        if not isAlreadyLoaded(dll_file):
-            h.nrn_load_dll(dll_file)
-
-        # Load and set fnction tables of membrane mechanism
+        # Load mechanisms and set function tables of appropriate membrane mechanism
+        self.loadMechanisms()
         self.setFuncTables(self.a, self.Fdrive)
 
         # Create section and set geometry
@@ -63,13 +52,24 @@ class Sonic0D:
         ''' Explicit naming of the model instance. '''
         return 'SONIC0D_{}_{}m_{}Hz'.format(self.neuron.name, *si_format([self.a, self.Fdrive], 2))
 
+    def loadMechanisms(self):
+        ''' Locate NMODL directory, check for untracked modifications in NMODL source files, and
+            load compiled mechanisms file.
+        '''
+        nmodl_dir = getNmodlDir()
+        mod_file = os.path.join(nmodl_dir, '{}.mod'.format(self.mechname))
+        dll_file = os.path.join(nmodl_dir, 'nrnmech.dll')
+        if not os.path.isfile(dll_file) or os.path.getmtime(mod_file) > os.path.getmtime(dll_file):
+            raise Warning('"{}.mod" file more recent than compiled dll'.format(self.mechname))
+        if not isAlreadyLoaded(dll_file):
+            h.nrn_load_dll(dll_file)
+
     def createSection(self, id):
         ''' Create morphological section.
 
             :param id: name of the section.
         '''
         return h.Section(name=id, cell=self)
-
 
     def setFuncTables(self, a, Fdrive):
         ''' Set neuron-specific, sonophore diameter and US frequency dependent 2D interpolation tables

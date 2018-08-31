@@ -2,7 +2,7 @@
 # @Author: Theo
 # @Date:   2018-08-15 15:08:23
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-08-30 11:29:24
+# @Last Modified time: 2018-08-31 15:19:57
 
 from itertools import repeat
 
@@ -17,8 +17,8 @@ from .._0D import Sonic0D
 class Sonic1D(Sonic0D):
     ''' Simple 1D extension of the SONIC model. '''
 
-    def __init__(self, neuron, nsec=1, diam=1e-6, L=1e-6, Ra=1e2, connector=None,
-                 a=32e-9, Fdrive=500e3, verbose=False):
+    def __init__(self, neuron, nsec, diam, L, Ra, connector=None, a=32e-9, Fdrive=500e3,
+                 verbose=False):
         ''' Initialization.
 
             :param neuron: neuron object
