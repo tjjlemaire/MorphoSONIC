@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-09-04 16:59:57
+# @Last Modified time: 2018-09-04 17:07:01
 
 
 import sys
@@ -72,7 +72,7 @@ class Sonic0D:
                 h.nrn_load_dll(dllfile)
         # linux -> standard use case
         elif sys.platform == 'linux':
-            load_mechanisms(nmodl_dir)
+            load_mechanisms(nmodldir)
 
     def createSection(self, id):
         ''' Create morphological section.
