@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 16:41:08
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-08-30 20:41:25
+# @Last Modified time: 2018-09-03 16:02:53
 
 import time
 import pickle
@@ -50,8 +50,8 @@ def runPlotEStim(neuron, Astim, tstim, toffset, PRF, DC, dt=None, atol=None):
     for item in ax.get_xticklabels() + ax.get_xticklabels():
         item.set_fontsize(fs)
     fig.subplots_adjust(top=0.8)
-    fig.suptitle('{} point-neuron, A = {}A/m2, {}s'.format(
-        neuron.name, *si_format([Astim * 1e-3, tstim], space=' '),
+    fig.suptitle('{}, A = {}A/m2, {}s'.format(
+        model.pprint(), *si_format([Astim * 1e-3, tstim], space=' '),
         'adaptive time step' if dt is None else 'dt = ${}$ ms'.format(pow10_format(dt * 1e3))),
         fontsize=18)
     ax.plot(t, Vmeff)
@@ -113,11 +113,10 @@ def compareAStim(neuron, a, Fdrive, Adrive, tstim, toffset, PRF, DC, dt=None, at
         for item in ax.get_xticklabels() + ax.get_xticklabels():
             item.set_fontsize(fs)
     fig.subplots_adjust(top=0.8, left=0.05, right=0.95)
-    fig.suptitle('{} point-neuron, a = {}m, f = {}Hz, A = {}Pa, {}s'
-                 .format(neuron.name, *si_format([a, Fdrive, Adrive, tstim], space=' '),
-                         'adaptive time step' if dt is None else 'dt = ${}$ ms'
-                         .format(pow10_format(dt * 1e3))),
-                 fontsize=18)
+    fig.suptitle('{}, A = {}Pa, {}s'.format(
+        model.pprint(), *si_format([Adrive, tstim], space=' '),
+        'adaptive time step' if dt is None else 'dt = ${}$ ms'.format(pow10_format(dt * 1e3))
+    ), fontsize=18)
 
     # Plot charge density profiles
     ax = axes[0]

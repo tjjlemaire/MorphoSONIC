@@ -2,12 +2,13 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-30 11:29:37
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-08-30 20:42:48
+# @Last Modified time: 2018-09-04 12:29:56
 
 import time
-import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+
+from neuron import h
 
 from PySONIC.utils import si_format, pow10_format
 from PySONIC.plt import plotSignals
@@ -15,19 +16,19 @@ from PySONIC.plt import plotSignals
 from .sonic1D import Sonic1D
 
 
-def compareEStim(neuron, nnodes, diam, L, Ra, connector, Astim, tstim, toffset, PRF, DC,
-                 dt=None, atol=None, cmode='qual'):
+def compareEStim(neuron, Ra, connector, diams, lengths, amps, tstim, toffset,
+                 PRF, DC, nnodes=None, dt=None, atol=None, cmode='qual', actives='all'):
     ''' Compare results of E-STIM simulations of the 1D extended SONIC model with different sections
         connection schemes.
     '''
 
-    # Set amplitude distribution vector
-    amps = np.insert(np.zeros(nnodes - 1), 0, Astim)
+    # Create extended SONIC model with specific US frequency and connection scheme
+    model = Sonic1D(neuron, Ra, diams, lengths, connector=connector, actives=actives, nsec=nnodes)
 
     # Run model simulation with classic connect scheme
     tstart = time.time()
-    model = Sonic1D(neuron, nsec=nnodes, diam=diam, L=L, Ra=Ra)
-    model.setElecAmps(amps)
+    model = Sonic1D(neuron, Ra, diams, lengths, connector=None, actives=actives, nsec=nnodes)
+    lbls = model.setElecAmps(amps)
     t_classic, stimon_classic, _, Vmeffprobes_classic, *_ = model.simulate(
         tstim, toffset, PRF, DC, dt, atol)
     tcomp_classic = time.time() - tstart
@@ -35,7 +36,7 @@ def compareEStim(neuron, nnodes, diam, L, Ra, connector, Astim, tstim, toffset, 
 
     # Run model simulation with custom connect scheme
     tstart = time.time()
-    model = Sonic1D(neuron, nsec=nnodes, diam=diam, L=L, Ra=Ra, connector=connector)
+    model = Sonic1D(neuron, Ra, diams, lengths, connector=connector, actives=actives, nsec=nnodes)
     model.setElecAmps(amps)
     t_custom, stimon_custom, _, Vmeffprobes_custom, *_ = model.simulate(
         tstim, toffset, PRF, DC, dt, atol)
@@ -47,15 +48,12 @@ def compareEStim(neuron, nnodes, diam, L, Ra, connector, Astim, tstim, toffset, 
     gs = gridspec.GridSpec(1, 3, width_ratios=[3, 3, 1])
     axes = list(map(plt.subplot, gs))
     fig.subplots_adjust(top=0.8, left=0.05, right=0.95)
-    fig.suptitle('{} neuron, {} node{}, d = {}m, L = {}m, Ra = ${}$ ohm.cm - {}'
-                 .format(neuron.name, nnodes, 's' if nnodes > 1 else '',
-                         *si_format([diam, L], space=' '), pow10_format(Ra),
-                         'adaptive time step' if dt is None else 'dt = ${}$ ms'
-                         .format(pow10_format(dt * 1e3))),
-                 fontsize=18)
+    fig.suptitle('{} - {}'.format(
+        model.pprint(),
+        'adaptive time step' if dt is None else 'dt = ${}$ ms'.format(pow10_format(dt * 1e3))
+    ), fontsize=18)
     tonset = -10.0
     fs = 10
-    lbls = ['node {} ({:.0f} $mA/m^2$)'.format(i + 1, amps[i]) for i in range(nnodes)]
 
     # Plot Vmeff-traces for classic scheme
     ax = axes[0]
@@ -98,17 +96,18 @@ def compareEStim(neuron, nnodes, diam, L, Ra, connector, Astim, tstim, toffset, 
     return fig
 
 
-def runPlotAStim(neuron, nnodes, diam, L, Ra, connector, a, Fdrive, Adrive, tstim, toffset, PRF, DC,
-                 dt=None, atol=None, cmode='qual'):
+def runPlotAStim(neuron, a, Fdrive, Ra, connector, diams, lengths, amps, tstim, toffset,
+                 PRF, DC, nnodes=None, dt=None, atol=None, cmode='qual', actives='all'):
     ''' Run A-STIM simulation of 1D extended SONIC model and plot results. '''
 
-    # Create extended SONIC model with specific US frequency and connection scheme
     tstart = time.time()
-    model = Sonic1D(neuron, nnodes, diam, L, Ra, connector, a, Fdrive)
+
+    # Create extended SONIC model with specific US frequency and connection scheme
+    model = Sonic1D(neuron, Ra, diams, lengths, connector=connector, actives=actives, nsec=nnodes,
+                    a=a, Fdrive=Fdrive)
 
     # Set node-specifc acoustic amplitudes
-    amps = np.insert(np.zeros(nnodes - 1), 0, Adrive)
-    model.setUSAmps(amps * 1e-3)
+    lbls = model.setUSAmps(amps)  # Pa
 
     # Run model simulation
     t, stimon, Qprobes, Vmeffprobes, _ = model.simulate(tstim, toffset, PRF, DC, dt, atol)
@@ -119,18 +118,16 @@ def runPlotAStim(neuron, nnodes, diam, L, Ra, connector, a, Fdrive, Adrive, tsti
     gs = gridspec.GridSpec(1, 3, width_ratios=[4, 4, 1])
     axes = list(map(plt.subplot, gs))
     fig.subplots_adjust(top=0.8, left=0.05, right=0.95)
-    fig.suptitle('{} neuron, {} node{}, d = {}m, L = {}m, Ra = ${}$ ohm.cm - {}'
-                 .format(neuron.name, nnodes, 's' if nnodes > 1 else '',
-                         *si_format([diam, L], space=' '), pow10_format(Ra),
-                         'adaptive time step' if dt is None else 'dt = ${}$ ms'
-                         .format(pow10_format(dt * 1e3))),
-                 fontsize=18)
+
+    fig.suptitle('{} - {}'.format(
+        model.pprint(),
+        'adaptive time step' if dt is None else 'dt = ${}$ ms'.format(pow10_format(dt * 1e3))
+    ), fontsize=18)
     for ax in axes:
         ax.set_ylim(-150, 50)
     tonset = -10.0
     Vm0 = model.neuron.Vm0
     fs = 10
-    lbls = ['node {} ({:.0f} kPa)'.format(i + 1, amps[i] * 1e-3) for i in range(nnodes)]
 
     # Plot charge density profiles
     ax = axes[0]

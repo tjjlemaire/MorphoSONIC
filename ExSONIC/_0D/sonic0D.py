@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-08-31 15:14:59
+# @Last Modified time: 2018-09-03 16:02:31
 
 
 import os
@@ -39,18 +39,21 @@ class Sonic0D:
         self.loadMechanisms()
         self.setFuncTables(self.a, self.Fdrive)
 
-        # Create section and set geometry
+        # Create section and set membrane mechanism
         self.section = self.createSection('point')
-
-        # Set section membrane mechanism
-        self.defineBiophysics()
+        self.section.insert(self.mechname)
 
         if self.verbose:
             print('Creating model: {}'.format(self))
 
-    def __str__(self):
+    def __repr__(self):
         ''' Explicit naming of the model instance. '''
         return 'SONIC0D_{}_{}m_{}Hz'.format(self.neuron.name, *si_format([self.a, self.Fdrive], 2))
+
+    def pprint(self):
+        ''' Pretty-print naming of the model instance. '''
+        return '{} point-neuron, a = {}m, f = {}Hz'.format(
+            self.neuron.name, *si_format([self.a, self.Fdrive], space=' '))
 
     def loadMechanisms(self):
         ''' Locate NMODL directory, check for untracked modifications in NMODL source files, and
@@ -102,12 +105,6 @@ class Sonic0D:
             for rate in ['alpha', 'beta']:
                 rname = '{}{}'.format(rate, gate)
                 setFuncTable(self.mechname, rname, self.lookups2D[rname], self.Aref, self.Qref)
-
-    def defineBiophysics(self, sections=None):
-        ''' Set neuron-specific active membrane properties. '''
-        sections = [self.section] if sections is None else sections
-        for sec in sections:
-            sec.insert(self.mechname)
 
     def setAdrive(self, Adrive):
         ''' Set US stimulation amplitude (and set modality to "US").

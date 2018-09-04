@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-25 02:00:26
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-08-30 10:38:53
+# @Last Modified time: 2018-09-03 15:58:55
 
 import numpy as np
 from neuron import h
@@ -24,11 +24,16 @@ class SeriesConnector:
         self.vref = vref
         self.rmin = rmin  # Ohm.cm2
 
+    def __repr__(self):
+        return 'connect("{}"{})'.format(
+            self.vref,
+            ', rmin={:.2e}_Ohm.cm2'.format(self.rmin) if self.rmin is not None else ''
+        )
+
     def __str__(self):
-        return 'Series connector object: {} density mechanism, reference voltage variable = "{}"{}'\
-            .format(self.mechname, self.vref,
-                    ', minimal resistance density = {:.2e} Ohm.cm2'.format(self.rmin)
-                    if self.rmin is not None else '')
+        return 'Series connector object: reference voltage variable = "{}"{}'.format(
+            self.vref, ', minimal resistance density = {:.2e} Ohm.cm2'.format(self.rmin)
+            if self.rmin is not None else '')
 
     def membraneArea(self, sec):
         ''' Compute section membrane surface area (in cm2) '''
