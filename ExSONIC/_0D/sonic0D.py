@@ -2,13 +2,13 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-09-04 17:07:01
+# @Last Modified time: 2018-09-05 11:52:33
 
 
 import sys
 import os
 import numpy as np
-from neuron import h, load_mechanisms
+from neuron import h
 
 from PySONIC.neurons import *
 from PySONIC.utils import getLookups2D, si_format
@@ -37,7 +37,7 @@ class Sonic0D:
         self.mechname = neuron.name
 
         # Load mechanisms and set function tables of appropriate membrane mechanism
-        self.loadMechanisms()
+        load_mechanisms(getNmodlDir(), self.mechname)
         self.setFuncTables(self.a, self.Fdrive)
 
         # Create section and set membrane mechanism
@@ -55,24 +55,6 @@ class Sonic0D:
         ''' Pretty-print naming of the model instance. '''
         return '{} point-neuron, a = {}m, f = {}Hz'.format(
             self.neuron.name, *si_format([self.a, self.Fdrive], space=' '))
-
-    def loadMechanisms(self):
-        ''' Locate NMODL directory, check for untracked modifications in NMODL source files, and
-            load compiled mechanisms file.
-        '''
-        nmodldir = getNmodlDir()
-
-        # load_mechanisms does not work on windows -> custom workaround
-        if sys.platform == 'win32':
-            modfile = os.path.join(nmodldir, '{}.mod'.format(self.mechname))
-            dllfile = os.path.join(nmodldir, 'nrnmech.dll')
-            if not os.path.isfile(dllfile) or os.path.getmtime(modfile) > os.path.getmtime(dllfile):
-                raise Warning('"{}.mod" file more recent than compiled dll'.format(self.mechname))
-            if not isAlreadyLoaded(dllfile):
-                h.nrn_load_dll(dllfile)
-        # linux -> standard use case
-        elif sys.platform == 'linux':
-            load_mechanisms(nmodldir)
 
     def createSection(self, id):
         ''' Create morphological section.
