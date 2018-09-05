@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 16:41:08
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-09-03 16:02:53
+# @Last Modified time: 2018-09-05 12:14:09
 
 import time
 import pickle
@@ -23,12 +23,9 @@ def runPlotEStim(neuron, Astim, tstim, toffset, PRF, DC, dt=None, atol=None):
     ''' Run E-STIM simulation of point-neuron SONIC model and plot results. '''
 
     # Create NEURON point-neuron SONIC model and run simulation
-    tstart = time.time()
     model = Sonic0D(neuron)
     model.setAstim(Astim)
     t, y, stimon = model.simulate(tstim, toffset, PRF, DC, dt, atol)
-    tcomp = time.time() - tstart
-    print('Simulation completed in {:.2f} ms'.format(tcomp * 1e3))
     Vmeff = y[1, :]
 
     # Rescale vectors to appropriate units
@@ -75,7 +72,7 @@ def compareAStim(neuron, a, Fdrive, Adrive, tstim, toffset, PRF, DC, dt=None, at
     # Create NEURON point-neuron SONIC model and run simulation
     tstart = time.time()
     model = Sonic0D(neuron, a=a, Fdrive=Fdrive)
-    model.setAdrive(Adrive * 1e-3)
+    model.setAdrive(Adrive)
     t_NEURON, y_NEURON, stimon_NEURON = model.simulate(tstim, toffset, PRF, DC, dt, atol)
     tcomp_NEURON = time.time() - tstart
     Qm_NEURON, Vmeff_NEURON = y_NEURON[0:2, :]
@@ -339,7 +336,7 @@ class AStimWorker():
         # Run simulation
         tstart = time.time()
         model = Sonic0D(self.neuron, a=self.a, Fdrive=self.Fdrive)
-        model.setAdrive(self.Adrive * 1e-3)
+        model.setAdrive(self.Adrive)
         (t, y, stimon) = model.simulate(self.tstim, self.toffset, self.PRF, self.DC,
                                         self.dt, self.atol)
         Qm, Vm, *states = y

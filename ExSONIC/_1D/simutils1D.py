@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-30 11:29:37
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-09-04 12:29:56
+# @Last Modified time: 2018-09-05 12:21:08
 
 import time
 import matplotlib.pyplot as plt
@@ -42,6 +42,9 @@ def compareEStim(neuron, Ra, connector, diams, lengths, amps, tstim, toffset,
         tstim, toffset, PRF, DC, dt, atol)
     tcomp_custom = time.time() - tstart
     stimon_custom[0] = 1
+
+    # Rescale vectors to appropriate units
+    t_classic, t_custom = [t * 1e3 for t in [t_classic, t_custom]]  # ms
 
     # Create comparative figure
     fig = plt.figure(figsize=(16, 3))
@@ -113,12 +116,15 @@ def runPlotAStim(neuron, a, Fdrive, Ra, connector, diams, lengths, amps, tstim, 
     t, stimon, Qprobes, Vmeffprobes, _ = model.simulate(tstim, toffset, PRF, DC, dt, atol)
     tcomp = time.time() - tstart
 
+    # Rescale vectors to appropriate units
+    t *= 1e3  # ms
+    Qprobes *= 1e5  # nC/cm2
+
     # Plot membrane potential and charge profiles
     fig = plt.figure(figsize=(16, 3))
     gs = gridspec.GridSpec(1, 3, width_ratios=[4, 4, 1])
     axes = list(map(plt.subplot, gs))
     fig.subplots_adjust(top=0.8, left=0.05, right=0.95)
-
     fig.suptitle('{} - {}'.format(
         model.pprint(),
         'adaptive time step' if dt is None else 'dt = ${}$ ms'.format(pow10_format(dt * 1e3))

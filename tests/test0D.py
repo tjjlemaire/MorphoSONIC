@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-30 11:26:26
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-08-30 12:22:51
+# @Last Modified time: 2018-09-05 12:21:43
 
 import sys
 import matplotlib.pyplot as plt
@@ -21,7 +21,7 @@ def runTests(hide):
 
     # Stimulation parameters
     Fdrive = 500e3  # Hz
-    Adrive = 50e3  # kPa
+    Adrive = 50e3  # Pa
     Astim = 30.0  # mA/m2
     tstim = 150e-3  # s
     toffset = 100e-3  # s

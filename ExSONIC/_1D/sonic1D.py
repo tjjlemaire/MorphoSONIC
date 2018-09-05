@@ -2,7 +2,7 @@
 # @Author: Theo
 # @Date:   2018-08-15 15:08:23
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-09-04 10:52:13
+# @Last Modified time: 2018-09-05 12:19:26
 
 import numpy as np
 from itertools import repeat
@@ -229,7 +229,7 @@ class Sonic1D(Sonic0D):
         # Set recording vectors
         tprobe = setTimeProbe()
         stimprobe = setStimProbe(self.sections[0], self.mechname)
-        vprobes = list(map(setRangeProbe, self.sections, repeat('v')))
+        Qprobes = list(map(setRangeProbe, self.sections, repeat('v')))
         Vmeffprobes = list(map(setRangeProbe, self.sections,
                                repeat('Vmeff_{}'.format(self.mechname))))
         statesprobes = [list(map(setRangeProbe, self.sections,
@@ -240,11 +240,11 @@ class Sonic1D(Sonic0D):
         self.integrate(tstim + toffset, tstim, PRF, DC, dt, atol)
 
         # Retrieve output variables
-        t = Vec2array(tprobe)  # ms
+        t = Vec2array(tprobe) * 1e-3  # s
         stimon = Vec2array(stimprobe)
-        vprobes = np.array(list(map(Vec2array, vprobes)))  # mV or nC/cm2
+        Qprobes = np.array(list(map(Vec2array, Qprobes))) * 1e-5  # C/cm2
         Vmeffprobes = np.array(list(map(Vec2array, Vmeffprobes)))  # mV
         statesprobes = {state: np.array(list(map(Vec2array, probes)))
                         for state, probes in zip(self.neuron.states_names, statesprobes)}
 
-        return t, stimon, vprobes, Vmeffprobes, statesprobes
+        return t, stimon, Qprobes, Vmeffprobes, statesprobes

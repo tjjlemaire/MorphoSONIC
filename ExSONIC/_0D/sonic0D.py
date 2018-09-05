@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-09-05 11:52:33
+# @Last Modified time: 2018-09-05 12:10:32
 
 
 import sys
@@ -102,8 +102,8 @@ class Sonic0D:
         '''
         if self.verbose:
             print('Setting acoustic stimulus amplitude: Adrive = {}Pa'
-                  .format(si_format(Adrive * 1e3, space=' ')))
-        setattr(self.section, 'Adrive_{}'.format(self.mechname), Adrive)
+                  .format(si_format(Adrive, space=' ')))
+        setattr(self.section, 'Adrive_{}'.format(self.mechname), Adrive * 1e-3)
         self.modality = 'US'
 
     def setAstim(self, Astim):
@@ -240,7 +240,7 @@ class Sonic0D:
         # Retrieve output variables
         t = Vec2array(tprobe) * 1e-3  # s
         stimon = Vec2array(stimprobe)
-        Qprobe = Vec2array(vprobe) * 1e-5  # nC/cm2
+        Qprobe = Vec2array(vprobe) * 1e-5  # C/cm2
         Vmeffprobe = Vec2array(Vmeffprobe)  # mV
         statesprobes = list(map(Vec2array, statesprobes))
         y = np.vstack([Qprobe, Vmeffprobe, np.array(statesprobes)])
