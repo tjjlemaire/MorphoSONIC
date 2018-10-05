@@ -2,11 +2,9 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-09-05 12:10:32
+# @Last Modified time: 2018-09-23 15:55:23
 
 
-import sys
-import os
 import numpy as np
 from neuron import h
 

@@ -27,6 +27,8 @@ __pycache__/
 *.o
 *.c
 *.dll
+x86_64/
+
 
 # Distribution / packaging
 .Python

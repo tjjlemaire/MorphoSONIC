@@ -2,13 +2,13 @@
 # @Author: Theo
 # @Date:   2018-08-15 15:08:23
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-09-05 12:19:26
+# @Last Modified time: 2018-09-27 12:27:51
 
 import numpy as np
 from itertools import repeat
 
 from PySONIC.neurons import *
-from PySONIC.utils import InputError, si_format, pow10_format
+from PySONIC.utils import si_format, pow10_format
 from PySONIC.constants import *
 
 from ..pyhoc import *
@@ -42,7 +42,7 @@ class Sonic1D(Sonic0D):
                     nsec = len(item)
                     break
             if nsec is None:
-                raise InputError('nsec must be provided for float-typed geometrical parameters')
+                raise ValueError('nsec must be provided for float-typed geometrical parameters')
         if isinstance(diams, float):
             diams = [diams] * nsec
         if isinstance(lengths, float):
@@ -52,10 +52,10 @@ class Sonic1D(Sonic0D):
 
         # Check inputs validity
         if len(diams) != len(lengths):
-            raise InputError('Inconsistent numbers of section diameters ({}) and lengths ({})'.format(
+            raise ValueError('Inconsistent numbers of section diameters ({}) and lengths ({})'.format(
                 len(diams), len(lengths)))
         if len(diams) != len(actives):
-            raise InputError('Inconsistent numbers of section diameters ({}) and states ({})'.format(
+            raise ValueError('Inconsistent numbers of section diameters ({}) and states ({})'.format(
                 len(diams), len(actives)))
 
         # Assign inputs as arguments
@@ -86,8 +86,6 @@ class Sonic1D(Sonic0D):
             else:
                 self.buildCustomTopology()
 
-        # Set zero acoustic amplitudes
-        self.setUSAmps(np.zeros(self.nsec))
 
     def __repr__(self):
         ''' Explicit naming of the model instance. '''
@@ -147,13 +145,17 @@ class Sonic1D(Sonic0D):
             :return: section-specific amplitude labels
         '''
 
+        if self.connector is None:
+            raise ValueError(
+                'attempting to perform A-STIM simulation with standard "v-based" connection scheme')
+
         # Pre-process input
         if isinstance(amps, float):
             amps = np.insert(np.zeros(self.nsec - 1), 0, amps)
         else:
             amps = np.array(amps)
         if self.nsec != len(amps):
-            raise InputError('Amplitude distribution vector does not match number of sections')
+            raise ValueError('Amplitude distribution vector does not match number of sections')
 
         # Conversion Pa -> kPa
         amps *= 1e-3
@@ -183,7 +185,7 @@ class Sonic1D(Sonic0D):
         else:
             amps = np.array(amps)
         if len(self.sections) != len(amps):
-            raise InputError('Amplitude distribution vector does not match number of sections')
+            raise ValueError('Amplitude distribution vector does not match number of sections')
 
         # Set IClamp objects
         if self.verbose:

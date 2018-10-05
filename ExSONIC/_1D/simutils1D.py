@@ -2,16 +2,14 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-30 11:29:37
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-09-05 12:21:08
+# @Last Modified time: 2018-09-27 11:36:41
 
 import time
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
-from neuron import h
-
 from PySONIC.utils import si_format, pow10_format
-from PySONIC.plt import plotSignals
+from ..plt import plotSignals
 
 from .sonic1D import Sonic1D
 

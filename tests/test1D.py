@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-30 10:51:12
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-09-05 12:15:26
+# @Last Modified time: 2018-09-05 15:48:09
 
 import sys
 import matplotlib.pyplot as plt
@@ -31,19 +31,13 @@ def runTests(hide):
     PRF = 100.  # Hz
     DC = 1.0
 
-    actives = 'all'
-    factor = 1
-
+    # E-STIM
     compareEStim(neuron, Ra, SeriesConnector(vref='v'), d, L, Astim, tstim, toffset, PRF, DC,
                  nnodes=nnodes)
-    compareEStim(neuron, Ra, SeriesConnector(vref='v'), d, [L, L * factor],
-                 Astim, tstim, toffset, PRF, DC, actives=actives)
 
+    # A-STIM
     runPlotAStim(neuron, a, Fdrive, Ra, SeriesConnector(vref='Vmeff_{}'.format(neuron.name)), d, L,
                  Adrive, tstim, toffset, PRF, DC, nnodes=nnodes)
-    runPlotAStim(neuron, a, Fdrive, Ra, SeriesConnector(vref='Vmeff_{}'.format(neuron.name)),
-                 d, [L, L * factor], [Adrive, 2 * Adrive], tstim, toffset, PRF, DC,
-                 actives=actives)
 
     if not hide:
         plt.show()

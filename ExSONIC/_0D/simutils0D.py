@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 16:41:08
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-09-05 12:14:09
+# @Last Modified time: 2018-09-27 11:32:27
 
 import time
 import pickle
@@ -11,10 +11,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
-from PySONIC.utils import logger, si_format, pow10_format
-from PySONIC.solvers import findPeaks, SolverUS, xlslog
+from PySONIC.utils import logger, si_format, pow10_format, getStimPulses
+from PySONIC.batches import xlslog
+from PySONIC.postpro import findPeaks
+from PySONIC.core import NeuronalBilayerSonophore
 from PySONIC.constants import *
-from PySONIC.plt import getPatchesLoc
 
 from .sonic0D import Sonic0D
 
@@ -32,7 +33,7 @@ def runPlotEStim(neuron, Astim, tstim, toffset, PRF, DC, dt=None, atol=None):
     t *= 1e3
 
     # Get pulses timing
-    npatches, tpatch_on, tpatch_off = getPatchesLoc(t, stimon)
+    npatches, tpatch_on, tpatch_off = getStimPulses(t, stimon)
 
     # Add onset to signals
     t0 = -10.0
@@ -79,8 +80,8 @@ def compareAStim(neuron, a, Fdrive, Adrive, tstim, toffset, PRF, DC, dt=None, at
 
     # Run Python stimulation
     tstart = time.time()
-    t_Python, y_Python, stimon_Python = SolverUS(a, neuron, Fdrive).run(neuron, Fdrive, Adrive,
-                                                                        tstim, toffset, PRF, DC)
+    nbls = NeuronalBilayerSonophore(a, neuron)
+    t_Python, y_Python, stimon_Python = nbls.simulate(Fdrive, Adrive, tstim, toffset, PRF, DC)
     tcomp_Python = time.time() - tstart
     Qm_Python, Vmeff_Python = y_Python[2:4, :]
 
@@ -89,7 +90,7 @@ def compareAStim(neuron, a, Fdrive, Adrive, tstim, toffset, PRF, DC, dt=None, at
     Qm_Python, Qm_NEURON = [Qm * 1e5 for Qm in [Qm_Python, Qm_NEURON]]
 
     # Get pulses timing
-    npatches, tpatch_on, tpatch_off = getPatchesLoc(t_Python, stimon_Python)
+    npatches, tpatch_on, tpatch_off = getStimPulses(t_Python, stimon_Python)
 
     # Add onset to signals
     t0 = -10.0
