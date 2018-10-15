@@ -2,7 +2,7 @@
 # @Author: Theo
 # @Date:   2018-08-15 15:08:23
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-09-27 12:27:51
+# @Last Modified time: 2018-10-15 23:33:59
 
 import numpy as np
 from itertools import repeat
@@ -18,16 +18,17 @@ from .._0D import Sonic0D
 class Sonic1D(Sonic0D):
     ''' Simple 1D extension of the SONIC model. '''
 
-    def __init__(self, neuron, Ra, diams, lengths, actives='all', connector=None,
-                 a=32e-9, Fdrive=500e3, verbose=False, nsec=None):
+    def __init__(self, neuron, Ra, diams, lengths, connector=None,
+                 a=32e-9, covs=1., Fdrive=500e3,
+                 verbose=False, nsec=None):
         ''' Initialization.
 
             :param neuron: neuron object
             :param Ra: cytoplasmic resistivity (Ohm.cm)
             :param diams: list of section diameters (m) or single value (applied to all sections)
             :param lengths: list of section lengths (m) or single value (applied to all sections)
-            :param actives: list of booleans stating whether nodes are treated as active or passive
-             or single value (applied to all sections)
+            :param covs: list of membrane sonophore coverage fraction in each section,
+              or single value (applied to all sections)
             :param connector: object used to connect sections together through a custom
                 axial current density mechanism
             :param a: sonophore diameter (m)
@@ -37,7 +38,7 @@ class Sonic1D(Sonic0D):
 
         # Pre-process inputs
         if nsec is None:
-            for item in [diams, lengths, actives]:
+            for item in [diams, lengths, covs]:
                 if isinstance(item, list) or isinstance(item, tuple) or isinstance(item, np.ndarray):
                     nsec = len(item)
                     break
@@ -47,27 +48,31 @@ class Sonic1D(Sonic0D):
             diams = [diams] * nsec
         if isinstance(lengths, float):
             lengths = [lengths] * nsec
-        if actives == 'all':
-            actives = [True] * nsec
+        if isinstance(covs, float):
+            covs = [covs] * nsec
 
         # Check inputs validity
         if len(diams) != len(lengths):
             raise ValueError('Inconsistent numbers of section diameters ({}) and lengths ({})'.format(
                 len(diams), len(lengths)))
-        if len(diams) != len(actives):
-            raise ValueError('Inconsistent numbers of section diameters ({}) and states ({})'.format(
-                len(diams), len(actives)))
+        if len(diams) != len(covs):
+            raise ValueError(
+                'Inconsistent numbers of section diameters ({}) and coverages ({})'.format(
+                    len(diams), len(covs)))
+        for i, fs in enumerate(covs):
+            if fs > 1. or fs < 0.:
+                raise ValueError('covs[{}] ({}) must be within [0-1]'.format(i, fs))
 
         # Assign inputs as arguments
         self.diams = np.array(diams) * 1e6  # um
         self.lengths = np.array(lengths) * 1e6  # um
-        self.actives = np.array(actives)
+        self.covs = np.array(covs)
         self.nsec = self.diams.size
         self.Ra = Ra  # Ohm.cm
         self.connector = connector
 
         # Initialize point-neuron model and delete its single section
-        super().__init__(neuron, a, Fdrive, verbose)
+        super().__init__(neuron, a=a, Fdrive=Fdrive, verbose=verbose)
         del self.section
 
         # Create sections and set their geometry
@@ -103,9 +108,14 @@ class Sonic1D(Sonic0D):
             L_str = '{}m'.format(si_format(self.lengths[0] * 1e-6, space=' '))
         else:
             L_str = '[{}] um'.format(', '.join(['{:.2f}'.format(x) for x in self.lengths]))
-        return '{} neuron, {} node{}, Ra = ${}$ ohm.cm, d = {}, L = {}'.format(
+        if np.all(self.covs == self.covs[0]):
+            cov_str = '{:.0f}%'.format(self.covs[0] * 1e2)
+        else:
+            cov_str = '[{}] %'.format(', '.join(['{:.0f}'.format(x * 1e2) for x in self.covs]))
+
+        return '{} neuron, {} node{}, Ra = ${}$ ohm.cm, d = {}, L = {}, cov = {}'.format(
             self.neuron.name, self.nsec, 's' if self.nsec > 1 else '',
-            pow10_format(self.Ra), d_str, L_str)
+            pow10_format(self.Ra), d_str, L_str, cov_str)
 
     def createSections(self, ids):
         ''' Create morphological sections.
@@ -122,10 +132,10 @@ class Sonic1D(Sonic0D):
             sec.nseg = 1
 
     def defineBiophysics(self):
-        ''' Set neuron-specific active membrane properties to specified active sections. '''
-        for sec, active in zip(self.sections, self.actives):
-            if active:
-                sec.insert(self.mechname)
+        ''' Set section-specific membrane properties with specific sonophore membrane coverage. '''
+        for sec, fs in zip(self.sections, self.covs):
+            sec.insert(self.mechname)
+            setattr(sec, 'fs_{}'.format(self.mechname), fs)
 
     def buildTopology(self):
         ''' Connect the sections in series through classic NEURON implementation. '''
@@ -148,17 +158,11 @@ class Sonic1D(Sonic0D):
         if self.connector is None:
             raise ValueError(
                 'attempting to perform A-STIM simulation with standard "v-based" connection scheme')
-
-        # Pre-process input
-        if isinstance(amps, float):
-            amps = np.insert(np.zeros(self.nsec - 1), 0, amps)
-        else:
-            amps = np.array(amps)
         if self.nsec != len(amps):
             raise ValueError('Amplitude distribution vector does not match number of sections')
 
         # Conversion Pa -> kPa
-        amps *= 1e-3
+        amps = np.array(amps) * 1e-3
 
         # Set acoustic amplitudes
         if self.verbose:
@@ -230,23 +234,30 @@ class Sonic1D(Sonic0D):
 
         # Set recording vectors
         tprobe = setTimeProbe()
-        stimprobe = setStimProbe(self.sections[0], self.mechname)
-        Qprobes = list(map(setRangeProbe, self.sections, repeat('v')))
-        Vmeffprobes = list(map(setRangeProbe, self.sections,
-                               repeat('Vmeff_{}'.format(self.mechname))))
-        statesprobes = [list(map(setRangeProbe, self.sections,
-                                 repeat('{}_{}'.format(alias(state), self.mechname))))
-                        for state in self.neuron.states_names]
+        stimon = setStimProbe(self.sections[0], self.mechname)
+        Qm = list(map(setRangeProbe, self.sections, repeat('v')))
+        Vmeff = list(map(setRangeProbe, self.sections,
+                         repeat('Vmeff_{}'.format(self.mechname))))
+        states = {
+            state: [{
+                suffix: setRangeProbe(sec, '{}_{}_{}'.format(alias(state), suffix, self.mechname))
+                for suffix in ['0', 'US']
+            } for sec in self.sections] for state in self.neuron.states_names
+        }
 
         # Integrate model
         self.integrate(tstim + toffset, tstim, PRF, DC, dt, atol)
 
         # Retrieve output variables
         t = Vec2array(tprobe) * 1e-3  # s
-        stimon = Vec2array(stimprobe)
-        Qprobes = np.array(list(map(Vec2array, Qprobes))) * 1e-5  # C/cm2
-        Vmeffprobes = np.array(list(map(Vec2array, Vmeffprobes)))  # mV
-        statesprobes = {state: np.array(list(map(Vec2array, probes)))
-                        for state, probes in zip(self.neuron.states_names, statesprobes)}
+        stimon = Vec2array(stimon)
+        Qm = np.array(list(map(Vec2array, Qm))) * 1e-5  # C/cm2
+        Vmeff = np.array(list(map(Vec2array, Vmeff)))  # mV
+        states = {
+            key: [
+                fs * Vec2array(val['US']) + (1 - fs) * Vec2array(val['0'])
+                for val, fs in zip(states[key], self.covs)
+            ] for key in self.neuron.states_names
+        }
 
-        return t, stimon, Qprobes, Vmeffprobes, statesprobes
+        return t, stimon, Qm, Vmeff, states

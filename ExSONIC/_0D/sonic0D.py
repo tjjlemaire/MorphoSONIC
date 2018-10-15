@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-09-23 15:55:23
+# @Last Modified time: 2018-10-15 23:33:02
 
 
 import numpy as np
@@ -19,40 +19,57 @@ from ..utils import getNmodlDir
 class Sonic0D:
     ''' Point-neuron SONIC model in NEURON. '''
 
-    def __init__(self, neuron, a=32e-9, Fdrive=500e3, verbose=False):
+    def __init__(self, neuron, a=32e-9, fs=1., Fdrive=500e3, verbose=False):
         ''' Initialization.
 
             :param neuron: neuron object
             :param a: sonophore diameter (nm)
+            :param fs: fraction of membrane covered by sonophores (0-1)
             :param Fdrive: ultrasound frequency (Hz)
             :param verbose: boolean stating whether to print out details
         '''
+        if fs > 1. or fs < 0.:
+            raise ValueError('fs ({}) must be within [0-1]'.format(fs))
+
         # Initialize arguments
         self.neuron = neuron
         self.a = a  # m
+        self.fs = fs
         self.Fdrive = Fdrive  # Hz
+        self.mechname = self.neuron.name
         self.verbose = verbose
-        self.mechname = neuron.name
 
         # Load mechanisms and set function tables of appropriate membrane mechanism
-        load_mechanisms(getNmodlDir(), self.mechname)
+        load_mechanisms(getNmodlDir(), self.neuron.name)
         self.setFuncTables(self.a, self.Fdrive)
 
         # Create section and set membrane mechanism
         self.section = self.createSection('point')
         self.section.insert(self.mechname)
 
+        # Set sonophore membrane coverage fraction into mechanism
+        setattr(self.section, 'fs_{}'.format(self.mechname), fs)
+
         if self.verbose:
             print('Creating model: {}'.format(self))
 
     def __repr__(self):
         ''' Explicit naming of the model instance. '''
-        return 'SONIC0D_{}_{}m_{}Hz'.format(self.neuron.name, *si_format([self.a, self.Fdrive], 2))
+        return 'SONIC0D_{}_{}m_{:.0f}%_{}Hz'.format(
+            self.neuron.name,
+            si_format(self.a, 2),
+            self.fs * 1e2,
+            si_format(self.Fdrive, 2)
+        )
 
     def pprint(self):
         ''' Pretty-print naming of the model instance. '''
-        return '{} point-neuron, a = {}m, f = {}Hz'.format(
-            self.neuron.name, *si_format([self.a, self.Fdrive], space=' '))
+        return '{} point-neuron, a = {}m, {:.0f}% cov., f = {}Hz'.format(
+            self.neuron.name,
+            si_format(self.a, space=' '),
+            self.fs * 1e2,
+            si_format(self.Fdrive, space=' ')
+        )
 
     def createSection(self, id):
         ''' Create morphological section.
@@ -71,7 +88,7 @@ class Sonic0D:
         '''
 
         # Get lookups
-        Aref, Qref, lookups2D = getLookups2D(self.mechname, a, Fdrive)
+        Aref, Qref, lookups2D = getLookups2D(self.neuron.name, a, Fdrive)
 
         # Rescale rate constants to ms-1
         for k in lookups2D.keys():
@@ -224,24 +241,29 @@ class Sonic0D:
             :param dt: integration time step for fixed time step method (s)
             :param atol: absolute error tolerance for adaptive time step method (default = 1e-3)
         '''
+
         # Set recording vectors
-        tprobe = setTimeProbe()
-        stimprobe = setStimProbe(self.section, self.mechname)
-        vprobe = setRangeProbe(self.section, 'v')
-        Vmeffprobe = setRangeProbe(self.section, 'Vmeff_{}'.format(self.mechname))
-        statesprobes = [setRangeProbe(self.section, '{}_{}'.format(alias(state), self.mechname))
-                        for state in self.neuron.states_names]
+        t = setTimeProbe()
+        stimon = setStimProbe(self.section, self.mechname)
+        Qm = setRangeProbe(self.section, 'v')
+        Vmeff = setRangeProbe(self.section, 'Vmeff_{}'.format(self.mechname))
+
+        states = [{suffix: setRangeProbe(
+            self.section, '{}_{}_{}'.format(alias(state), suffix, self.mechname))
+            for suffix in ['0', 'US']
+        } for state in self.neuron.states_names]
 
         # Integrate model
         self.integrate(tstim + toffset, tstim, PRF, DC, dt, atol)
 
         # Retrieve output variables
-        t = Vec2array(tprobe) * 1e-3  # s
-        stimon = Vec2array(stimprobe)
-        Qprobe = Vec2array(vprobe) * 1e-5  # C/cm2
-        Vmeffprobe = Vec2array(Vmeffprobe)  # mV
-        statesprobes = list(map(Vec2array, statesprobes))
-        y = np.vstack([Qprobe, Vmeffprobe, np.array(statesprobes)])
+        t = Vec2array(t) * 1e-3  # s
+        stimon = Vec2array(stimon)
+        Qm = Vec2array(Qm) * 1e-5  # C/cm2
+        Vmeff = Vec2array(Vmeff)  # mV
+        states = [self.fs * Vec2array(state['US']) + (1 - self.fs) * Vec2array(state['0'])
+                  for state in states]
+        y = np.vstack([Qm, Vmeff, np.array(states)])
 
         # return output variables
         return (t, y, stimon)

@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-21 19:48:04
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-09-05 11:50:02
+# @Last Modified time: 2018-10-15 22:02:36
 
 
 ''' Utilities to manipulate HOC objects. '''

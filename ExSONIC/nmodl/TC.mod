@@ -37,12 +37,8 @@ NEURON {
     NONSPECIFIC_CURRENT iLeak
 
     : RANGE variables
-    RANGE Adrive, Vmeff : section specific
+    RANGE Adrive, fs, Vmeff : section specific
     RANGE stimon : common to all sections (but set as RANGE to be accessible from caller)
-
-    : physiological variables
-    :RANGE k1, k2, k3, k4, nca
-    :RANGE depth, taur, camin
 }
 
 CONSTANT {
@@ -51,11 +47,10 @@ CONSTANT {
 
 
 PARAMETER {
-    :Stimulation state (set by the python/hoc caller)
-    stimon
-
-    : Stimulation amplitude (set by the python/hoc caller)
-    Adrive    (kPa)
+    : Parameters set by python/hoc caller
+    stimon : Stimulation state
+    fs : Fraction of membrane covered by sonophore
+    Adrive (kPa) : Stimulation amplitude
 
     : membrane properties
     cm = 1              (uF/cm2)
@@ -86,21 +81,35 @@ PARAMETER {
 }
 
 STATE {
-    : Differential variables other than v
-    m  : iNa activation gate
-    h  : iNa inactivation gate
-    n  : iKd activation gate
-    s  : iCa activation gate
-    u  : iCa inactivation gate
-    C1  : iH channel closed state
-    O1  : iH channel open state
-    P0  : proportion of unbound CB protein
-    C_Ca (M) : submembrane Calcium concentration
+    : Standard gating states
+    m_0  : iNa activation gate
+    h_0  : iNa inactivation gate
+    n_0  : iKd activation gate
+    s_0  : iCa activation gate
+    u_0  : iCa inactivation gate
+    C1_0  : iH channel closed state
+    O1_0  : iH channel open state
+
+    : US-modulated gating state
+    m_US  : iNa activation gate
+    h_US  : iNa inactivation gate
+    n_US  : iKd activation gate
+    s_US  : iCa activation gate
+    u_US  : iCa inactivation gate
+    C1_US  : iH channel closed state
+    O1_US  : iH channel open state
+
+    C_Ca_0 (M) : submembrane Calcium concentration
+    P0_0       : proportion of unbound CB protein
+    C_Ca_US (M) : submembrane Calcium concentration
+    P0_US       : proportion of unbound CB protein
 }
 
 ASSIGNED {
     : Variables computed during the simulation and whose value can be retrieved
-    Vmeff    (mV)
+    Vmeff_0   (mV)
+    Vmeff_US  (mV)
+    Vmeff   (mV)
     v        (mV)
     iNa      (mA/cm2)
     iKd      (mA/cm2)
@@ -137,21 +146,32 @@ FUNCTION iondrive(i (mA/cm2), val, d(nm)) (M/ms) {
 
 INITIAL {
     : Set initial states values
-    m = alpham(0, v) / (alpham(0, v) + betam(0, v))
-    h = alphah(0, v) / (alphah(0, v) + betah(0, v))
-    n = alphan(0, v) / (alphan(0, v) + betan(0, v))
-    s = alphas(0, v) / (alphas(0, v) + betas(0, v))
-    u = alphau(0, v) / (alphau(0, v) + betau(0, v))
+    m_0 = alpham(0, v) / (alpham(0, v) + betam(0, v))
+    h_0 = alphah(0, v) / (alphah(0, v) + betah(0, v))
+    n_0 = alphan(0, v) / (alphan(0, v) + betan(0, v))
+    s_0 = alphas(0, v) / (alphas(0, v) + betas(0, v))
+    u_0 = alphau(0, v) / (alphau(0, v) + betau(0, v))
+
+    m_US = m_0
+    h_US = h_0
+    n_US = n_0
+    s_US = s_0
+    u_US = u_0
 
     : Compute steady-state Calcium concentration
-    iCa = gcabar * s * s * u * (V(0, v) - eca)
-    :iCadrive = -1e-5 * iCa / (2 * FARADAY * depth)
-    C_Ca = camin + taur * iondrive(iCa, 2, depth)
+    iCa = gcabar * s_0 * s_0 * u_0 * (V(0, v) - eca)
+    C_Ca_0 = camin + taur * iondrive(iCa, 2, depth)
+
+    C_Ca_US = C_Ca_0
 
     : Compute steady values for the kinetics system of Ih
-    P0 = k2 / (k2 + k1 * npow(C_Ca, nca))
-    O1 = k4 / (k3 * (1 - P0) + k4 * (1 + betao(0, v) / alphao(0, v)))
-    C1 = betao(0, v) / alphao(0, v) * O1
+    P0_0 = k2 / (k2 + k1 * npow(C_Ca_0, nca))
+    O1_0 = k4 / (k3 * (1 - P0_0) + k4 * (1 + betao(0, v) / alphao(0, v)))
+    C1_0 = betao(0, v) / alphao(0, v) * O1_0
+
+    O1_US = O1_0
+    C1_US = C1_0
+    P0_US = P0_0
 }
 
 BREAKPOINT {
@@ -159,37 +179,55 @@ BREAKPOINT {
     SOLVE states METHOD cnexp
 
     : Check iH states and restrict them if needed
-    if(O1 < 0.) {O1 = 0.}
-    if(O1 > 1.) {O1 = 1.}
-    if(C1 < 0.) {C1 = 0.}
-    if(C1 > 1.) {C1 = 1.}
+    if(O1_0 < 0.) {O1_0 = 0.}
+    if(O1_0 > 1.) {O1_0 = 1.}
+    if(C1_0 < 0.) {C1_0 = 0.}
+    if(C1_0 > 1.) {C1_0 = 1.}
+
+    if(O1_US < 0.) {O1_US = 0.}
+    if(O1_US > 1.) {O1_US = 1.}
+    if(C1_US < 0.) {C1_US = 0.}
+    if(C1_US > 1.) {C1_US = 1.}
 
     : Compute effective membrane potential
-    Vmeff = V(Adrive * stimon, v)
+    Vmeff_0 = V(0, v)
+    Vmeff_US = V(Adrive * stimon, v)
+    Vmeff = (1 - fs) * Vmeff_0 + fs * Vmeff_US
 
     : compute ionic currents
-    iNa = gnabar * m * m * m * h * (Vmeff - ena)
-    iKd = gkdbar * n * n * n * n * (Vmeff - ek)
-    iKl = gkl * (Vmeff - ek)
-    iCa = gcabar * s * s * u * (Vmeff - eca)
-    iLeak = gleak * (Vmeff - eleak)
-    iH = ghbar * (O1 + 2 * (1 - O1 - C1)) * (Vmeff - eh)
+    iNa = gnabar * ((1 - fs) * m_0 * m_0 * m_0 * h_0 * (Vmeff_0 - ena) + fs * m_US * m_US * m_US * h_US * (Vmeff_US - ena))
+    iKd = gkdbar * ((1 - fs) * n_0 * n_0 * n_0 * n_0 * (Vmeff_0 - ek) + fs * n_US * n_US * n_US * n_US * (Vmeff_US - ek))
+    iKl = gkl * ((1 - fs) * (Vmeff_0 - ek) + fs * (Vmeff_US - ek))
+    iCa = gcabar * ((1 - fs) * s_0 * s_0 * u_0 * (Vmeff_0 - eca) + fs * s_US * s_US * u_US * (Vmeff_US - eca))
+    iH = ghbar * ((1 - fs) * (O1_0 + 2 * (1 - O1_0 - C1_0)) * (Vmeff_0 - eh) + fs * (O1_US + 2 * (1 - O1_US - C1_US)) * (Vmeff_US - eh))
+    iLeak = gleak * ((1 - fs) * (Vmeff_0 - eleak) + fs * (Vmeff_US - eleak))
 }
 
 DERIVATIVE states {
-    : Compute gating states derivatives
-    m' = alpham(Adrive * stimon, v) * (1 - m) - betam(Adrive * stimon, v) * m
-    h' = alphah(Adrive * stimon, v) * (1 - h) - betah(Adrive * stimon, v) * h
-    n' = alphan(Adrive * stimon, v) * (1 - n) - betan(Adrive * stimon, v) * n
-    s' = alphas(Adrive * stimon, v) * (1 - s) - betas(Adrive * stimon, v) * s
-    u' = alphau(Adrive * stimon, v) * (1 - u) - betau(Adrive * stimon, v) * u
+    : Standard states derivatives
+    m_0' = alpham(0, v) * (1 - m_0) - betam(0, v) * m_0
+    h_0' = alphah(0, v) * (1 - h_0) - betah(0, v) * h_0
+    n_0' = alphan(0, v) * (1 - n_0) - betan(0, v) * n_0
+    s_0' = alphas(0, v) * (1 - s_0) - betas(0, v) * s_0
+    u_0' = alphau(0, v) * (1 - u_0) - betau(0, v) * u_0
+
+    : US-modulated states derivatives
+    m_US' = alpham(Adrive * stimon, v) * (1 - m_US) - betam(Adrive * stimon, v) * m_US
+    h_US' = alphah(Adrive * stimon, v) * (1 - h_US) - betah(Adrive * stimon, v) * h_US
+    n_US' = alphan(Adrive * stimon, v) * (1 - n_US) - betan(Adrive * stimon, v) * n_US
+    s_US' = alphas(Adrive * stimon, v) * (1 - s_US) - betas(Adrive * stimon, v) * s_US
+    u_US' = alphau(Adrive * stimon, v) * (1 - u_US) - betau(Adrive * stimon, v) * u_US
 
     : Compute derivatives of variables for the kinetics system of Ih
-    :iCadrive = -1e-5 * iCa / (2 * FARADAY * depth)
-    C_Ca' = (camin - C_Ca) / taur + iondrive(iCa, 2, depth)
-    P0' = k2 * (1 - P0) - k1 * P0 * npow(C_Ca, nca)
-    C1' = betao(Adrive * stimon, v) * O1 - alphao(Adrive * stimon, v) * C1
-    O1' = alphao(Adrive * stimon, v) * C1 - betao(Adrive * stimon, v) * O1 - k3 * O1 * (1 - P0) + k4 * (1 - O1 - C1)
+    C_Ca_0' = (camin - C_Ca_0) / taur + iondrive(iCa, 2, depth)
+    P0_0' = k2 * (1 - P0_0) - k1 * P0_0 * npow(C_Ca_0, nca)
+    C1_0' = betao(0, v) * O1_0 - alphao(0, v) * C1_0
+    O1_0' = alphao(0, v) * C1_0 - betao(0, v) * O1_0 - k3 * O1_0 * (1 - P0_0) + k4 * (1 - O1_0 - C1_0)
+
+    C_Ca_US' = (camin - C_Ca_US) / taur + iondrive(iCa, 2, depth)
+    P0_US' = k2 * (1 - P0_US) - k1 * P0_US * npow(C_Ca_US, nca)
+    C1_US' = betao(Adrive * stimon, v) * O1_US - alphao(Adrive * stimon, v) * C1_US
+    O1_US' = alphao(Adrive * stimon, v) * C1_US - betao(Adrive * stimon, v) * O1_US - k3 * O1_US * (1 - P0_US) + k4 * (1 - O1_US - C1_US)
 }
 
 

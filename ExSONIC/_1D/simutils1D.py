@@ -2,9 +2,10 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-30 11:29:37
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-09-27 11:36:41
+# @Last Modified time: 2018-10-15 23:42:43
 
 import time
+import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
@@ -15,17 +16,14 @@ from .sonic1D import Sonic1D
 
 
 def compareEStim(neuron, Ra, connector, diams, lengths, amps, tstim, toffset,
-                 PRF, DC, nnodes=None, dt=None, atol=None, cmode='qual', actives='all'):
+                 PRF, DC, nnodes=None, dt=None, atol=None, cmode='qual', verbose=False):
     ''' Compare results of E-STIM simulations of the 1D extended SONIC model with different sections
         connection schemes.
     '''
 
-    # Create extended SONIC model with specific US frequency and connection scheme
-    model = Sonic1D(neuron, Ra, diams, lengths, connector=connector, actives=actives, nsec=nnodes)
-
     # Run model simulation with classic connect scheme
     tstart = time.time()
-    model = Sonic1D(neuron, Ra, diams, lengths, connector=None, actives=actives, nsec=nnodes)
+    model = Sonic1D(neuron, Ra, diams, lengths, connector=None, covs=0., nsec=nnodes, verbose=verbose)
     lbls = model.setElecAmps(amps)
     t_classic, stimon_classic, _, Vmeffprobes_classic, *_ = model.simulate(
         tstim, toffset, PRF, DC, dt, atol)
@@ -34,7 +32,8 @@ def compareEStim(neuron, Ra, connector, diams, lengths, amps, tstim, toffset,
 
     # Run model simulation with custom connect scheme
     tstart = time.time()
-    model = Sonic1D(neuron, Ra, diams, lengths, connector=connector, actives=actives, nsec=nnodes)
+    model = Sonic1D(neuron, Ra, diams, lengths, connector=connector, covs=0.,
+                    nsec=nnodes, verbose=verbose)
     model.setElecAmps(amps)
     t_custom, stimon_custom, _, Vmeffprobes_custom, *_ = model.simulate(
         tstim, toffset, PRF, DC, dt, atol)
@@ -98,16 +97,18 @@ def compareEStim(neuron, Ra, connector, diams, lengths, amps, tstim, toffset,
 
 
 def runPlotAStim(neuron, a, Fdrive, Ra, connector, diams, lengths, amps, tstim, toffset,
-                 PRF, DC, nnodes=None, dt=None, atol=None, cmode='qual', actives='all'):
+                 PRF, DC, nnodes=None, dt=None, atol=None, cmode='qual', covs=1., verbose=False):
     ''' Run A-STIM simulation of 1D extended SONIC model and plot results. '''
 
     tstart = time.time()
 
     # Create extended SONIC model with specific US frequency and connection scheme
-    model = Sonic1D(neuron, Ra, diams, lengths, connector=connector, actives=actives, nsec=nnodes,
-                    a=a, Fdrive=Fdrive)
+    model = Sonic1D(neuron, Ra, diams, lengths, connector=connector, covs=covs, nsec=nnodes,
+                    a=a, Fdrive=Fdrive, verbose=verbose)
 
     # Set node-specifc acoustic amplitudes
+    if isinstance(amps, float):
+        amps = np.insert(np.zeros(nnodes - 1), 0, amps)
     lbls = model.setUSAmps(amps)  # Pa
 
     # Run model simulation
@@ -139,7 +140,7 @@ def runPlotAStim(neuron, a, Fdrive, Ra, connector, diams, lengths, amps, tstim, 
                 lbls=lbls, fs=fs, cmode=cmode)
     ax.set_xlim(tonset, (tstim + toffset) * 1e3)
     ax.set_xlabel('time (ms)', fontsize=fs)
-    ax.set_ylabel('Qm (nC/cm2)', fontsize=fs)
+    ax.set_ylabel('$\\rm Qm\ (nC/cm^2)$', fontsize=fs)
     ax.set_title('membrane charge density', fontsize=fs + 2)
 
     # Plot effective potential profiles
@@ -148,7 +149,7 @@ def runPlotAStim(neuron, a, Fdrive, Ra, connector, diams, lengths, amps, tstim, 
                 lbls=lbls, fs=fs, cmode=cmode)
     ax.set_xlim(tonset, (tstim + toffset) * 1e3)
     ax.set_xlabel('time (ms)', fontsize=fs)
-    ax.set_ylabel('$V_{m, eff}$ (mV)', fontsize=fs)
+    ax.set_ylabel('$\\rm V_{m,eff}\ (mV)$', fontsize=fs)
     ax.set_title('effective membrane potential', fontsize=fs + 2)
 
     # Plot comparative time histogram

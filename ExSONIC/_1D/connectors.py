@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-25 02:00:26
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-09-03 15:58:55
+# @Last Modified time: 2018-10-15 20:33:06
 
 import numpy as np
 from neuron import h

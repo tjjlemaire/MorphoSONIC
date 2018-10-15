@@ -27,6 +27,7 @@
 				"deprecated",
 				"docs",
 				"lookups",
+				"notebooks",
 				"graphs",
 				"templates",
 				"*.egg-info"
