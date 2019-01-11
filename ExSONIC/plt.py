@@ -2,17 +2,19 @@
 # @Author: Theo Lemaire
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-09-27 11:36:08
+# @Last Modified time: 2019-01-04 17:26:15
 
 
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
+from matplotlib import colorbar
 
 from PySONIC.utils import getStimPulses
 
 
-def plotSignals(t, signals, states=None, ax=None, onset=None, lbls=None, fs=10, cmode='qual'):
+def plotSignals(t, signals, states=None, ax=None, onset=None, lbls=None, fs=10, cmode='qual',
+                linestyle='-', cmap='winter'):
     ''' Plot several signals on one graph.
 
         :param t: time vector
@@ -23,16 +25,9 @@ def plotSignals(t, signals, states=None, ax=None, onset=None, lbls=None, fs=10, 
         :param lbls (optional): list of legend labels
         :param fs (optional): font size to use on graph
         :param cmode: color mode ('seq' for sequentiual or 'qual' for qualitative)
-        :return: figure handle (if no axis provided as input)
+        :param linestyle: linestyle string ('-', '--', 'o--' or '.--')
+        :return: handles to created lines
     '''
-
-
-    # If no axis provided, create figure
-    if ax is None:
-        fig, ax = plt.subplots(figsize=(8, 3))
-        argout = fig
-    else:
-        argout = None
 
     # Set axis aspect
     ax.spines['top'].set_visible(False)
@@ -64,7 +59,7 @@ def plotSignals(t, signals, states=None, ax=None, onset=None, lbls=None, fs=10, 
     nlevels = nsignals
     if cmode == 'seq':
         norm = matplotlib.colors.Normalize(0, nlevels - 1)
-        sm = plt.cm.ScalarMappable(norm=norm, cmap=plt.cm.get_cmap('viridis'))
+        sm = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
         sm._A = []
         colors = [sm.to_rgba(i) for i in range(nlevels)]
     elif cmode == 'qual':
@@ -76,11 +71,13 @@ def plotSignals(t, signals, states=None, ax=None, onset=None, lbls=None, fs=10, 
         raise ValueError('Unknown color mode')
 
     # Plot signals
+    handles = []
     for i, var in enumerate(signals):
-        ax.plot(t, var, label=lbls[i] if lbls is not None else None, c=colors[i])
+        lh = ax.plot(t, var, linestyle, label=lbls[i] if lbls is not None else None, c=colors[i])[0]
+        handles.append(lh)
 
     # Add legend
     if lbls is not None:
         ax.legend(fontsize=fs, frameon=False)
 
-    return argout
+    return handles

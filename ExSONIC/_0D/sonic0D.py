@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-10-15 23:33:02
+# @Last Modified time: 2019-01-11 15:59:51
 
 
 import numpy as np
@@ -19,57 +19,59 @@ from ..utils import getNmodlDir
 class Sonic0D:
     ''' Point-neuron SONIC model in NEURON. '''
 
-    def __init__(self, neuron, a=32e-9, fs=1., Fdrive=500e3, verbose=False):
+    def __init__(self, neuron, a=None, Fdrive=None, verbose=False):
         ''' Initialization.
 
             :param neuron: neuron object
             :param a: sonophore diameter (nm)
-            :param fs: fraction of membrane covered by sonophores (0-1)
-            :param Fdrive: ultrasound frequency (Hz)
+            :param Fdrive: ultrasound frequency (kHz)
             :param verbose: boolean stating whether to print out details
         '''
-        if fs > 1. or fs < 0.:
-            raise ValueError('fs ({}) must be within [0-1]'.format(fs))
+
+        # Resolve modality based on input parameters
+        if a is None or Fdrive is None:
+            self.modality = 'Iinj'
+        else:
+            self.modality = 'US'
+
+        # if fs is not None and (fs > 1. or fs < 0.):
+        #     raise ValueError('fs ({}) must be within [0-1]'.format(fs))
 
         # Initialize arguments
         self.neuron = neuron
-        self.a = a  # m
-        self.fs = fs
-        self.Fdrive = Fdrive  # Hz
+        self.a = a if a is not None else 32.  # nm
+        # self.fs = fs if fs is not None else 1.
+        self.Fdrive = Fdrive if Fdrive is not None else 500.  # kHz
         self.mechname = self.neuron.name
         self.verbose = verbose
+
+        if self.verbose:
+            print('---------- Creating model: {} ----------'.format(self))
 
         # Load mechanisms and set function tables of appropriate membrane mechanism
         load_mechanisms(getNmodlDir(), self.neuron.name)
         self.setFuncTables(self.a, self.Fdrive)
 
         # Create section and set membrane mechanism
-        self.section = self.createSection('point')
+        self.section = self.createSection('node0')
         self.section.insert(self.mechname)
 
         # Set sonophore membrane coverage fraction into mechanism
-        setattr(self.section, 'fs_{}'.format(self.mechname), fs)
+        # setattr(self.section, 'fs_{}'.format(self.mechname), self.fs)
 
-        if self.verbose:
-            print('Creating model: {}'.format(self))
 
     def __repr__(self):
         ''' Explicit naming of the model instance. '''
-        return 'SONIC0D_{}_{}m_{:.0f}%_{}Hz'.format(
-            self.neuron.name,
-            si_format(self.a, 2),
-            self.fs * 1e2,
-            si_format(self.Fdrive, 2)
-        )
+        return 'SONIC0D ({})'.format(self.strBiophysics())
 
-    def pprint(self):
-        ''' Pretty-print naming of the model instance. '''
-        return '{} point-neuron, a = {}m, {:.0f}% cov., f = {}Hz'.format(
-            self.neuron.name,
-            si_format(self.a, space=' '),
-            self.fs * 1e2,
-            si_format(self.Fdrive, space=' ')
-        )
+    def strBiophysics(self):
+        s = '{} neuron'.format(self.neuron.name)
+        if self.modality == 'US':
+            s += ', a = {}m, f = {}Hz'.format(
+                si_format(self.a * 1e-9, space=' '),
+                # self.fs * 1e2,
+                si_format(self.Fdrive * 1e3, space=' '))
+        return s
 
     def createSection(self, id):
         ''' Create morphological section.
@@ -83,12 +85,15 @@ class Sonic0D:
             in the (amplitude, charge) space, and link them to FUNCTION_TABLEs in the MOD file of the
             corresponding membrane mechanism.
 
-            :param a: sonophore diameter (m)
-            :param Fdrive: US frequency (Hz)
+            :param a: sonophore diameter (nm)
+            :param Fdrive: US frequency (kHz)
         '''
 
+        if self.verbose:
+            print('loading membrane dynamics lookup tables for {} neuron'.format(self.mechname))
+
         # Get lookups
-        Aref, Qref, lookups2D = getLookups2D(self.neuron.name, a, Fdrive)
+        Aref, Qref, lookups2D, _ = getLookups2D(self.neuron.name, a=a * 1e-9, Fdrive=Fdrive * 1e3)
 
         # Rescale rate constants to ms-1
         for k in lookups2D.keys():
@@ -110,18 +115,18 @@ class Sonic0D:
                 rname = '{}{}'.format(rate, gate)
                 setFuncTable(self.mechname, rname, self.lookups2D[rname], self.Aref, self.Qref)
 
-    def setAdrive(self, Adrive):
+    def setUSdrive(self, Adrive):
         ''' Set US stimulation amplitude (and set modality to "US").
 
-            :param Adrive: acoustic pressure amplitude (Pa)
+            :param Adrive: acoustic pressure amplitude (kPa)
         '''
         if self.verbose:
             print('Setting acoustic stimulus amplitude: Adrive = {}Pa'
-                  .format(si_format(Adrive, space=' ')))
-        setattr(self.section, 'Adrive_{}'.format(self.mechname), Adrive * 1e-3)
+                  .format(si_format(Adrive * 1e3, space=' ')))
+        setattr(self.section, 'Adrive_{}'.format(self.mechname), Adrive)
         self.modality = 'US'
 
-    def setAstim(self, Astim):
+    def setIinj(self, Astim):
         ''' Set electrical stimulation amplitude (and set modality to "elec")
 
             :param Astim: injected current density (mA/m2).
@@ -133,7 +138,16 @@ class Sonic0D:
         self.iclamp = h.IClamp(self.section(0.5))
         self.iclamp.delay = 0  # we want to exert control over amp starting at 0 ms
         self.iclamp.dur = 1e9  # dur must be long enough to span all our changes
-        self.modality = 'elec'
+        self.modality = 'Iinj'
+
+    def setVext(self, Vext):
+        ''' Insert extracellular mechanism into section and set extracellular potential value.
+
+            :param Vext: extracellular potential (mV).
+        '''
+        insertVext(self.section)
+        self.Vext = Vext
+        self.modality = 'Vext'
 
     def setStimON(self, value):
         ''' Set US or electrical stimulation ON or OFF by updating the appropriate
@@ -143,8 +157,10 @@ class Sonic0D:
             :return: new stimulation state
         '''
         setattr(self.section, 'stimon_{}'.format(self.mechname), value)
-        if self.modality == 'elec':
+        if self.modality == 'Iinj':
             self.iclamp.amp = value * self.Iinj
+        elif self.modality == 'Vext':
+            self.section.e_extracellular = value * self.Vext
         return value
 
     def toggleStim(self):
@@ -217,7 +233,7 @@ class Sonic0D:
                 print('adaptive time step integration (atol = {})'.format(self.cvode.atol()))
 
         # Initialize
-        h.finitialize(self.neuron.Vm0)
+        h.finitialize(self.neuron.Vm0 * self.neuron.Cm0 * 1e2)
         self.stimon = self.setStimON(1)
         self.cvode.event(self.Ton, self.toggleStim)
 
@@ -248,10 +264,14 @@ class Sonic0D:
         Qm = setRangeProbe(self.section, 'v')
         Vmeff = setRangeProbe(self.section, 'Vmeff_{}'.format(self.mechname))
 
-        states = [{suffix: setRangeProbe(
-            self.section, '{}_{}_{}'.format(alias(state), suffix, self.mechname))
-            for suffix in ['0', 'US']
-        } for state in self.neuron.states_names]
+        # states = [{suffix: setRangeProbe(
+        #     self.section, '{}_{}_{}'.format(alias(state), suffix, self.mechname))
+        #     for suffix in ['0', 'US']
+        # } for state in self.neuron.states_names]
+
+        states = []
+        for key in self.neuron.states_names:
+            states.append(setRangeProbe(self.section, '{}_{}'.format(alias(key), self.mechname)))
 
         # Integrate model
         self.integrate(tstim + toffset, tstim, PRF, DC, dt, atol)
@@ -261,8 +281,10 @@ class Sonic0D:
         stimon = Vec2array(stimon)
         Qm = Vec2array(Qm) * 1e-5  # C/cm2
         Vmeff = Vec2array(Vmeff)  # mV
-        states = [self.fs * Vec2array(state['US']) + (1 - self.fs) * Vec2array(state['0'])
-                  for state in states]
+        # states = [self.fs * Vec2array(state['US']) + (1 - self.fs) * Vec2array(state['0'])
+        #           for state in states]
+        states = [Vec2array(state) for state in states]
+
         y = np.vstack([Qm, Vmeff, np.array(states)])
 
         # return output variables

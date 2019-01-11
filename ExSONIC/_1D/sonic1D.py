@@ -2,7 +2,7 @@
 # @Author: Theo
 # @Date:   2018-08-15 15:08:23
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-10-16 00:59:16
+# @Last Modified time: 2019-01-11 17:37:50
 
 import numpy as np
 from itertools import repeat
@@ -10,159 +10,245 @@ from itertools import repeat
 from PySONIC.neurons import *
 from PySONIC.utils import si_format, pow10_format
 from PySONIC.constants import *
+from PySONIC.postpro import findPeaks
 
 from ..pyhoc import *
 from .._0D import Sonic0D
+from ..utils import VextPointSource
+
+
+IINJ_INTRA_MAX = 1e5  # upper limit for intracellular current amplitude (mA/m2)
+IINJ_EXTRA_CATHODAL_MAX = 1e4  # upper limit for cathodal stimulation current magnitude (uA)
+IINJ_EXTRA_ANODAL_MAX = 1e4  # upper limit for anodal stimulation current magnitude (uA)
+DELTA_IINJ_INTRA_MIN = 1e3  # refinement threshold for titration with intracellular current (mA/m2)
+DELTA_IINJ_EXTRA_MIN = 1e1  # refinement threshold for titration with extracellular current (uA)
+
 
 
 class Sonic1D(Sonic0D):
     ''' Simple 1D extension of the SONIC model. '''
 
-    def __init__(self, neuron, Ra, diams, lengths, connector=None,
-                 a=32e-9, covs=1., Fdrive=500e3,
-                 verbose=False, nsec=None):
-        ''' Initialization.
+    def __init__(self, neuron, rs, nodeD, nodeL, interD=0., interL=0., connector=None,
+                 nnodes=None, a=None, Fdrive=None, verbose=False):
+        ''' Class constructor, defining the model's sections geometry, topology and biophysics.
+            Note: internodes are not represented in the model but rather used to set appropriate
+            axial resistances between node compartments.
 
             :param neuron: neuron object
-            :param Ra: cytoplasmic resistivity (Ohm.cm)
-            :param diams: list of section diameters (m) or single value (applied to all sections)
-            :param lengths: list of section lengths (m) or single value (applied to all sections)
-            :param covs: list of membrane sonophore coverage fraction in each section,
-              or single value (applied to all sections)
+            :param rs: cytoplasmic resistivity (Ohm.cm)
+            :param nodeD: list of node diameters (um) or single value (applied to all nodes)
+            :param nodeL: list of node lengths (um) or single value (applied to all nodes)
+            :param interD: list of internode diameters (um) or single value (applied to all internodes)
+            :param interL: list of internode lengths (um) or single value (applied to all internodes)
+            :param nnodes: number of nodes (applied only if all parameters are passed as floats)
             :param connector: object used to connect sections together through a custom
                 axial current density mechanism
-            :param a: sonophore diameter (m)
-            :param Fdrive: ultrasound frequency (Hz)
+            :param a: sonophore diameter (nm)
+            :param Fdrive: ultrasound frequency (kHz)
             :param verbose: boolean stating whether to print out details
         '''
 
-        # Pre-process inputs
-        if nsec is None:
-            for item in [diams, lengths, covs]:
+        # Pre-process node parameters
+        if nnodes is None:
+            for item in [nodeD, nodeL]:
                 if isinstance(item, list) or isinstance(item, tuple) or isinstance(item, np.ndarray):
-                    nsec = len(item)
+                    nnodes = len(item)
                     break
-            if nsec is None:
-                raise ValueError('nsec must be provided for float-typed geometrical parameters')
-        if isinstance(diams, float):
-            diams = [diams] * nsec
-        if isinstance(lengths, float):
-            lengths = [lengths] * nsec
-        if isinstance(covs, float):
-            covs = [covs] * nsec
+            if nnodes is None:
+                raise ValueError('nnodes must be provided for float-typed geometrical parameters')
+        if isinstance(nodeD, float):
+            nodeD = [nodeD] * nnodes
+        if isinstance(nodeL, float):
+            nodeL = [nodeL] * nnodes
+        # if isinstance(nodeFs, float):
+        #     nodeFs = [nodeFs] * nnodes
 
-        # Check inputs validity
-        if len(diams) != len(lengths):
-            raise ValueError('Inconsistent numbers of section diameters ({}) and lengths ({})'.format(
-                len(diams), len(lengths)))
-        if len(diams) != len(covs):
+        # Check consistency of node parameters
+        if len(nodeD) != len(nodeL):
+            raise ValueError('Inconsistent numbers of node diameters ({}) and lengths ({})'.format(
+                len(nodeD), len(nodeL)))
+        # if len(nodeD) != len(nodeFs):
+        #     raise ValueError(
+        #         'Inconsistent numbers of node diameters ({}) and coverages ({})'.format(
+        #             len(nodeD), len(nodeFs)))
+        # for i, fs in enumerate(nodeFs):
+        #     if fs > 1. or fs < 0.:
+        #         raise ValueError('nodeFs[{}] ({}) must be within [0-1]'.format(i, fs))
+
+        # Pre-process internode parameters
+        if isinstance(interD, float):
+            interD = [interD] * (nnodes - 1)
+        if isinstance(interL, float):
+            interL = [interL] * (nnodes - 1)
+        # if isinstance(nodeFs, float):
+        #     nodeFs = [nodeFs] * (nnodes - 1)
+
+        # Check consistency of internode parameters
+        if len(interD) != nnodes - 1:
             raise ValueError(
-                'Inconsistent numbers of section diameters ({}) and coverages ({})'.format(
-                    len(diams), len(covs)))
-        for i, fs in enumerate(covs):
-            if fs > 1. or fs < 0.:
-                raise ValueError('covs[{}] ({}) must be within [0-1]'.format(i, fs))
+                'Number of internode diameters ({}) does not match nnodes - 1 ({})'.format(
+                    len(interD), nnodes - 1))
+        if len(interL) != nnodes - 1:
+            raise ValueError(
+                'Number of internode lengths ({}) does not match nnodes - 1 ({})'.format(
+                    len(interD), nnodes - 1))
 
-        # Assign inputs as arguments
-        self.diams = np.array(diams) * 1e6  # um
-        self.lengths = np.array(lengths) * 1e6  # um
-        self.covs = np.array(covs)
-        self.nsec = self.diams.size
-        self.Ra = Ra  # Ohm.cm
+
+        # Convert vector inputs to arrays and assign class attributes
+        self.nnodes = nnodes
+        self.nodeD = np.array(nodeD)  # um
+        self.nodeL = np.array(nodeL)  # um
+        # self.nodeFs = np.array(nodeFs)
+        self.interD = np.array(interD)  # um
+        self.interL = np.array(interL)  # um
+        self.rs = rs  # Ohm.cm
         self.connector = connector
+        self.has_vext_mech = False
 
         # Initialize point-neuron model and delete its single section
         super().__init__(neuron, a=a, Fdrive=Fdrive, verbose=verbose)
         del self.section
 
-        # Create sections and set their geometry
-        self.sections = self.createSections(['node{}'.format(i) for i in range(self.nsec)])
+        # Create node sections and set their geometry
+        self.sections = self.createSections(['node{}'.format(i) for i in range(self.nnodes)])
         self.defineGeometry()  # must be called PRIOR to build_custom_topology()
 
         # Set sections membrane mechanism
         self.defineBiophysics()
-        for sec in self.sections:
-            sec.Ra = Ra
+
+        # Set sections resisitvity, corrected with internodal influence
+        self.setResistivity()
 
         # Connect section together
-        if self.nsec > 1:
+        if self.nnodes > 1:
             if self.connector is None:
                 self.buildTopology()
             else:
                 self.buildCustomTopology()
 
+    def nodeDistances(self):
+        ''' Return vector of node-to-node distances along axial dimension (um). '''
+        return (self.nodeL[:-1] + self.nodeL[1:]) / 2 + self.interL
+
+    def nodeCoordinates(self):
+        ''' Return vector of node coordinates along axial dimension, centered at zero (um). '''
+        xcoords = np.insert(np.cumsum(self.nodeDistances()), 0, 0)
+        return xcoords - xcoords[-1] / 2.
 
     def __repr__(self):
         ''' Explicit naming of the model instance. '''
-        return 'SONIC1D_{}node{}_{}'.format(
-            self.nsec, 's' if self.nsec > 1 else '',
-            'classic_connect' if self.connector is None else repr(self.connector))
+        return 'SONIC1D ({}, {})'.format(self.strBiophysics(), self.strNodes())
+        # 'classic_connect' if self.connector is None else repr(self.connector))
+
+    def strNodes(self):
+        return '{} node{}'.format(self.nnodes, 's' if self.nnodes > 1 else '')
+
+    def strResistivity(self):
+        return 'rs = ${}$ ohm.cm'.format(pow10_format(self.rs))
+
+    def strGeom(self):
+        ''' Format model geometrical parameters into string. '''
+        params = {
+            'nodeD': self.nodeD,
+            'nodeL': self.nodeL,
+            'interD': self.interD,
+            'interL': self.interL
+        }
+        lbls = {}
+        for key, val in params.items():
+            if np.all(val == val[0]):
+                lbls[key] = '{} = {}m'.format(key, si_format(val[0] * 1e-6, 1, space=' '))
+            else:
+                lbls[key] = '{} = [{}] um'.format(key, ', '.join(['{:.2f}'.format(x) for x in val]))
+        return ', '.join(lbls.values())
 
     def pprint(self):
         ''' Pretty-print naming of the model instance. '''
-        if np.all(self.diams == self.diams[0]):
-            d_str = '{}m'.format(si_format(self.diams[0] * 1e-6, space=' '))
-        else:
-            d_str = '[{}] um'.format(', '.join(['{:.2f}'.format(x) for x in self.diams]))
-        if np.all(self.lengths == self.lengths[0]):
-            L_str = '{}m'.format(si_format(self.lengths[0] * 1e-6, space=' '))
-        else:
-            L_str = '[{}] um'.format(', '.join(['{:.2f}'.format(x) for x in self.lengths]))
-        if np.all(self.covs == self.covs[0]):
-            cov_str = '{:.0f}%'.format(self.covs[0] * 1e2)
-        else:
-            cov_str = '[{}] %'.format(', '.join(['{:.0f}'.format(x * 1e2) for x in self.covs]))
-
-        return '{} neuron, {} node{}, Ra = ${}$ ohm.cm, d = {}, L = {}, cov = {}'.format(
-            self.neuron.name, self.nsec, 's' if self.nsec > 1 else '',
-            pow10_format(self.Ra), d_str, L_str, cov_str)
+        return ('{} neuron, {}, {}, {}').format(
+            self.mechname, self.strNodes(), self.strResistivity(), self.strGeom())
 
     def createSections(self, ids):
         ''' Create morphological sections.
 
             :param id: names of the sections.
         '''
+        if self.verbose:
+            print('creating sections')
         return list(map(super(Sonic1D, self).createSection, ids))
 
     def defineGeometry(self):
-        ''' Set the 3D geometry of the model. '''
+        ''' Set the geometry of the nodes sections. '''
+        if self.verbose:
+            print('defining sections geometry: {}'.format(self.strGeom()))
         for i, sec in enumerate(self.sections):
-            sec.diam = self.diams[i]  # um
-            sec.L = self.lengths[i]  # um
+            sec.diam = self.nodeD[i]  # um
+            sec.L = self.nodeL[i]  # um
             sec.nseg = 1
 
     def defineBiophysics(self):
         ''' Set section-specific membrane properties with specific sonophore membrane coverage. '''
-        for sec, fs in zip(self.sections, self.covs):
+        if self.verbose:
+            print('defining membrane biophysics: {}'.format(self.strBiophysics()))
+        for sec in self.sections:
             sec.insert(self.mechname)
-            setattr(sec, 'fs_{}'.format(self.mechname), fs)
+        # for sec, fs in zip(self.sections, self.nodeFs):
+        #     sec.insert(self.mechname)
+        #     setattr(sec, 'fs_{}'.format(self.mechname), fs)
+
+    def relResistance(self, D, L):
+        ''' Return relative resistance of cylindrical section based on its diameter and length. '''
+        return 4 * L / (np.pi * D**2)
+
+    def setResistivity(self):
+        ''' Set sections axial resistivity, corrected to account for internodes. '''
+
+        for i, sec in enumerate(self.sections):
+            # compute node relative resistance
+            r_node = self.relResistance(self.nodeD[i], self.nodeL[i])
+
+            # compute relative resistances of half of previous and/or next internodal sections, if any
+            r_inter = 0.
+            if i > 0:
+                r_inter += self.relResistance(self.interD[i - 1], self.interL[i - 1] / 2)
+            if i < self.nnodes - 1:
+                r_inter += self.relResistance(self.interD[i], self.interL[i] / 2)
+            x = (r_node + r_inter) / r_node
+
+            # correct axial resistivity to account for internodal resistance
+            print(sec, ': rs =', self.rs, ', adjusted rs =', self.rs * x)
+            sec.Ra = self.rs * x
 
     def buildTopology(self):
         ''' Connect the sections in series through classic NEURON implementation. '''
+        if self.verbose:
+            print('building standard topology')
         for sec1, sec2 in zip(self.sections[:-1], self.sections[1:]):
             sec2.connect(sec1, 1, 0)
 
     def buildCustomTopology(self):
-        list(map(self.connector.attach, self.sections, [True] + [False] * (self.nsec - 1)))
+        if self.verbose:
+            print('building custom {}-based topology'.format(self.connector.vref))
+        list(map(self.connector.attach, self.sections))
         for sec1, sec2 in zip(self.sections[:-1], self.sections[1:]):
             self.connector.connect(sec1, sec2)
 
-    def setUSAmps(self, amps):
+    def setUSdrive(self, amps):
         ''' Set section specific acoustic stimulation amplitudes.
 
-            :param amps: model-sized vector or electrical amplitudes (Pa)
+            :param amps: model-sized vector of acoustic amplitudes (kPa)
             or single value (assigned to first node)
-            :return: section-specific amplitude labels
+            :return: section-specific labels
         '''
-
+        # Process inputs
         if self.connector is None:
             raise ValueError(
                 'attempting to perform A-STIM simulation with standard "v-based" connection scheme')
-        if self.nsec != len(amps):
-            raise ValueError('Amplitude distribution vector does not match number of sections')
-
-        # Conversion Pa -> kPa
-        amps = np.array(amps) * 1e-3
+        if isinstance(amps, float):
+            amps = np.insert(np.zeros(self.nnodes - 1), 0, amps)  # kPa
+        else:
+            if self.nnodes != len(amps):
+                raise ValueError('US drive distribution vector does not match number of nodes')
+            amps = np.array(amps)  # kPa
 
         # Set acoustic amplitudes
         if self.verbose:
@@ -172,28 +258,27 @@ class Sonic1D(Sonic0D):
             setattr(sec, 'Adrive_{}'.format(self.mechname), Adrive)
         self.modality = 'US'
 
-        # Return section-specific amplitude labels
+        # Return section-specific labels
         return ['node {} ({:.0f} kPa)'.format(i + 1, A) for i, A in enumerate(amps)]
 
-    def setElecAmps(self, amps):
+    def setIinj(self, amps):
         ''' Set section specific electrical stimulation amplitudes.
 
-            :param amps: model-sized vector or electrical amplitudes (mA/m2)
+            :param amps: model-sized vector of electrical amplitudes (mA/m2)
             or single value (assigned to first node)
-            :return: section-specific amplitude labels
+            :return: section-specific labels
         '''
-
-        # Pre-process input
+        # Process inputs
         if isinstance(amps, float):
-            amps = np.insert(np.zeros(self.nsec - 1), 0, amps)
+            amps = np.insert(np.zeros(self.nnodes - 1), 0, amps)  # mA/m2
         else:
-            amps = np.array(amps)
-        if len(self.sections) != len(amps):
-            raise ValueError('Amplitude distribution vector does not match number of sections')
+            if self.nnodes != len(amps):
+                raise ValueError('Iinj distribution vector does not match number of nodes')
+            amps = np.array(amps)  # mA/m2
 
         # Set IClamp objects
         if self.verbose:
-            print('Setting electrical stimulus amplitudes: Astim = [{}] mA/m2'.format(
+            print('Setting electrical stimulus amplitudes: Iinj = [{}] mA/m2'.format(
                 ', '.join('{:.0f}'.format(Astim) for Astim in amps)))
         self.Iinjs = [Astim * sec(0.5).area() * 1e-6
                       for Astim, sec in zip(amps, self.sections)]  # nA
@@ -203,10 +288,44 @@ class Sonic1D(Sonic0D):
             pulse.delay = 0  # we want to exert control over amp starting at 0 ms
             pulse.dur = 1e9  # dur must be long enough to span all our changes
             self.iclamps.append(pulse)
-        self.modality = 'elec'
+        self.modality = 'Iinj'
 
-        # return node-specific amplitude labels
+        # return node-specific labels
         return ['node {} ({:.0f} $mA/m^2$)'.format(i + 1, A) for i, A in enumerate(amps)]
+
+    def setVext(self, Vexts):
+        ''' Insert extracellular mechanism into node sections and set extracellular potential values.
+
+            :param Vexts: model-sized vector of extracellular potentials (mV)
+            or single value (assigned to first node)
+            :return: section-specific labels
+        '''
+        # Process inputs
+        if isinstance(Vexts, float):
+            Vexts = np.insert(np.zeros(self.nnodes - 1), 0, Vexts)  # mV
+        else:
+            if self.nnodes != len(Vexts):
+                raise ValueError('Vext distribution vector does not match number of nodes')
+            Vexts = np.array(Vexts)  # mV
+
+        # Insert extracellular mechanism in nodes sections
+        if not self.has_vext_mech:
+            if self.verbose:
+                print('Inserting extracellular mechanism in all nodes')
+            for sec in self.sections:
+                insertVext(sec)
+            self.has_vext_mech = True
+            self.modality = 'Vext'
+
+        # Set extracellular potential values
+        if self.verbose:
+            print('Setting extracellular potentials: Vexts = [{}] mV'.format(
+                ', '.join('{:.5f}'.format(Vext) for Vext in Vexts)))
+        self.Vexts = Vexts  # mV
+
+        # return node-specific labels
+        return ['node {} ({:.0f} $mV$)'.format(i + 1, Vext) for i, Vext in enumerate(Vexts)]
+
 
     def setStimON(self, value):
         ''' Set US or electrical stimulation ON or OFF by updating the appropriate
@@ -217,9 +336,13 @@ class Sonic1D(Sonic0D):
         '''
         for sec in self.sections:
             setattr(sec, 'stimon_{}'.format(self.mechname), value)
-        if self.modality == 'elec':
+        if self.modality == 'Iinj':
             for iclamp, Iinj in zip(self.iclamps, self.Iinjs):
                 iclamp.amp = value * Iinj
+        elif self.modality == 'Vext':
+            for sec, Vext in zip(self.sections, self.Vexts):
+                sec.e_extracellular = value * Vext
+                # print(sec.e_extracellular, sec.vext[0], sec.vext[1])
         return value
 
     def simulate(self, tstim, toffset, PRF, DC, dt, atol):
@@ -238,12 +361,26 @@ class Sonic1D(Sonic0D):
         Qm = list(map(setRangeProbe, self.sections, repeat('v')))
         Vmeff = list(map(setRangeProbe, self.sections,
                          repeat('Vmeff_{}'.format(self.mechname))))
-        states = {
-            state: [{
-                suffix: setRangeProbe(sec, '{}_{}_{}'.format(alias(state), suffix, self.mechname))
-                for suffix in ['0', 'US']
-            } for sec in self.sections] for state in self.neuron.states_names
-        }
+        # states = {
+        #     state: [{
+        #         suffix: setRangeProbe(sec, '{}_{}_{}'.format(alias(state), suffix, self.mechname))
+        #         for suffix in ['0', 'US']
+        #     } for sec in self.sections] for state in self.neuron.states_names
+        # }
+
+        states = {}
+        for key in self.neuron.states_names:
+            # print(key, '{}_{}'.format(alias(key), self.mechname))
+            states[key] = [setRangeProbe(sec, '{}_{}'.format(alias(key), self.mechname))
+                           for sec in self.sections]
+
+        # states = {
+        #     state: [
+        #         setRangeProbe(sec, '{}_{}'.format(alias(state), self.mechname))
+        #         for sec in self.sections]
+        #     for state in self.neuron.states_names
+        # }
+
 
         # Integrate model
         self.integrate(tstim + toffset, tstim, PRF, DC, dt, atol)
@@ -253,11 +390,121 @@ class Sonic1D(Sonic0D):
         stimon = Vec2array(stimon)
         Qm = np.array(list(map(Vec2array, Qm))) * 1e-5  # C/cm2
         Vmeff = np.array(list(map(Vec2array, Vmeff)))  # mV
-        states = {
-            key: [
-                fs * Vec2array(val['US']) + (1 - fs) * Vec2array(val['0'])
-                for val, fs in zip(states[key], self.covs)
-            ] for key in self.neuron.states_names
-        }
+        # states = {
+        #     key: [
+        #         fs * Vec2array(val['US']) + (1 - fs) * Vec2array(val['0'])
+        #         for val, fs in zip(states[key], self.nodeFs)
+        #     ] for key in self.neuron.states_names
+        # }
+        states = {key: np.array(list(map(Vec2array, val))) for key, val in states.items()}
 
         return t, stimon, Qm, Vmeff, states
+
+
+    def titrateIinjIntra(self, tstim, toffset, PRF, DC, dt, atol, inode=0, Irange=(0., IINJ_INTRA_MAX)):
+        ''' Use a dichotomic recursive search to determine the threshold intracellular current
+            amplitude needed to obtain neural excitation for a given duration, PRF and duty cycle.
+
+            :param tstim: stimulus duration (s)
+            :param toffset: duration of the offset (s)
+            :param PRF: pulse repetition frequency (Hz)
+            :param DC: pulse duty cycle (-)
+            :param dt: integration time step
+            :param atol: integration error tolerance
+            :param inode: node at which to detect for spike occurence
+            :param Irange: search interval for Iinj, iteratively refined (mA/m2)
+            :return: 5-tuple with the determined threshold, time profile,
+                 solution matrix, state vector and response latency
+        '''
+        Iinj = (Irange[0] + Irange[1]) / 2
+        self.setIinj(Iinj)
+
+        # Run simulation and detect spikes on ith trace
+        t, stimon, Qm, Vmeff, states = self.simulate(tstim, toffset, PRF, DC, dt, atol)
+        ipeaks, *_ = findPeaks(Vmeff[inode], mph=SPIKE_MIN_VAMP, mpp=SPIKE_MIN_VPROM)
+        nspikes = ipeaks.size
+
+        # If accurate threshold is found, return simulation results
+        if (Irange[1] - Irange[0]) <= DELTA_IINJ_INTRA_MIN and nspikes == 1:
+            print('threshold amplitude: {}A/m2'.format(si_format(Iinj * 1e-3, 2, space=' ')))
+            return Iinj
+
+        # Otherwise, refine titration interval and iterate recursively
+        else:
+            if nspikes == 0:
+                Irange = (Iinj, Irange[1])
+            else:
+                Irange = (Irange[0], Iinj)
+            return self.titrateIinjIntra(
+                tstim, toffset, PRF, DC, dt, atol, inode=inode, Irange=Irange)
+
+
+    def titrateIinjExtra(self, z0, tstim, toffset, PRF, DC, dt, atol, inode=0, Irange=None,
+                         Itype='cathodal'):
+        ''' Use a dichotomic recursive search to determine the threshold amplitude needed
+            to obtain neural excitation for a given duration, PRF and duty cycle.
+
+            :param z0: electrode z-coordinate (um)
+            :param tstim: stimulus duration (s)
+            :param toffset: duration of the offset (s)
+            :param PRF: pulse repetition frequency (Hz)
+            :param DC: pulse duty cycle (-)
+            :param dt: integration time step
+            :param atol: integration error tolerance
+            :param inode: node at which to detect for spike occurence
+            :param Irange: search interval for Iinj, iteratively refined (uA)
+            :param Itype: stimulation type ("cathodal" or "anodal")
+            :return: 5-tuple with the determined threshold, time profile,
+                 solution matrix, state vector and response latency
+        '''
+        # Determine Irange from stimulation type (cathodic or anodic)
+        if Irange is None:
+            if Itype == 'cathodal':
+                Irange = (-IINJ_EXTRA_CATHODAL_MAX, 0.)
+            elif Itype == 'anodal':
+                Irange = (0., IINJ_EXTRA_ANODAL_MAX)
+
+        # Update Iinj and resulting Vexts
+        Iinj = (Irange[0] + Irange[1]) / 2
+        self.setVext(computeVext(self, Iinj, z0))
+
+        # Run simulation and detect spikes on ith trace
+        t, stimon, Qm, Vmeff, states = self.simulate(tstim, toffset, PRF, DC, dt, atol)
+        ipeaks, *_ = findPeaks(Vmeff[inode], mph=SPIKE_MIN_VAMP, mpp=SPIKE_MIN_VPROM)
+        nspikes = ipeaks.size
+
+        # If accurate threshold is found, return simulation results
+        if (Irange[1] - Irange[0]) <= DELTA_IINJ_EXTRA_MIN and nspikes == 1:
+            print('threshold amplitude: {}A'.format(si_format(Iinj * 1e-6, 2, space=' ')))
+            return Iinj
+
+        # Otherwise, refine titration interval and iterate recursively
+        else:
+            if nspikes == 0:
+                Irange = (Iinj, Irange[1])
+            else:
+                Irange = (Irange[0], Iinj)
+            return self.titrateIinjExtra(
+                z0, tstim, toffset, PRF, DC, dt, atol, inode=inode, Irange=Irange, Itype=Itype)
+
+
+def computeVext(fiber, I, z0=None, x0=0):
+    ''' Compute the extracellular electric potential at a fiber's nodes of Ranvier generated by
+        a point-current source at a given distance from the fiber in a homogenous, isotropic medium.
+
+        :param fiber: Sonic1D fiber model object
+        :param I: stimulation current amplitude (uA)
+        :param z0: electrode coordinate along z-axis (perpendicular to axon), in um
+        :param x0: electrode coordinate along x-axis (parallel to axon), in um
+        :return: computed extracellular potential(s) (mV)
+    '''
+
+    # if no z-coordinate is provided, place the electrode at one internodal distance from the fiber
+    if z0 is None:
+        z0 = fiber.interL[0]
+
+    # Get x-coordinates of fiber nodes (centered at x=0), compute node-electrode distances and
+    # return induced extracellular potentials
+    xnodes = fiber.nodeCoordinates()
+    distances = np.sqrt((xnodes - x0)**2 + z0**2)
+    return VextPointSource(I, distances)

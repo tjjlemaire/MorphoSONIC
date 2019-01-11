@@ -2,48 +2,15 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-30 10:51:12
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-10-15 23:37:03
+# @Last Modified time: 2019-01-11 17:47:50
 
 import sys
 import matplotlib.pyplot as plt
 from argparse import ArgumentParser
 
 from PySONIC.neurons import getNeuronsDict
+from ExSONIC.utils import sennGeometry
 from ExSONIC._1D import SeriesConnector, compareEStim, runPlotAStim
-
-
-def runTests(testset, neuron, verbose, hide):
-
-    # Model parameters
-    neuron = getNeuronsDict()[neuron]()
-    a = 32e-9  # sonophore diameter (m)
-    nnodes = 2
-    Ra = 1e2  # default order of magnitude found in litterature (Ohm.cm)
-    d = 1e-6  # order of magnitude of axon node diameter (m)
-    L = 1e-5  # between length order of magnitude of axon node (1 um) and internode (100 um - 1 mm)
-
-    # Stimulation parameters
-    tstim = 150e-3  # s
-    toffset = 100e-3  # s
-    PRF = 100.  # Hz
-    DC = 1.0
-
-    # E-STIM
-    if 'ESTIM' in testset:
-        Astim = 30.0  # mA/m2
-        compareEStim(neuron, Ra, SeriesConnector(vref='v'), d, L, Astim, tstim, toffset, PRF, DC,
-                     nnodes=nnodes)
-
-    # A-STIM
-    if 'ASTIM' in testset:
-        Fdrive = 500e3  # Hz
-        amps = [50e3, 50e3]  # Pa
-        covs = [1.0, .5]
-        runPlotAStim(neuron, a, Fdrive, Ra, SeriesConnector(vref='Vmeff_{}'.format(neuron.name)),
-                     d, L, amps, tstim, toffset, PRF, DC, nnodes=nnodes, covs=covs)
-
-    if not hide:
-        plt.show()
 
 
 def main():
@@ -51,9 +18,8 @@ def main():
     # Define argument parser
     ap = ArgumentParser()
     ap.add_argument('-t', '--testset', type=str, default='all', help='Test set')
-    ap.add_argument('-n', '--neuron', type=str, default='RS', help='Neuron type')
-    ap.add_argument('-v', '--verbose', default=False, action='store_true',
-                    help='Increase verbosity')
+    ap.add_argument('-n', '--neuron', type=str, default='FH', help='Neuron type')
+    ap.add_argument('-v', '--verbose', default=False, action='store_true', help='Increase verbosity')
     ap.add_argument('--noplot', default=False, action='store_true',
                     help='Do not show figures')
 
@@ -62,12 +28,53 @@ def main():
 
     testset = args.testset
     if testset == 'all':
-        testset = ['ESTIM', 'ASTIM']
+        testset = ['Iintra', 'Iextra', 'US']
     else:
         testset = [testset]
 
-    # Run tests
-    runTests(testset, args.neuron, args.verbose, args.noplot)
+    # Model parameters
+    neuron = getNeuronsDict()[args.neuron]()
+    nnodes = 20
+    rs = 1e2  # Ohm.cm
+    fiberD = 20.0  # um
+    nodeD, nodeL, interD, interL = sennGeometry(fiberD)
+
+    # Iintra
+    if 'Iintra' in testset:
+        tstim = 1e-4  # s
+        toffset = 10e-3  # s
+        PRF = 100.  # Hz
+        DC = 1.0
+        connector = SeriesConnector(vref='v', rmin=None)
+        compareEStim(neuron, rs, connector, nodeD, nodeL, interD, interL,
+                     None, tstim, toffset, PRF, DC, nnodes=nnodes,
+                     cmode='seq', verbose=args.verbose)
+
+    # Iextra
+    if 'Iextra' in testset:
+        z0 = interL
+        tstim = 1e-4  # s
+        toffset = 10e-3  # s
+        PRF = 100.  # Hz
+        DC = 1.0
+        dt = 1e-6  # s
+        Iinj = None
+        connector = SeriesConnector(vref='v', rmin=None)
+        compareEStim(neuron, rs, connector, nodeD, nodeL, interD, interL,
+                     Iinj, tstim, toffset, PRF, DC, nnodes=nnodes,
+                     cmode='seq', verbose=args.verbose, z0=z0, dt=dt)
+
+    # US
+    if 'US' in testset:
+        a = 32.  # nm
+        Fdrive = 500.  # kHz
+        amps = [50.] + [0.] * (nnodes - 1)  # kPa
+        runPlotAStim(neuron, a, Fdrive, rs, SeriesConnector(vref='Vmeff_{}'.format(neuron.name)),
+                     nodeD, nodeL, interD, interL, amps, tstim, toffset, PRF, DC, nnodes=nnodes,
+                     verbose=args.verbose)
+
+    if not args.noplot:
+        plt.show()
     sys.exit(0)
 
 

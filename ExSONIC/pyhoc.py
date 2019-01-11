@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-21 19:48:04
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-10-15 22:02:36
+# @Last Modified time: 2019-01-11 10:20:22
 
 
 ''' Utilities to manipulate HOC objects. '''
@@ -200,3 +200,17 @@ def setRangesProbes(sections, var, locs=None):
     if locs is None:
         locs = [0.5] * len(sections)
     return map(setRangeProbe, sections, [var] * len(sections), locs)
+
+
+def insertVext(sec, xr=1e20, xg=1e10, xc=0.):
+    ''' Insert extracellular mechanism into section and set appropriate parameters.
+
+        :param sec: section object
+        :param xr: axial resistance of extracellular layer (Mohms/cm)
+        :param xg: transverse conductance of extracellular layer (S/cm^2)
+        :param xc: transverse capacitance of extracellular layer (uF/cm^2)
+    '''
+    sec.insert('extracellular')
+    sec.xraxial[0] = xr
+    sec.xg[0] = xg
+    sec.xc[0] = xc

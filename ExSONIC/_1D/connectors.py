@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-25 02:00:26
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2018-10-15 20:33:06
+# @Last Modified time: 2018-12-28 17:21:18
 
 import numpy as np
 from neuron import h
@@ -16,13 +16,15 @@ class SeriesConnector:
 
         :param mechname: name of the mechanism that compute axial current contribution
         :param vref: name of the reference voltage varibale to compute axial currents
-        :param rmin (optional): lower bound for axial resistance density (Ohm.cm2)
+        :param rmin: lower bound for axial resistance density (resistance * membrane area, in Ohm.cm2)
+        :param verbose: string indicating whether to output details of the connection process
     '''
 
-    def __init__(self, mechname='Iax', vref='v', rmin=2e2):
+    def __init__(self, mechname='Iax', vref='v', rmin=2e2, verbose='if_bound'):
         self.mechname = mechname
         self.vref = vref
-        self.rmin = rmin  # Ohm.cm2
+        self.rmin = rmin  # resistance density (Ohm.cm2)
+        self.verbose = verbose
 
     def __repr__(self):
         return 'connect("{}"{})'.format(
@@ -47,11 +49,10 @@ class SeriesConnector:
         ''' Compute section axial resistance (in Ohm) '''
         return sec.Ra * (sec.L * 1e-4) / self.axialArea(sec)
 
-    def attach(self, sec, verbose=False):
+    def attach(self, sec):
         ''' Insert density mechanism to section and set appropriate axial conduction parameters.
 
             :param sec: section to attach
-            :param verbose: boolean indicating whether to output details of the connection process
         '''
 
         # Insert axial current density mechanism
@@ -62,15 +63,18 @@ class SeriesConnector:
         R = self.resistance(sec)  # section resistance (Ohm)
 
         # Optional: bound resistance to ensure (resistance * membrane area) is always above threshold,
-        # in order to limit the magnitude of axial currents and thus ensure convergence of simulation
+        # in order to limit the magnitude of axial currents
+        s = '{}: R*Am = {:.1e} Ohm.cm2'.format(sec, R * Am)
         if self.rmin is not None:
             if R < self.rmin / Am:
-                if verbose:
-                    print('R*Am = {:.1e} Ohm.cm2 -> bounded to {:.1e} Ohm.cm2'.format(
-                        R * Am, self.rmin))
+                s += ' -> bounded to {:.1e} Ohm.cm2'.format(self.rmin)
                 R = self.rmin / Am
-            elif verbose:
-                print('R*Am = {:.1e} Ohm.cm2 -> not bounded'.format(R * Am))
+            else:
+                s += ' -> not bounded'
+            if self.verbose in ['if_bound', 'all']:
+                print(s)
+        if self.verbose == 'all':
+            print(s)
 
         # Set section propeties to Iax mechanism
         setattr(sec, 'R_{}'.format(self.mechname), R)
