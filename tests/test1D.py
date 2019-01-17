@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-30 10:51:12
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-01-11 17:47:50
+# @Last Modified time: 2019-01-17 19:20:03
 
 import sys
 import matplotlib.pyplot as plt
@@ -34,15 +34,15 @@ def main():
 
     # Model parameters
     neuron = getNeuronsDict()[args.neuron]()
-    nnodes = 20
+    nnodes = 21
     rs = 1e2  # Ohm.cm
-    fiberD = 20.0  # um
+    fiberD = 10.0  # um
     nodeD, nodeL, interD, interL = sennGeometry(fiberD)
 
     # Iintra
     if 'Iintra' in testset:
         tstim = 1e-4  # s
-        toffset = 10e-3  # s
+        toffset = 3e-3  # s
         PRF = 100.  # Hz
         DC = 1.0
         connector = SeriesConnector(vref='v', rmin=None)

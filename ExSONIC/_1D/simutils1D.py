@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-30 11:29:37
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-01-11 17:47:02
+# @Last Modified time: 2019-01-17 17:26:24
 
 import time
 import numpy as np
@@ -12,7 +12,7 @@ import matplotlib as mpl
 
 from PySONIC.utils import si_format, pow10_format
 from ..plt import plotSignals
-from ..utils import getSpikesTimings, getConductionSpeed
+from ..utils import getSpikesTimings, getConductionSpeeds
 from .sonic1D import Sonic1D, computeVext
 
 
@@ -22,7 +22,7 @@ def compareEStim(neuron, rs, connector, nodeD, nodeL, interD, interL, Iinj, tsti
         connection schemes.
     '''
 
-    vcond_classic, vcond_custom = np.nan, np.nan
+    vconds_classic, vconds_custom = np.nan, np.nan
 
     # Run model simulation with classic connect scheme
     model = Sonic1D(neuron, rs, nodeD, nodeL, interD=interD, interL=interL, nnodes=nnodes,
@@ -46,12 +46,13 @@ def compareEStim(neuron, rs, connector, nodeD, nodeL, interD, interL, Iinj, tsti
     tcomp_classic = time.time() - tstart
     stimon_classic[0] = 1
 
-    node_distances = model.nodeDistances()  # um
+    xcoords = model.getNodeCoordinates()  # um
 
     spiketimings_classic = getSpikesTimings(t_classic, Vmeffprobes_classic)  # ms
     if spiketimings_classic is not None:
-        vcond_classic = getConductionSpeed(node_distances, spiketimings_classic)  # m/s
-        print('average conduction speed: {:.2f} m/s'.format(vcond_classic))
+        vconds_classic = getConductionSpeeds(xcoords, spiketimings_classic)  # m/s
+        print('conduction speed range: {:.2f} - {:.2f} m/s'.format(
+            vconds_classic.min(), vconds_classic.max()))
 
     # Run model simulation with custom connect scheme
     model = Sonic1D(neuron, rs, nodeD, nodeL, interD=interD, interL=interL, nnodes=nnodes,
@@ -68,8 +69,9 @@ def compareEStim(neuron, rs, connector, nodeD, nodeL, interD, interL, Iinj, tsti
 
     spiketimings_custom = getSpikesTimings(t_custom, Vmeffprobes_custom)  # ms
     if spiketimings_custom is not None:
-        vcond_custom = getConductionSpeed(node_distances, spiketimings_custom)  # m/s
-        print('average conduction speed: {:.2f} m/s'.format(vcond_custom))
+        vconds_custom = getConductionSpeeds(xcoords, spiketimings_custom)  # m/s
+        print('conduction speed range: {:.2f} - {:.2f} m/s'.format(
+            vconds_custom.min(), vconds_custom.max()))
 
     # Rescale vectors to appropriate units
     t_classic, t_custom = [t * 1e3 for t in [t_classic, t_custom]]  # ms
@@ -85,7 +87,7 @@ def compareEStim(neuron, rs, connector, nodeD, nodeL, interD, interL, Iinj, tsti
     ), fontsize=13)
     tonset = -0.05 * (t_classic[-1] - t_classic[0])
     fs = 10
-    cmap = plt.cm.viridis_r
+    cmap = plt.cm.jet_r
 
     # Plot Vmeff-traces for classic and custom schemes
     ax = axes[0]
@@ -118,6 +120,8 @@ def compareEStim(neuron, rs, connector, nodeD, nodeL, interD, interL, Iinj, tsti
     cbar_ax.tick_params(axis='both', which='both', length=0)
     cbar_ax.set_title('node index', size=fs)
 
+    colors = ['dimgrey', 'silver']
+
     # Histogram comparing conduction speeds
     ax = axes[2]
     ax.spines['top'].set_visible(False)
@@ -126,13 +130,22 @@ def compareEStim(neuron, rs, connector, nodeD, nodeL, interD, interL, Iinj, tsti
         item.set_fontsize(fs)
     ax.set_title('conduction speed (m/s)', fontsize=fs)
     indices = [1, 2]
-    vconds = [vcond_classic, vcond_custom]
-    colors = ['k', 'silver']
+    vconds = [np.squeeze(np.reshape(x, (x.size, 1))) for x in [vconds_classic, vconds_custom]]
     ax.set_xticks(indices)
     ax.set_xticklabels(['classic', 'custom'])
-    for i, (idx, vcond) in enumerate(zip(indices, vconds)):
-        ax.bar(idx, vcond, align='center', color=colors[i])
-        ax.text(idx, 1.5 * vcond, '{:.2f} m/s'.format(vcond), horizontalalignment='center')
+    violin_parts = ax.violinplot(vconds, indices, points=60, widths=0.5, showextrema=False)
+    for c, pc in zip(colors, violin_parts['bodies']):
+        pc.set_facecolor(c)
+        pc.set_edgecolor('k')
+    for idx, data in zip(indices, vconds):
+        q1, med, q3 = np.percentile(data, [25, 50, 75])
+        wmin = np.clip(q1 - (q3 - q1) * 1.5, min(data), q1)
+        wmax = np.clip(q3 + (q3 - q1) * 1.5, q3, max(data))
+        ax.scatter(idx, med, marker='o', color='k', s=30, zorder=3)
+        ax.vlines(idx, q1, q3, color='grey', linestyle='-', lw=5)
+        ax.vlines(idx, wmin, wmax, color='grey', linestyle='-', lw=1)
+        ax.text(idx, 0.5 * data.min(), '{:.1f} m/s'.format(med), horizontalalignment='center')
+    # ax.plot(indices, vconds, '.k')
     ax.set_yscale('log')
     ax.set_ylim(1e0, 1e3)
 
@@ -145,7 +158,6 @@ def compareEStim(neuron, rs, connector, nodeD, nodeL, interD, interL, Iinj, tsti
     ax.set_title('comp. time (s)', fontsize=fs)
     indices = [1, 2]
     tcomps = [tcomp_classic, tcomp_custom]
-    colors = ['k', 'silver']
     ax.set_xticks(indices)
     ax.set_xticklabels(['classic', 'custom'])
     for i, (idx, tcomp) in enumerate(zip(indices, tcomps)):

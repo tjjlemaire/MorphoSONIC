@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-01-11 15:59:51
+# @Last Modified time: 2019-01-17 18:43:54
 
 
 import numpy as np
@@ -52,7 +52,7 @@ class Sonic0D:
         load_mechanisms(getNmodlDir(), self.neuron.name)
         self.setFuncTables(self.a, self.Fdrive)
 
-        # Create section and set membrane mechanism
+        # Create section and set capacitance and membrane mechanism
         self.section = self.createSection('node0')
         self.section.insert(self.mechname)
 
@@ -79,6 +79,7 @@ class Sonic0D:
             :param id: name of the section.
         '''
         return h.Section(name=id, cell=self)
+
 
     def setFuncTables(self, a, Fdrive):
         ''' Set neuron-specific, sonophore diameter and US frequency dependent 2D interpolation tables
@@ -233,7 +234,7 @@ class Sonic0D:
                 print('adaptive time step integration (atol = {})'.format(self.cvode.atol()))
 
         # Initialize
-        h.finitialize(self.neuron.Vm0 * self.neuron.Cm0 * 1e2)
+        h.finitialize(self.neuron.Vm0 * self.neuron.Cm0 * 1e2)  # Set initial membrane charge density
         self.stimon = self.setStimON(1)
         self.cvode.event(self.Ton, self.toggleStim)
 

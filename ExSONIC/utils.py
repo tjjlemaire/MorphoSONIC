@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 14:38:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-01-11 14:46:56
+# @Last Modified time: 2019-01-17 14:47:20
 
 import os
 import numpy as np
@@ -63,36 +63,40 @@ def getSpikesTimings(t, Vm_traces, tstart=None, tend=None):
     nspikes = None
     tspikes = []
     for Vm in Vm_traces:
+
+        # Detect spikes on current trace
         ispikes, *_ = findPeaks(Vm, SPIKE_MIN_VAMP, mpd, SPIKE_MIN_VPROM)
+
+        # Assert consistency of spikes propagation
         if nspikes is None:
             nspikes = ispikes.size
             if nspikes == 0:
                 print('Warning: no spikes detected')
                 return None
         else:
-            assert len(ispikes) == ispikes.size, 'Inconsistent number of spikes in different nodes'
-        tspikes.append(t[ispikes])
+            assert ispikes.size == nspikes, 'Inconsistent number of spikes in different nodes'
+
+        # Consider spikes as time of zero-crossing preceding each peak
+        i_zcross = np.where(np.diff(np.sign(Vm)) > 0)[0]  # detect ascending zero-crossings
+        slopes = (Vm[i_zcross + 1] - Vm[i_zcross]) / (t[i_zcross + 1] - t[i_zcross])  # slopes
+        offsets = Vm[i_zcross] - slopes * t[i_zcross]  # offsets
+        tzcross = -offsets / slopes  # interpolated times
+        tspikes.append(tzcross)
+
     return np.array(tspikes) * 1e3
 
 
-def getConductionSpeed(distances, tspikes):
+def getConductionSpeeds(xcoords, tspikes):
     ''' Compute average conduction speed from simulation results.
 
-        :param distances: vector of node-to-node distances (um)
+        :param xcoords: vector of node longitudinal coordinates (um)
         :param tspikes: nnodes x nspikes 2D matrix with occurence time (ms) per node and spike.
-        :return: average conduction speed (m/s).
+        :return: (nnodes - 1) x nspikesconduction speed matrix (m/s).
     '''
-    dtot = np.sum(distances)  # first-to-last node distance (um)
-    print('first-to-last node distance: {}m'.format(si_format(dtot * 1e-6, 2)))
     nnodes, nspikes = tspikes.shape
-    vconds = np.empty(nspikes)
-    for i in range(nspikes):
-        dtspike = tspikes[-1, i] - tspikes[0, i]  # first-to-last node spikes occurence delay
-        vconds[i] = dtot / dtspike * 1e-3  # m/s
-        print('spike {}: {:.2f} ms @node{} -> {:.2f} ms @node{} (delay = {:.2f} ms, vcond = {:.2f} m/s)'.format(
-            i + 1, tspikes[0, i], 0, tspikes[-1, i], nnodes - 1, dtspike, vconds[i]))
-    return np.mean(vconds)
-
+    dists = np.diff(xcoords)  # internodal distances (um)
+    delays = np.abs(np.diff(tspikes, axis=0))  # node-to-node delays (ms)
+    return (dists / delays.T).T * 1e-3  # node-to-node conduction velocities (m/s)
 
 
 class IPulse:

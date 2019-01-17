@@ -2,7 +2,7 @@
 # @Author: Theo
 # @Date:   2018-08-15 15:08:23
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-01-11 17:37:50
+# @Last Modified time: 2019-01-17 19:16:51
 
 import numpy as np
 from itertools import repeat
@@ -126,14 +126,18 @@ class Sonic1D(Sonic0D):
             else:
                 self.buildCustomTopology()
 
-    def nodeDistances(self):
-        ''' Return vector of node-to-node distances along axial dimension (um). '''
-        return (self.nodeL[:-1] + self.nodeL[1:]) / 2 + self.interL
 
-    def nodeCoordinates(self):
+    def getNodeCoordinates(self):
         ''' Return vector of node coordinates along axial dimension, centered at zero (um). '''
-        xcoords = np.insert(np.cumsum(self.nodeDistances()), 0, 0)
+        xcoords = np.zeros(self.nnodes)
+        for i in range(1, self.nnodes):
+            xcoords[i] = xcoords[i - 1] + (self.nodeL[i - 1] + self.nodeL[i]) / 2 + self.interL[i - 1]
         return xcoords - xcoords[-1] / 2.
+
+    def getNode2NodeDistance(self, i, j):
+        ''' Return node-to-node distance along axial dimension (um). '''
+        xcoords = self.getNodeCoordinates()
+        return np.abs(xcoords[j] - xcoords[i])
 
     def __repr__(self):
         ''' Explicit naming of the model instance. '''
@@ -200,8 +204,11 @@ class Sonic1D(Sonic0D):
         return 4 * L / (np.pi * D**2)
 
     def setResistivity(self):
-        ''' Set sections axial resistivity, corrected to account for internodes. '''
+        ''' Set sections axial resistivity, corrected to account for internodes and membrane capacitance
+            in the Q-based differentiation scheme. '''
 
+        if self.verbose:
+            print('adjusting resistivity to account for internodal sections')
         for i, sec in enumerate(self.sections):
             # compute node relative resistance
             r_node = self.relResistance(self.nodeD[i], self.nodeL[i])
@@ -215,8 +222,17 @@ class Sonic1D(Sonic0D):
             x = (r_node + r_inter) / r_node
 
             # correct axial resistivity to account for internodal resistance
-            print(sec, ': rs =', self.rs, ', adjusted rs =', self.rs * x)
             sec.Ra = self.rs * x
+
+        # In case the axial coupling variable is v (an alias for membrane charge density),
+        # multiply resistivity by membrane capacitance to ensure consistency of Q-based
+        # differential scheme, where Iax = dV / r = dQ / (r * cm)
+        if self.connector is None or self.connector.vref == 'v':
+            if self.verbose:
+                print('adjusting resistivity to account for Q-based differential scheme')
+        for sec in self.sections:
+            sec.Ra *= self.neuron.Cm0 * 1e2
+
 
     def buildTopology(self):
         ''' Connect the sections in series through classic NEURON implementation. '''
@@ -225,12 +241,14 @@ class Sonic1D(Sonic0D):
         for sec1, sec2 in zip(self.sections[:-1], self.sections[1:]):
             sec2.connect(sec1, 1, 0)
 
+
     def buildCustomTopology(self):
         if self.verbose:
             print('building custom {}-based topology'.format(self.connector.vref))
         list(map(self.connector.attach, self.sections))
         for sec1, sec2 in zip(self.sections[:-1], self.sections[1:]):
             self.connector.connect(sec1, sec2)
+
 
     def setUSdrive(self, amps):
         ''' Set section specific acoustic stimulation amplitudes.
@@ -252,7 +270,7 @@ class Sonic1D(Sonic0D):
 
         # Set acoustic amplitudes
         if self.verbose:
-            print('Setting acoustic stimulus amplitudes: Adrive = [{}] kPa'.format(
+            print('Setting acoustic amplitudes: Adrive = [{}] kPa'.format(
                 ' - '.join('{:.0f}'.format(Adrive) for Adrive in amps)))
         for sec, Adrive in zip(self.sections, amps):
             setattr(sec, 'Adrive_{}'.format(self.mechname), Adrive)
@@ -265,12 +283,14 @@ class Sonic1D(Sonic0D):
         ''' Set section specific electrical stimulation amplitudes.
 
             :param amps: model-sized vector of electrical amplitudes (mA/m2)
-            or single value (assigned to first node)
+            or single value (assigned to central node)
             :return: section-specific labels
         '''
         # Process inputs
         if isinstance(amps, float):
-            amps = np.insert(np.zeros(self.nnodes - 1), 0, amps)  # mA/m2
+            # amps = np.insert(np.zeros(self.nnodes - 1), 0, amps)  # mA/m2
+            halfpad = np.zeros(self.nnodes // 2)
+            amps = np.hstack((halfpad, np.array([amps]), halfpad))  # mA/m2
         else:
             if self.nnodes != len(amps):
                 raise ValueError('Iinj distribution vector does not match number of nodes')
@@ -278,7 +298,7 @@ class Sonic1D(Sonic0D):
 
         # Set IClamp objects
         if self.verbose:
-            print('Setting electrical stimulus amplitudes: Iinj = [{}] mA/m2'.format(
+            print('Injecting intracellular currents: Iinj = [{}] mA/m2'.format(
                 ', '.join('{:.0f}'.format(Astim) for Astim in amps)))
         self.Iinjs = [Astim * sec(0.5).area() * 1e-6
                       for Astim, sec in zip(amps, self.sections)]  # nA

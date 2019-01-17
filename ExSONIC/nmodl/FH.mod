@@ -51,7 +51,6 @@ PARAMETER {
 
     : membrane properties
     v0 = -70          (mV)
-    cm = 2            (uF/cm2)
     pnabar = 8e-3     (cm/s)
 	ppbar = .54e-3    (cm/s)
 	pkbar = 1.2e-3    (cm/s)
