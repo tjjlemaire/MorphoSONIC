@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 16:41:08
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-01-11 10:39:23
+# @Last Modified time: 2019-01-18 11:16:30
 
 import time
 import numpy as np
@@ -15,7 +15,7 @@ from PySONIC.core import NeuronalBilayerSonophore
 from .sonic0D import Sonic0D
 
 
-def compare(neuron, A, tstim, toffset, PRF, DC, a=None, Fdrive=None, dt=None, atol=None,
+def compare(neuron, A, tstim, toffset, PRF=100., DC=1., a=None, Fdrive=None, dt=None, atol=None,
             verbose=False):
     ''' Compare results of NEURON and Python based A-STIM or E-STIM simulations of the point-neuron
         SONIC model.
@@ -54,8 +54,8 @@ def compare(neuron, A, tstim, toffset, PRF, DC, a=None, Fdrive=None, dt=None, at
     npatches, tpatch_on, tpatch_off = getStimPulses(t_Python, stimon_Python)
 
     # Add onset to signals
-    t0 = -10.0
-    t_Python, t_NEURON = [np.hstack((np.array([t0, 0.]), t)) for t in [t_Python, t_NEURON]]
+    tonset = -0.05 * (t_Python[-1] - t_NEURON[0])
+    t_Python, t_NEURON = [np.hstack((np.array([tonset, 0.]), t)) for t in [t_Python, t_NEURON]]
     Qm_Python, Qm_NEURON = [np.hstack((np.ones(2) * neuron.Vm0 * neuron.Cm0 * 1e2, Qm))
                             for Qm in [Qm_Python, Qm_NEURON]]
     Vmeff_Python, Vmeff_NEURON = [np.hstack((np.ones(2) * neuron.Vm0, Vm))
@@ -87,7 +87,7 @@ def compare(neuron, A, tstim, toffset, PRF, DC, a=None, Fdrive=None, dt=None, at
         ax.axvspan(tpatch_on[i], tpatch_off[i], edgecolor='none',
                    facecolor='#8A8A8A', alpha=0.2)
     ax.legend(fontsize=fs, frameon=False)
-    ax.set_xlim(t0, (tstim + toffset) * 1e3)
+    ax.set_xlim(tonset, (tstim + toffset) * 1e3)
     ax.set_ylim(neuron.Qbounds * 1e5)
     ax.set_xlabel('time (ms)', fontsize=fs)
     ax.set_ylabel('Qm (nC/cm2)', fontsize=fs)
@@ -101,7 +101,7 @@ def compare(neuron, A, tstim, toffset, PRF, DC, a=None, Fdrive=None, dt=None, at
         ax.axvspan(tpatch_on[i], tpatch_off[i], edgecolor='none',
                    facecolor='#8A8A8A', alpha=0.2)
     ax.legend(fontsize=fs, frameon=False)
-    ax.set_xlim(t0, (tstim + toffset) * 1e3)
+    ax.set_xlim(tonset, (tstim + toffset) * 1e3)
     ax.set_ylim(-150, 70)
     ax.set_xlabel('time (ms)', fontsize=fs)
     ax.set_ylabel('$V_{m, eff}$ (mV)', fontsize=fs)

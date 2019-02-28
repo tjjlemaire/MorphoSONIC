@@ -2,24 +2,27 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-01-17 18:43:54
+# @Last Modified time: 2019-01-24 11:25:17
 
 
 import numpy as np
 from neuron import h
 
 from PySONIC.neurons import *
-from PySONIC.utils import getLookups2D, si_format
+from PySONIC.utils import getLookups2D, getLookups2Dfs, si_format
+from PySONIC.postpro import findPeaks
+from PySONIC.constants import *
 
 from ..pyhoc import *
 from ..utils import getNmodlDir
+from ..constants import *
 
 
 
 class Sonic0D:
     ''' Point-neuron SONIC model in NEURON. '''
 
-    def __init__(self, neuron, a=None, Fdrive=None, verbose=False):
+    def __init__(self, neuron, a=None, Fdrive=None, fs=None, verbose=False):
         ''' Initialization.
 
             :param neuron: neuron object
@@ -44,13 +47,14 @@ class Sonic0D:
         self.Fdrive = Fdrive if Fdrive is not None else 500.  # kHz
         self.mechname = self.neuron.name
         self.verbose = verbose
+        self.fs = fs
 
         if self.verbose:
             print('---------- Creating model: {} ----------'.format(self))
 
         # Load mechanisms and set function tables of appropriate membrane mechanism
         load_mechanisms(getNmodlDir(), self.neuron.name)
-        self.setFuncTables(self.a, self.Fdrive)
+        self.setFuncTables(self.a, self.Fdrive, self.fs)
 
         # Create section and set capacitance and membrane mechanism
         self.section = self.createSection('node0')
@@ -67,9 +71,9 @@ class Sonic0D:
     def strBiophysics(self):
         s = '{} neuron'.format(self.neuron.name)
         if self.modality == 'US':
-            s += ', a = {}m, f = {}Hz'.format(
+            s += ', a = {}m{}, f = {}Hz'.format(
                 si_format(self.a * 1e-9, space=' '),
-                # self.fs * 1e2,
+                ', fs = {:.0f}%'.format(self.fs * 1e2) if self.fs is not None else '',
                 si_format(self.Fdrive * 1e3, space=' '))
         return s
 
@@ -81,7 +85,7 @@ class Sonic0D:
         return h.Section(name=id, cell=self)
 
 
-    def setFuncTables(self, a, Fdrive):
+    def setFuncTables(self, a, Fdrive, fs=None):
         ''' Set neuron-specific, sonophore diameter and US frequency dependent 2D interpolation tables
             in the (amplitude, charge) space, and link them to FUNCTION_TABLEs in the MOD file of the
             corresponding membrane mechanism.
@@ -94,7 +98,10 @@ class Sonic0D:
             print('loading membrane dynamics lookup tables for {} neuron'.format(self.mechname))
 
         # Get lookups
-        Aref, Qref, lookups2D, _ = getLookups2D(self.neuron.name, a=a * 1e-9, Fdrive=Fdrive * 1e3)
+        if fs is None:
+            Aref, Qref, lookups2D, _ = getLookups2D(self.neuron.name, a=a * 1e-9, Fdrive=Fdrive * 1e3)
+        else:
+            Aref, Qref, lookups2D = getLookups2Dfs(self.neuron.name, a * 1e-9, Fdrive * 1e3, fs)
 
         # Rescale rate constants to ms-1
         for k in lookups2D.keys():
@@ -168,16 +175,16 @@ class Sonic0D:
         ''' Toggle US or electrical stimulation and set appropriate next toggle event. '''
         # OFF -> ON at pulse onset
         if self.stimon == 0:
-            # print('t = {:.2f} ms: switching stim ON and setting next OFF event at {:.2f} ms'
-            #       .format(h.t, min(self.tstim, h.t + self.Ton)))
+            print('t = {:.2f} ms: switching stim ON and setting next OFF event at {:.2f} ms'
+                  .format(h.t, min(self.tstim, h.t + self.Ton)))
             self.stimon = self.setStimON(1)
             self.cvode.event(min(self.tstim, h.t + self.Ton), self.toggleStim)
         # ON -> OFF at pulse offset
         else:
             self.stimon = self.setStimON(0)
             if (h.t + self.Toff) < self.tstim - h.dt:
-                # print('t = {:.2f} ms: switching stim OFF and setting next ON event at {:.2f} ms'
-                #       .format(h.t, h.t + self.Toff))
+                print('t = {:.2f} ms: switching stim OFF and setting next ON event at {:.2f} ms'
+                      .format(h.t, h.t + self.Toff))
                 self.cvode.event(h.t + self.Toff, self.toggleStim)
             # else:
             #     print('t = {:.2f} ms: switching stim OFF'.format(h.t))
@@ -264,12 +271,6 @@ class Sonic0D:
         stimon = setStimProbe(self.section, self.mechname)
         Qm = setRangeProbe(self.section, 'v')
         Vmeff = setRangeProbe(self.section, 'Vmeff_{}'.format(self.mechname))
-
-        # states = [{suffix: setRangeProbe(
-        #     self.section, '{}_{}_{}'.format(alias(state), suffix, self.mechname))
-        #     for suffix in ['0', 'US']
-        # } for state in self.neuron.states_names]
-
         states = []
         for key in self.neuron.states_names:
             states.append(setRangeProbe(self.section, '{}_{}'.format(alias(key), self.mechname)))
@@ -282,11 +283,52 @@ class Sonic0D:
         stimon = Vec2array(stimon)
         Qm = Vec2array(Qm) * 1e-5  # C/cm2
         Vmeff = Vec2array(Vmeff)  # mV
-        # states = [self.fs * Vec2array(state['US']) + (1 - self.fs) * Vec2array(state['0'])
-        #           for state in states]
         states = [Vec2array(state) for state in states]
-
         y = np.vstack([Qm, Vmeff, np.array(states)])
 
         # return output variables
         return (t, y, stimon)
+
+    def titrateUS(self, tstim, toffset, PRF, DC, dt, atol, Arange=None):
+        ''' Use a dichotomic recursive search to determine the threshold acoustic pressure
+            amplitude needed to obtain neural excitation for a given duration, PRF and duty cycle.
+
+            :param tstim: stimulus duration (s)
+            :param toffset: duration of the offset (s)
+            :param PRF: pulse repetition frequency (Hz)
+            :param DC: pulse duty cycle (-)
+            :param dt: integration time step
+            :param atol: integration error tolerance
+            :param Arange: search interval for Adrive, iteratively refined (kPa)
+            :return: threshold excitation amplitude (kPa)
+        '''
+
+        # Determine amplitude interval if needed
+        if Arange is None:
+            Arange = (0, self.Aref.max())  # kPa
+        Adrive = (Arange[0] + Arange[1]) / 2  # kPa
+        self.setUSdrive(Adrive)
+
+        # Run simulation and detect spikes on ith trace
+        t, y, stimon = self.simulate(tstim, toffset, PRF, DC, dt, atol)
+        Qm = y[0, :]
+        ipeaks, *_ = findPeaks(Qm, mph=SPIKE_MIN_QAMP, mpp=SPIKE_MIN_QPROM)
+        nspikes = ipeaks.size
+
+        # If accurate threshold is found, return simulation results
+        if (Arange[1] - Arange[0]) <= DELTA_US_AMP_MIN and nspikes == 1:
+            print('threshold amplitude: {}Pa'.format(si_format(Adrive * 1e3, 2, space=' ')))
+            return Adrive
+
+        # Otherwise, refine titration interval and iterate recursively
+        else:
+            if nspikes == 0:
+                # if Adrive too close to max then stop
+                if (self.Aref.max() - Adrive) <= DELTA_US_AMP_MIN:
+                    print('no threshold amplitude found within (0-{:.0f}) kPa search interval'.format(
+                        self.Aref.max()))
+                    return np.nan
+                Arange = (Adrive, Arange[1])
+            else:
+                Arange = (Arange[0], Adrive)
+            return self.titrateUS(tstim, toffset, PRF, DC, dt, atol, Arange=Arange)

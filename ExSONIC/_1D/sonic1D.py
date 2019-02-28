@@ -2,7 +2,7 @@
 # @Author: Theo
 # @Date:   2018-08-15 15:08:23
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-01-17 19:16:51
+# @Last Modified time: 2019-01-23 18:05:54
 
 import numpy as np
 from itertools import repeat
@@ -15,13 +15,7 @@ from PySONIC.postpro import findPeaks
 from ..pyhoc import *
 from .._0D import Sonic0D
 from ..utils import VextPointSource
-
-
-IINJ_INTRA_MAX = 1e5  # upper limit for intracellular current amplitude (mA/m2)
-IINJ_EXTRA_CATHODAL_MAX = 1e4  # upper limit for cathodal stimulation current magnitude (uA)
-IINJ_EXTRA_ANODAL_MAX = 1e4  # upper limit for anodal stimulation current magnitude (uA)
-DELTA_IINJ_INTRA_MIN = 1e3  # refinement threshold for titration with intracellular current (mA/m2)
-DELTA_IINJ_EXTRA_MIN = 1e1  # refinement threshold for titration with extracellular current (uA)
+from ..constants import *
 
 
 
@@ -207,22 +201,27 @@ class Sonic1D(Sonic0D):
         ''' Set sections axial resistivity, corrected to account for internodes and membrane capacitance
             in the Q-based differentiation scheme. '''
 
-        if self.verbose:
-            print('adjusting resistivity to account for internodal sections')
-        for i, sec in enumerate(self.sections):
-            # compute node relative resistance
-            r_node = self.relResistance(self.nodeD[i], self.nodeL[i])
+        # Set resistivity of nodal sections
+        for sec in self.sections:
+            sec.Ra = self.rs
 
-            # compute relative resistances of half of previous and/or next internodal sections, if any
-            r_inter = 0.
-            if i > 0:
-                r_inter += self.relResistance(self.interD[i - 1], self.interL[i - 1] / 2)
-            if i < self.nnodes - 1:
-                r_inter += self.relResistance(self.interD[i], self.interL[i] / 2)
-            x = (r_node + r_inter) / r_node
+        # Adjust resistivity to account for internodal resistances
+        if not np.all(self.interL == 0.):
+            if self.verbose:
+                print('adjusting resistivity to account for internodal sections')
+            for i, sec in enumerate(self.sections):
+                # compute node relative resistance
+                r_node = self.relResistance(self.nodeD[i], self.nodeL[i])
 
-            # correct axial resistivity to account for internodal resistance
-            sec.Ra = self.rs * x
+                # compute relative resistances of half of previous and/or next internodal sections, if any
+                r_inter = 0.
+                if i > 0:
+                    r_inter += self.relResistance(self.interD[i - 1], self.interL[i - 1] / 2)
+                if i < self.nnodes - 1:
+                    r_inter += self.relResistance(self.interD[i], self.interL[i] / 2)
+
+                # correct axial resistivity
+                sec.Ra *= (r_node + r_inter) / r_node
 
         # In case the axial coupling variable is v (an alias for membrane charge density),
         # multiply resistivity by membrane capacitance to ensure consistency of Q-based
@@ -250,25 +249,47 @@ class Sonic1D(Sonic0D):
             self.connector.connect(sec1, sec2)
 
 
-    def setUSdrive(self, amps):
+    def processInputs(self, values, config):
+        ''' Return section specific inputs for a given configuration.
+
+            :param values: model-sized vector of inputs, or single value
+            :param config: spatial configuration ofr input application, used if values is float.
+            Can be either 'first', 'central' or 'all'.
+            :return: model-sized vector of inputs.
+        '''
+        # Process inputs
+        if isinstance(values, float):
+            if config == 'first':
+                values = np.insert(np.zeros(self.nnodes - 1), 0, values)
+            elif config == 'central':
+                if self.nnodes % 2 == 0:
+                    raise ValueError('"central" stimulus not applicable for an even number of nodes')
+                halfpad = np.zeros(self.nnodes // 2)
+                values = np.hstack((halfpad, np.array([values]), halfpad))
+            elif config == 'all':
+                values = np.ones(self.nodes) * values
+            else:
+                raise ValueError('Unknown stimulus configuration')
+        else:
+            if self.nnodes != len(values):
+                raise ValueError('Stimulus distribution vector does not match number of nodes')
+            values = np.array(values)
+        return values
+
+
+    def setUSdrive(self, amps, config):
         ''' Set section specific acoustic stimulation amplitudes.
 
-            :param amps: model-sized vector of acoustic amplitudes (kPa)
-            or single value (assigned to first node)
+            :param amps: model-sized vector of acoustic amplitudes (kPa) or single value
             :return: section-specific labels
         '''
         # Process inputs
         if self.connector is None:
             raise ValueError(
                 'attempting to perform A-STIM simulation with standard "v-based" connection scheme')
-        if isinstance(amps, float):
-            amps = np.insert(np.zeros(self.nnodes - 1), 0, amps)  # kPa
-        else:
-            if self.nnodes != len(amps):
-                raise ValueError('US drive distribution vector does not match number of nodes')
-            amps = np.array(amps)  # kPa
 
         # Set acoustic amplitudes
+        amps = self.processInputs(amps, config)  # kPa
         if self.verbose:
             print('Setting acoustic amplitudes: Adrive = [{}] kPa'.format(
                 ' - '.join('{:.0f}'.format(Adrive) for Adrive in amps)))
@@ -279,24 +300,16 @@ class Sonic1D(Sonic0D):
         # Return section-specific labels
         return ['node {} ({:.0f} kPa)'.format(i + 1, A) for i, A in enumerate(amps)]
 
-    def setIinj(self, amps):
+
+    def setIinj(self, amps, config):
         ''' Set section specific electrical stimulation amplitudes.
 
-            :param amps: model-sized vector of electrical amplitudes (mA/m2)
-            or single value (assigned to central node)
+            :param amps: model-sized vector of electrical amplitudes (mA/m2) or single value.
             :return: section-specific labels
         '''
-        # Process inputs
-        if isinstance(amps, float):
-            # amps = np.insert(np.zeros(self.nnodes - 1), 0, amps)  # mA/m2
-            halfpad = np.zeros(self.nnodes // 2)
-            amps = np.hstack((halfpad, np.array([amps]), halfpad))  # mA/m2
-        else:
-            if self.nnodes != len(amps):
-                raise ValueError('Iinj distribution vector does not match number of nodes')
-            amps = np.array(amps)  # mA/m2
 
         # Set IClamp objects
+        amps = self.processInputs(amps, config)  # mA/m2
         if self.verbose:
             print('Injecting intracellular currents: Iinj = [{}] mA/m2'.format(
                 ', '.join('{:.0f}'.format(Astim) for Astim in amps)))
@@ -313,6 +326,7 @@ class Sonic1D(Sonic0D):
         # return node-specific labels
         return ['node {} ({:.0f} $mA/m^2$)'.format(i + 1, A) for i, A in enumerate(amps)]
 
+
     def setVext(self, Vexts):
         ''' Insert extracellular mechanism into node sections and set extracellular potential values.
 
@@ -320,15 +334,9 @@ class Sonic1D(Sonic0D):
             or single value (assigned to first node)
             :return: section-specific labels
         '''
-        # Process inputs
-        if isinstance(Vexts, float):
-            Vexts = np.insert(np.zeros(self.nnodes - 1), 0, Vexts)  # mV
-        else:
-            if self.nnodes != len(Vexts):
-                raise ValueError('Vext distribution vector does not match number of nodes')
-            Vexts = np.array(Vexts)  # mV
 
         # Insert extracellular mechanism in nodes sections
+        Vexts = self.processInputs(Vexts, None)  # mV
         if not self.has_vext_mech:
             if self.verbose:
                 print('Inserting extracellular mechanism in all nodes')
@@ -421,7 +429,8 @@ class Sonic1D(Sonic0D):
         return t, stimon, Qm, Vmeff, states
 
 
-    def titrateIinjIntra(self, tstim, toffset, PRF, DC, dt, atol, inode=0, Irange=(0., IINJ_INTRA_MAX)):
+    def titrateIinjIntra(self, tstim, toffset, PRF, DC, dt, atol, config,
+                         inode=0, Irange=(0., IINJ_INTRA_MAX)):
         ''' Use a dichotomic recursive search to determine the threshold intracellular current
             amplitude needed to obtain neural excitation for a given duration, PRF and duty cycle.
 
@@ -437,7 +446,7 @@ class Sonic1D(Sonic0D):
                  solution matrix, state vector and response latency
         '''
         Iinj = (Irange[0] + Irange[1]) / 2
-        self.setIinj(Iinj)
+        self.setIinj(Iinj, config)
 
         # Run simulation and detect spikes on ith trace
         t, stimon, Qm, Vmeff, states = self.simulate(tstim, toffset, PRF, DC, dt, atol)
@@ -456,7 +465,45 @@ class Sonic1D(Sonic0D):
             else:
                 Irange = (Irange[0], Iinj)
             return self.titrateIinjIntra(
-                tstim, toffset, PRF, DC, dt, atol, inode=inode, Irange=Irange)
+                tstim, toffset, PRF, DC, dt, atol, config, inode=inode, Irange=Irange)
+
+
+    def titrateUS(self, tstim, toffset, PRF, DC, dt, atol, config, inode=0, Arange=(0., US_AMP_MAX)):
+        ''' Use a dichotomic recursive search to determine the threshold acoustic pressure
+            amplitude needed to obtain neural excitation for a given duration, PRF and duty cycle.
+
+            :param tstim: stimulus duration (s)
+            :param toffset: duration of the offset (s)
+            :param PRF: pulse repetition frequency (Hz)
+            :param DC: pulse duty cycle (-)
+            :param dt: integration time step
+            :param atol: integration error tolerance
+            :param inode: node at which to detect for spike occurence
+            :param Arange: search interval for Adrive, iteratively refined (kPa)
+            :return: 5-tuple with the determined threshold, time profile,
+                 solution matrix, state vector and response latency
+        '''
+        Adrive = (Arange[0] + Arange[1]) / 2
+        self.setUSdrive(Adrive, config)
+
+        # Run simulation and detect spikes on ith trace
+        t, stimon, Qm, Vmeff, states = self.simulate(tstim, toffset, PRF, DC, dt, atol)
+        ipeaks, *_ = findPeaks(Qm[inode], mph=SPIKE_MIN_QAMP, mpp=SPIKE_MIN_QPROM)
+        nspikes = ipeaks.size
+
+        # If accurate threshold is found, return simulation results
+        if (Arange[1] - Arange[0]) <= DELTA_US_AMP_MIN and nspikes == 1:
+            print('threshold amplitude: {}Pa'.format(si_format(Adrive * 1e3, 2, space=' ')))
+            return Adrive
+
+        # Otherwise, refine titration interval and iterate recursively
+        else:
+            if nspikes == 0:
+                Arange = (Adrive, Arange[1])
+            else:
+                Arange = (Arange[0], Adrive)
+            return self.titrateUS(
+                tstim, toffset, PRF, DC, dt, atol, config, inode=inode, Arange=Arange)
 
 
     def titrateIinjExtra(self, z0, tstim, toffset, PRF, DC, dt, atol, inode=0, Irange=None,
