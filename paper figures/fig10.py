@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-30 10:51:12
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-02-28 10:44:47
+# @Last Modified time: 2019-03-01 13:35:50
 
 import os
 import logging
@@ -46,10 +46,8 @@ def plotResponse(neuron, rs, deff, a, fs, Fdrive, Adrive, tstim, toffset, PRF, D
 
     # Initialize 0D model with specific membrane coverage
     nodeD, nodeL = radialGeometry(deff, a * 1e-3, fc=fs)
-    interD = 1.  # um
-    interL = 0.  # um
     connector = SeriesConnector(vref='Vmeff_{}'.format(neuron.name))
-    model = Sonic1D(neuron, rs, nodeD, nodeL, interD=interD, interL=interL,
+    model = Sonic1D(neuron, rs, nodeD, nodeL, interD=1., interL=0.,
                     a=a, Fdrive=Fdrive, connector=connector, verbose=verbose)
     model.setUSdrive(Adrive, 'first')
 

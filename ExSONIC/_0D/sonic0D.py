@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-01-24 11:25:17
+# @Last Modified time: 2019-03-01 17:32:41
 
 
 import numpy as np
@@ -175,16 +175,16 @@ class Sonic0D:
         ''' Toggle US or electrical stimulation and set appropriate next toggle event. '''
         # OFF -> ON at pulse onset
         if self.stimon == 0:
-            print('t = {:.2f} ms: switching stim ON and setting next OFF event at {:.2f} ms'
-                  .format(h.t, min(self.tstim, h.t + self.Ton)))
+            # print('t = {:.2f} ms: switching stim ON and setting next OFF event at {:.2f} ms'
+            #       .format(h.t, min(self.tstim, h.t + self.Ton)))
             self.stimon = self.setStimON(1)
             self.cvode.event(min(self.tstim, h.t + self.Ton), self.toggleStim)
         # ON -> OFF at pulse offset
         else:
             self.stimon = self.setStimON(0)
             if (h.t + self.Toff) < self.tstim - h.dt:
-                print('t = {:.2f} ms: switching stim OFF and setting next ON event at {:.2f} ms'
-                      .format(h.t, h.t + self.Toff))
+                # print('t = {:.2f} ms: switching stim OFF and setting next ON event at {:.2f} ms'
+                #       .format(h.t, h.t + self.Toff))
                 self.cvode.event(h.t + self.Toff, self.toggleStim)
             # else:
             #     print('t = {:.2f} ms: switching stim OFF'.format(h.t))
