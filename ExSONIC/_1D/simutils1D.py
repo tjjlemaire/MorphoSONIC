@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-30 11:29:37
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-02-28 11:47:12
+# @Last Modified time: 2019-03-04 19:43:07
 
 import time
 import numpy as np
@@ -224,8 +224,8 @@ def runPlotAStim(neuron, a, Fdrive, rs, connector, nodeD, nodeL, interD, interL,
         'adaptive time step' if dt is None else 'dt = ${}$ ms'.format(pow10_format(dt * 1e3))
     ), fontsize=13)
 
-    for ax in axes[:2]:
-        ax.set_ylim(-150, 50)
+    # for ax in axes[:2]:
+    #     ax.set_ylim(-150, 50)
     tonset = -0.05 * (t[-1] - t[0])
     Vm0 = model.neuron.Vm0
 

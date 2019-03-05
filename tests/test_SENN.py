@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-30 10:51:12
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-01-23 17:24:47
+# @Last Modified time: 2019-03-04 19:49:51
 
 import sys
 import matplotlib.pyplot as plt
@@ -39,6 +39,12 @@ def main():
     for test in testset:
         assert test in alltests, '{} is not a valid test'.format(test)
 
+    # stimulation parameters
+    tstim = 1e-4  # s
+    toffset = 3e-3  # s
+    PRF = 100.  # Hz
+    DC = 1.0
+
     # Iintra
     if 'Iintra' in testset:
 
@@ -46,10 +52,6 @@ def main():
         # Reilly, J.P., Freeman, V.T., and Larkin, W.D. (1985). Sensory effects of transient
         # electrical stimulation--evaluation with a neuroelectric model.
         # IEEE Trans Biomed Eng 32, 1001–1011.
-        tstim = 1e-4  # s
-        toffset = 3e-3  # s
-        PRF = 100.  # Hz
-        DC = 1.0
 
         connector = SeriesConnector(vref='v', rmin=None)
         compareEStim(neuron, rs, connector, nodeD, nodeL, interD, interL,
@@ -62,11 +64,10 @@ def main():
         # Application of SENN model to US stimuli
         a = 32.  # nm
         Fdrive = 500.  # kHz
-        tstim = 0.3e-3  # s
-        toffset = 3e-3  # s
-        PRF = 100.  # Hz
-        Adrive = 500.  # kPa
-        DC = 1.
+        Adrive = 100.  # kPa
+
+        tstim = 10e-3  # s
+        toffset = 30e-3  # s
 
         connector = SeriesConnector(vref='Vmeff_{}'.format(neuron.name), rmin=None)
         runPlotAStim(neuron, a, Fdrive, rs, connector, nodeD, nodeL, interD, interL,
