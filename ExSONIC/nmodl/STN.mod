@@ -27,7 +27,7 @@ NEURON {
     NONSPECIFIC_CURRENT iA
     NONSPECIFIC_CURRENT iCaT
     NONSPECIFIC_CURRENT iCaL
-    NONSPECIFIC_CURRENT iCaK
+    NONSPECIFIC_CURRENT iKCa
     NONSPECIFIC_CURRENT iLeak
 
     : RANGE variables
@@ -57,7 +57,7 @@ PARAMETER {
     gAbar = 0.005      (S/cm2)
     gcaTbar = 0.005    (S/cm2)
     gcaLbar = 0.015    (S/cm2)
-    gcaKbar = 0.001    (S/cm2)
+    gkcabar = 0.001    (S/cm2)
     gleak = 1.9e-5     (S/cm2)
 
     thetax_d2 = 1e-7   (M)
@@ -105,7 +105,7 @@ ASSIGNED {
     iA      (mA/cm2)
     iCaT    (mA/cm2)
     iCaL    (mA/cm2)
-    iCaK    (mA/cm2)
+    iKCa    (mA/cm2)
     iLeak   (mA/cm2)
 }
 
@@ -187,7 +187,7 @@ BREAKPOINT {
     iA = gAbar * a * a * b * (Vmeff - ek)
     iCaT = gcaTbar * p * p * q * (Vmeff - eca)
     iCaL = gcaLbar * c * c * d1 * d2 * (Vmeff - eca)
-    iCaK = gcaKbar * r * r * (Vmeff - ek)
+    iKCa = gkcabar * r * r * (Vmeff - ek)
     iLeak = gleak * (Vmeff - eleak)
 }
 
