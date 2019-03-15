@@ -24,7 +24,7 @@
 			],
 			"folder_exclude_patterns":
 			[
-				"deprecated",
+				"deprECated",
 				"docs",
 				"lookups",
 				"notebooks",

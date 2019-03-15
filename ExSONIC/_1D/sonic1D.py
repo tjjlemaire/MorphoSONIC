@@ -2,7 +2,7 @@
 # @Author: Theo
 # @Date:   2018-08-15 15:08:23
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-01-23 18:05:54
+# @Last Modified time: 2019-03-15 02:44:21
 
 import numpy as np
 from itertools import repeat
@@ -393,11 +393,11 @@ class Sonic1D(Sonic0D):
         #     state: [{
         #         suffix: setRangeProbe(sec, '{}_{}_{}'.format(alias(state), suffix, self.mechname))
         #         for suffix in ['0', 'US']
-        #     } for sec in self.sections] for state in self.neuron.states_names
+        #     } for sec in self.sections] for state in self.neuron.states
         # }
 
         states = {}
-        for key in self.neuron.states_names:
+        for key in self.neuron.states:
             # print(key, '{}_{}'.format(alias(key), self.mechname))
             states[key] = [setRangeProbe(sec, '{}_{}'.format(alias(key), self.mechname))
                            for sec in self.sections]
@@ -406,7 +406,7 @@ class Sonic1D(Sonic0D):
         #     state: [
         #         setRangeProbe(sec, '{}_{}'.format(alias(state), self.mechname))
         #         for sec in self.sections]
-        #     for state in self.neuron.states_names
+        #     for state in self.neuron.states
         # }
 
 
@@ -422,7 +422,7 @@ class Sonic1D(Sonic0D):
         #     key: [
         #         fs * Vec2array(val['US']) + (1 - fs) * Vec2array(val['0'])
         #         for val, fs in zip(states[key], self.nodeFs)
-        #     ] for key in self.neuron.states_names
+        #     ] for key in self.neuron.states
         # }
         states = {key: np.array(list(map(Vec2array, val))) for key, val in states.items()}
 

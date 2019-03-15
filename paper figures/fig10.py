@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-30 10:51:12
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-03-01 13:35:50
+# @Last Modified time: 2019-03-15 02:49:45
 
 import os
 import logging
@@ -24,7 +24,7 @@ matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
 matplotlib.rcParams['font.family'] = 'arial'
 
-# Figure basename
+# Figure basEName
 figbase = os.path.splitext(__file__)[0]
 
 

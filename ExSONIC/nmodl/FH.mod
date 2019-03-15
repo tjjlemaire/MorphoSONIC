@@ -16,7 +16,6 @@ UNITS {
     (uF) = (microfarad)
     (nC) = (nanocoulomb)
     (kPa) = (kilopascal)
-
     (molar) = (1/liter)         : moles do not appear in units
     (M)     = (molar)
     (mM)    = (millimolar)
@@ -50,19 +49,18 @@ PARAMETER {
     q10
 
     : membrane properties
-    v0 = -70          (mV)
-    pnabar = 8e-3     (cm/s)
-	ppbar = .54e-3    (cm/s)
+    pNabar = 8e-3     (cm/s)
+	pPbar = .54e-3    (cm/s)
 	pkbar = 1.2e-3    (cm/s)
-	gleak = 30.3e-3   (S/cm2)
-	eleak = -69.74    (mV)
+	gLeak = 30.3e-3   (S/cm2)
+	ELeak = -69.74    (mV)
 	Tcelsius = 20.00  (degC)
 
 	: ionic concentrations
-	nai = 13.74e-3    (M)
-    nao = 114.5e-3    (M)
-    ki = 120e-3       (M)
-    ko = 2.5e-3       (M)
+	Nai = 13.74e-3    (M)
+    Nao = 114.5e-3    (M)
+    Ki = 120e-3       (M)
+    Ko = 2.5e-3       (M)
 }
 
 STATE {
@@ -94,54 +92,6 @@ FUNCTION_TABLE betan(A(kPa), Q(nC/cm2))   (/ms)
 FUNCTION_TABLE alphap(A(kPa), Q(nC/cm2))  (/ms)
 FUNCTION_TABLE betap(A(kPa), Q(nC/cm2))   (/ms)
 
-
-COMMENT
-FUNCTION V(A(kPa), Q(nC/cm2)) {
-	V = Q / cm
-}
-
-FUNCTION alpham(A(kPa), Q(nC/cm2)){ LOCAL Vdiff
-	:printf("v = %f, Q = %f, cm = %f, Q/cm = %f\n", v, Q, cm, Q / cm)
-    Vdiff = Q / cm - v0
-    alpham = q10 * 0.36 * vtrap(22. - Vdiff, 3.)
-}
-
-FUNCTION betam(A(kPa), Q(nC/cm2)) { LOCAL Vdiff
-	Vdiff = Q / cm - v0
-	betam = q10 * 0.4 * vtrap(Vdiff - 13., 20.)
-}
-
-FUNCTION alphah(A(kPa), Q(nC/cm2)) { LOCAL Vdiff
-	Vdiff = Q / cm - v0
-	alphah = q10 * 0.1 * vtrap(Vdiff + 10.0, 6.)
-}
-
-FUNCTION betah(A(kPa), Q(nC/cm2)) { LOCAL Vdiff
-	Vdiff = Q / cm - v0
-	betah = q10 * 4.5 / (exp((45. - Vdiff) / 10.) + 1)
-}
-
-FUNCTION alphan(A(kPa), Q(nC/cm2)) { LOCAL Vdiff
-	Vdiff = Q / cm - v0
-	alphan = q10 * 0.02 * vtrap(35. - Vdiff, 10.0)
-}
-
-FUNCTION betan(A(kPa), Q(nC/cm2)) { LOCAL Vdiff
-	Vdiff = Q / cm - v0
-	betan = q10 * 0.05 * vtrap(Vdiff - 10., 10.)
-}
-
-FUNCTION alphap(A(kPa), Q(nC/cm2)) { LOCAL Vdiff
-	Vdiff = Q / cm - v0
-	alphap = q10 * 0.006 * vtrap(40. - Vdiff, 10.0)
-}
-
-FUNCTION betap(A(kPa), Q(nC/cm2)) { LOCAL Vdiff
-	Vdiff = Q / cm - v0
-	betap = q10 * 0.09 * vtrap(Vdiff + 25., 20.)
-}
-ENDCOMMENT
-
 INITIAL {
     : Set initial states values
     q10 = 3^((Tcelsius - 20) / 10)
@@ -152,7 +102,7 @@ INITIAL {
 }
 
 BREAKPOINT {
-	LOCAL ghk_na, ghk_k
+	LOCAL ghkNa, ghkK
 
     : Integrate states
     SOLVE states METHOD cnexp
@@ -161,21 +111,21 @@ BREAKPOINT {
     Vmeff = V(Adrive * stimon, v)
 
     : compute ionic currents
-    ghk_na = ghkDrive(Vmeff, nai, nao)
-    ghk_k = ghkDrive(Vmeff, ki, ko)
-    iNa = pnabar * m * m * h * ghk_na
-	iKd = pkbar * n * n * ghk_k
-    iP = ppbar * p * p * ghk_na
-	iLeak = gleak * (Vmeff - eleak)
+    ghkNa = ghkDrive(Vmeff, Nai, Nao)
+    ghkK = ghkDrive(Vmeff, Ki, Ko)
+    iNa = pNabar * m * m * h * ghkNa
+	iKd = pkbar * n * n * ghkK
+    iP = pPbar * p * p * ghkNa
+	iLeak = gLeak * (Vmeff - ELeak)
 }
 
-FUNCTION ghkDrive(v(mV), ci(M), co(M)) {
+FUNCTION ghkDrive(v(mV), Ci(M), Co(M)) {
 	:assume a single charge
-	LOCAL x, eci, eco
+	LOCAL x, ECi, ECo
 	x = FARADAY * v / (R*(Tcelsius+273.15)) * 1e-3
-	eci = ci*efun(-x)
-	eco = co*efun(x)
-	ghkDrive = FARADAY*(eci - eco)
+	ECi = Ci*efun(-x)
+	ECo = Co*efun(x)
+	ghkDrive = FARADAY*(ECi - ECo)
 }
 
 FUNCTION efun(x) {

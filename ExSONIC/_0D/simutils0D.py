@@ -2,15 +2,16 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 16:41:08
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-01-18 11:16:30
+# @Last Modified time: 2019-03-15 03:08:07
 
 import time
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
-from PySONIC.utils import si_format, pow10_format, getStimPulses
+from PySONIC.utils import si_format, pow10_format
 from PySONIC.core import NeuronalBilayerSonophore
+from PySONIC.plt import getStimPulses
 
 from .sonic0D import Sonic0D
 
@@ -88,7 +89,7 @@ def compare(neuron, A, tstim, toffset, PRF=100., DC=1., a=None, Fdrive=None, dt=
                    facecolor='#8A8A8A', alpha=0.2)
     ax.legend(fontsize=fs, frameon=False)
     ax.set_xlim(tonset, (tstim + toffset) * 1e3)
-    ax.set_ylim(neuron.Qbounds * 1e5)
+    ax.set_ylim(neuron.Qbounds() * 1e5)
     ax.set_xlabel('time (ms)', fontsize=fs)
     ax.set_ylabel('Qm (nC/cm2)', fontsize=fs)
     ax.set_title('membrane charge density', fontsize=fs + 2)

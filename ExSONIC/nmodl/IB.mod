@@ -25,7 +25,7 @@ NEURON {
     NONSPECIFIC_CURRENT iNa
     NONSPECIFIC_CURRENT iKd
     NONSPECIFIC_CURRENT iM
-    NONSPECIFIC_CURRENT iCa
+    NONSPECIFIC_CURRENT iCaL
     NONSPECIFIC_CURRENT iLeak
 
     : RANGE variables
@@ -41,15 +41,15 @@ PARAMETER {
 
     : membrane properties
     cm = 1              (uF/cm2)
-    ena = 50            (mV)
-    eca = 120           (mV)
-    ek = -90            (mV)
-    eleak = -70.0       (mV)
-    gnabar = 0.050     (S/cm2)
-    gkdbar = 0.005     (S/cm2)
-    gmbar = 3.0e-5     (S/cm2)
-    gcabar = 1.0e-4    (S/cm2)
-    gleak = 1.0e-5     (S/cm2)
+    ENa = 50            (mV)
+    ECa = 120           (mV)
+    EK = -90            (mV)
+    ELeak = -70.0       (mV)
+    gNabar = 0.050     (S/cm2)
+    gKdbar = 0.005     (S/cm2)
+    gMbar = 3.0e-5     (S/cm2)
+    gCaLbar = 1.0e-4    (S/cm2)
+    gLeak = 1.0e-5     (S/cm2)
 }
 
 STATE {
@@ -58,8 +58,8 @@ STATE {
     h  : iNa inactivation gate
     n  : iKd activation gate
     p  : iM activation gate
-    q  : iCa activation gate
-    r  : iCa inactivation gate
+    q  : iCaL activation gate
+    r  : iCaL inactivation gate
 }
 
 ASSIGNED {
@@ -69,7 +69,7 @@ ASSIGNED {
     iNa     (mA/cm2)
     iKd     (mA/cm2)
     iM      (mA/cm2)
-    iCa     (mA/cm2)
+    iCaL     (mA/cm2)
     iLeak   (mA/cm2)
 }
 
@@ -106,11 +106,11 @@ BREAKPOINT {
     Vmeff = V(Adrive * stimon, v)
 
     : Compute ionic currents
-    iNa = gnabar * m * m * m * h * (Vmeff - ena)
-    iKd = gkdbar * n * n * n * n * (Vmeff - ek)
-    iM = gmbar * p * (Vmeff - ek)
-    iCa = gcabar * q * q * r * (Vmeff - eca)
-    iLeak = gleak * (Vmeff - eleak)
+    iNa = gNabar * m * m * m * h * (Vmeff - ENa)
+    iKd = gKdbar * n * n * n * n * (Vmeff - EK)
+    iM = gMbar * p * (Vmeff - EK)
+    iCaL = gCaLbar * q * q * r * (Vmeff - ECa)
+    iLeak = gLeak * (Vmeff - ELeak)
 }
 
 DERIVATIVE states {

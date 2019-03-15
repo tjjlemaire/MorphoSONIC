@@ -2,15 +2,14 @@
 # @Author: Theo Lemaire
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-01-04 17:26:15
+# @Last Modified time: 2019-03-15 02:14:48
 
 
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
-from matplotlib import colorbar
 
-from PySONIC.utils import getStimPulses
+from PySONIC.plt import getStimPulses
 
 
 def plotSignals(t, signals, states=None, ax=None, onset=None, lbls=None, fs=10, cmode='qual',

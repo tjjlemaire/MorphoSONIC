@@ -2,7 +2,7 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-03-01 17:32:41
+# @Last Modified time: 2019-03-15 02:43:45
 
 
 import numpy as np
@@ -272,7 +272,7 @@ class Sonic0D:
         Qm = setRangeProbe(self.section, 'v')
         Vmeff = setRangeProbe(self.section, 'Vmeff_{}'.format(self.mechname))
         states = []
-        for key in self.neuron.states_names:
+        for key in self.neuron.states:
             states.append(setRangeProbe(self.section, '{}_{}'.format(alias(key), self.mechname)))
 
         # Integrate model

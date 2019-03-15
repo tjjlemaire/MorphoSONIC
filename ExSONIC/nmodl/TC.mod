@@ -33,7 +33,7 @@ NEURON {
     NONSPECIFIC_CURRENT iKd
     NONSPECIFIC_CURRENT iKl
     NONSPECIFIC_CURRENT iH
-    NONSPECIFIC_CURRENT iCa
+    NONSPECIFIC_CURRENT iCaT
     NONSPECIFIC_CURRENT iLeak
 
     : RANGE variables
@@ -53,17 +53,17 @@ PARAMETER {
 
     : membrane properties
     cm = 1              (uF/cm2)
-    ena = 50            (mV)
-    eca = 120           (mV)
-    ek = -90            (mV)
-    eh = -40            (mV)
-    eleak = -70         (mV)
-    gnabar = 0.09       (S/cm2)
-    gkdbar = 0.01       (S/cm2)
-    gkl = 1.38e-5       (S/cm2)
-    gcabar = 0.002      (S/cm2)
-    ghbar = 1.75e-5     (S/cm2)
-    gleak = 1e-5        (S/cm2)
+    ENa = 50            (mV)
+    ECa = 120           (mV)
+    EK = -90            (mV)
+    EH = -40            (mV)
+    ELeak = -70         (mV)
+    gNabar = 0.09       (S/cm2)
+    gKdbar = 0.01       (S/cm2)
+    gKLeak = 1.38e-5       (S/cm2)
+    gCaTbar = 0.002      (S/cm2)
+    gHbar = 1.75e-5     (S/cm2)
+    gLeak = 1e-5        (S/cm2)
 
     : iH Calcium dependence properties
     k1 = 2.5e19         (1/M*M*M*M*ms)    : CB protein Calcium-driven activation rate
@@ -84,12 +84,12 @@ STATE {
     m  : iNa activation gate
     h  : iNa inactivation gate
     n  : iKd activation gate
-    s  : iCa activation gate
-    u  : iCa inactivation gate
+    s  : iCaT activation gate
+    u  : iCaT inactivation gate
     C1  : iH channel closed state
     O1  : iH channel open state
 
-    C_Ca (M) : submembrane Calcium concentration
+    Cai (M) : submembrane Calcium concentration
     P0       : proportion of unbound CB protein
 }
 
@@ -100,7 +100,7 @@ ASSIGNED {
     iNa      (mA/cm2)
     iKd      (mA/cm2)
     iKl      (mA/cm2)
-    iCa      (mA/cm2)
+    iCaT      (mA/cm2)
     iH       (mA/cm2)
     iLeak    (mA/cm2)
 }
@@ -139,11 +139,11 @@ INITIAL {
     u = alphau(0, v) / (alphau(0, v) + betau(0, v))
 
     : Compute steady-state Calcium concentration
-    iCa = gcabar * s * s * u * (V(0, v) - eca)
-    C_Ca = camin + taur * iondrive(iCa, 2, depth)
+    iCaT = gCaTbar * s * s * u * (V(0, v) - ECa)
+    Cai = camin + taur * iondrive(iCaT, 2, depth)
 
     : Compute steady values for the kinetics system of Ih
-    P0 = k2 / (k2 + k1 * npow(C_Ca, nca))
+    P0 = k2 / (k2 + k1 * npow(Cai, nca))
     O1 = k4 / (k3 * (1 - P0) + k4 * (1 + betao(0, v) / alphao(0, v)))
     C1 = betao(0, v) / alphao(0, v) * O1
 }
@@ -162,12 +162,12 @@ BREAKPOINT {
     Vmeff = V(Adrive * stimon, v)
 
     : compute ionic currents
-    iNa = gnabar * m * m * m * h * (Vmeff - ena)
-    iKd = gkdbar * n * n * n * n * (Vmeff - ek)
-    iKl = gkl * (Vmeff - ek)
-    iCa = gcabar * s * s * u * (Vmeff - eca)
-    iH = ghbar * (O1 + 2 * (1 - O1 - C1)) * (Vmeff - eh)
-    iLeak = gleak * (Vmeff - eleak)
+    iNa = gNabar * m * m * m * h * (Vmeff - ENa)
+    iKd = gKdbar * n * n * n * n * (Vmeff - EK)
+    iKl = gKLeak * (Vmeff - EK)
+    iCaT = gCaTbar * s * s * u * (Vmeff - ECa)
+    iH = gHbar * (O1 + 2 * (1 - O1 - C1)) * (Vmeff - EH)
+    iLeak = gLeak * (Vmeff - ELeak)
 }
 
 DERIVATIVE states {
@@ -179,8 +179,8 @@ DERIVATIVE states {
     u' = alphau(Adrive * stimon, v) * (1 - u) - betau(Adrive * stimon, v) * u
 
     : Compute derivatives of variables for the kinetics system of Ih
-    C_Ca' = (camin - C_Ca) / taur + iondrive(iCa, 2, depth)
-    P0' = k2 * (1 - P0) - k1 * P0 * npow(C_Ca, nca)
+    Cai' = (camin - Cai) / taur + iondrive(iCaT, 2, depth)
+    P0' = k2 * (1 - P0) - k1 * P0 * npow(Cai, nca)
     C1' = betao(Adrive * stimon, v) * O1 - alphao(Adrive * stimon, v) * C1
     O1' = alphao(Adrive * stimon, v) * C1 - betao(Adrive * stimon, v) * O1 - k3 * O1 * (1 - P0) + k4 * (1 - O1 - C1)
 }

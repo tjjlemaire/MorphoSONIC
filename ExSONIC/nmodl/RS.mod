@@ -39,13 +39,13 @@ PARAMETER {
 
     : Membrane properties
     cm = 1              (uF/cm2)
-    ena = 50            (mV)
-    ek = -90            (mV)
-    eleak = -70.3       (mV)
-    gnabar = 0.056      (S/cm2)
-    gkdbar = 0.006      (S/cm2)
-    gmbar = 7.5e-5      (S/cm2)
-    gleak = 2.05e-5     (S/cm2)
+    ENa = 50            (mV)
+    EK = -90            (mV)
+    ELeak = -70.3       (mV)
+    gNabar = 0.056      (S/cm2)
+    gKdbar = 0.006      (S/cm2)
+    gMbar = 7.5e-5      (S/cm2)
+    gLeak = 2.05e-5     (S/cm2)
 }
 
 STATE {
@@ -93,10 +93,10 @@ BREAKPOINT {
     Vmeff = V(Adrive * stimon, v)
 
     : Compute ionic currents
-    iNa = gnabar * m * m * m * h * (Vmeff - ena)
-    iKd = gkdbar * n * n * n * n * (Vmeff - ek)
-    iM = gmbar * p * (Vmeff - ek)
-    iLeak = gleak * (Vmeff - eleak)
+    iNa = gNabar * m * m * m * h * (Vmeff - ENa)
+    iKd = gKdbar * n * n * n * n * (Vmeff - EK)
+    iM = gMbar * p * (Vmeff - EK)
+    iLeak = gLeak * (Vmeff - ELeak)
 }
 
 DERIVATIVE states {

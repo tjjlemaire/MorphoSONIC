@@ -49,16 +49,16 @@ PARAMETER {
 
     : membrane properties
     cm = 1              (uF/cm2)
-    ena = 60            (mV)
-    ek = -90            (mV)
-    eleak = -60.0       (mV)
-    gnabar = 0.049     (S/cm2)
-    gkdbar = 0.057     (S/cm2)
+    ENa = 60            (mV)
+    EK = -90            (mV)
+    ELeak = -60.0       (mV)
+    gNabar = 0.049     (S/cm2)
+    gKdbar = 0.057     (S/cm2)
     gAbar = 0.005      (S/cm2)
-    gcaTbar = 0.005    (S/cm2)
-    gcaLbar = 0.015    (S/cm2)
-    gkcabar = 0.001    (S/cm2)
-    gleak = 1.9e-5     (S/cm2)
+    gCaTbar = 0.005    (S/cm2)
+    gCaLbar = 0.015    (S/cm2)
+    gKCabar = 0.001    (S/cm2)
+    gLeak = 3.5e-4     (S/cm2)
 
     thetax_d2 = 1e-7   (M)
     kx_d2 = 2e-8       (M)
@@ -68,15 +68,15 @@ PARAMETER {
     tau_d2 = 130       (ms)
     tau_r = 2          (ms)
 
-    C_Ca0 = 5e-9       (M)
-    C_Ca_out = 2e-3    (M)
+    Cai0 = 5e-9       (M)
+    Cao = 2e-3        (M)
     KCa = 2            (1/ms)
 
     T = 306.15         (K)
 
     depth              (m)  : depth of sub-membrane space
-    i2CCa  :conversion factor from Calcium current (mA/cm2) to Calcium concentration derivative (M/ms)
-    eca                (mV)
+    iCa2Cai  :conversion factor from Calcium current (mA/cm2) to Calcium concentration derivative (M/ms)
+    ECa                (mV)
 }
 
 STATE {
@@ -93,7 +93,7 @@ STATE {
     d2 : iCaL inactivation gate
     r  : iCaK activation gate
 
-    C_Ca (M) : submembrane Calcium concentration
+    Cai (M) : submembrane Calcium concentration
 }
 
 ASSIGNED {
@@ -159,16 +159,17 @@ INITIAL {
     b = alphab(0, v) / (alphab(0, v) + betab(0, v))
     c = alphac(0, v) / (alphac(0, v) + betac(0, v))
     d1 = alphad1(0, v) / (alphad1(0, v) + betad1(0, v))
-    d2 = d2inf(C_Ca0)
-    r = rinf(C_Ca0)
-    C_Ca = C_Ca0
+    d2 = d2inf(Cai0)
+    r = rinf(Cai0)
+    Cai = Cai0
 
-    eca = nernst(2, C_Ca0, C_Ca_out, T)
+    ECa = nernst(2, Cai0, Cao, T)
     Vmeff = V(0, v)
-    iCaT = gcaTbar * p * p * q * (Vmeff - eca)
-    iCaL = gcaLbar * c * c * d1 * d2 * (Vmeff - eca)
-    depth = -(iCaT + iCaL) / (2 * FARADAY * KCa * C_Ca) * 1e-5
-    i2CCa = 1e-5 / (2 * depth * FARADAY)
+    iCaT = gCaTbar * p * p * q * (Vmeff - ECa)
+    iCaL = gCaLbar * c * c * d1 * d2 * (Vmeff - ECa)
+    depth = -(iCaT + iCaL) / (2 * FARADAY * KCa * Cai) * 1e-5
+    iCa2Cai = 1e-5 / (2 * depth * FARADAY)
+:    printf("depth = %.2e, iCa2Cai = %.2e \n", depth, iCa2Cai)
 }
 
 BREAKPOINT {
@@ -179,16 +180,16 @@ BREAKPOINT {
     Vmeff = V(Adrive * stimon, v)
 
     : Compute Calcium reversal potential
-    eca = nernst(2, C_Ca, C_Ca_out, T)
+    ECa = nernst(2, Cai, Cao, T)
 
     : Compute ionic currents
-    iNa = gnabar * m * m * m * h * (Vmeff - ena)
-    iKd = gkdbar * n * n * n * n * (Vmeff - ek)
-    iA = gAbar * a * a * b * (Vmeff - ek)
-    iCaT = gcaTbar * p * p * q * (Vmeff - eca)
-    iCaL = gcaLbar * c * c * d1 * d2 * (Vmeff - eca)
-    iKCa = gkcabar * r * r * (Vmeff - ek)
-    iLeak = gleak * (Vmeff - eleak)
+    iNa = gNabar * m * m * m * h * (Vmeff - ENa)
+    iKd = gKdbar * n * n * n * n * (Vmeff - EK)
+    iA = gAbar * a * a * b * (Vmeff - EK)
+    iCaT = gCaTbar * p * p * q * (Vmeff - ECa)
+    iCaL = gCaLbar * c * c * d1 * d2 * (Vmeff - ECa)
+    iKCa = gKCabar * r * r * (Vmeff - EK)
+    iLeak = gLeak * (Vmeff - ELeak)
 }
 
 DERIVATIVE states {
@@ -203,10 +204,20 @@ DERIVATIVE states {
     c' = alphac(Adrive * stimon, v) * (1 - c) - betac(Adrive * stimon, v) * c
     d1' = alphad1(Adrive * stimon, v) * (1 - d1) - betad1(Adrive * stimon, v) * d1
 
-    d2' = (d2inf(C_Ca) - d2) / tau_d2
-    r' = (rinf(C_Ca) - r) / tau_r
+    d2' = (d2inf(Cai) - d2) / tau_d2
+    r' = (rinf(Cai) - r) / tau_r
 
-    iCaT = gcaTbar * p * p * q * (Vmeff - eca)
-    iCaL = gcaLbar * c * c * d1 * d2 * (Vmeff - eca)
-    C_Ca' = - i2CCa * (iCaT + iCaL) - C_Ca * KCa
+    : Compute Calcium reversal potential
+    ECa = nernst(2, Cai, Cao, T)
+
+    iCaT = gCaTbar * p * p * q * (Vmeff - ECa)
+    iCaL = gCaLbar * c * c * d1 * d2 * (Vmeff - ECa)
+    Cai' = - iCa2Cai * (iCaT + iCaL) - Cai * KCa
+
+    if (t > 999. && t < 1000.) {
+        printf("t = %.2f ms, Q = %.3f nC/cm2, Vm = %.3f mV, Cai = %.3f uM,", t, v, Vmeff, Cai * 1e6)
+        printf("p = %.4f, q = %.4f,", p, q)
+        printf("c = %.4f, d1 = %.4f, d2 = %.4f,", c, d1, d2)
+        printf("ECa = %.2f mV, iCaT = %.3f A/m2, iCaL = %.3f A/m2\n", ECa, iCaT * 1e1, iCaL * 1e1)
+    }
 }
