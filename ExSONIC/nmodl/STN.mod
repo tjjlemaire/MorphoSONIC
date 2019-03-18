@@ -214,10 +214,12 @@ DERIVATIVE states {
     iCaL = gCaLbar * c * c * d1 * d2 * (Vmeff - ECa)
     Cai' = - iCa2Cai * (iCaT + iCaL) - Cai * KCa
 
+    COMMENT
     if (t > 999. && t < 1000.) {
         printf("t = %.2f ms, Q = %.3f nC/cm2, Vm = %.3f mV, Cai = %.3f uM,", t, v, Vmeff, Cai * 1e6)
         printf("p = %.4f, q = %.4f,", p, q)
         printf("c = %.4f, d1 = %.4f, d2 = %.4f,", c, d1, d2)
         printf("ECa = %.2f mV, iCaT = %.3f A/m2, iCaL = %.3f A/m2\n", ECa, iCaT * 1e1, iCaL * 1e1)
     }
+    ENDCOMMENT
 }
