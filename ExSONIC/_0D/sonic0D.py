@@ -2,14 +2,14 @@
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-03-15 02:43:45
+# @Last Modified time: 2019-06-07 13:59:37
 
 
 import numpy as np
 from neuron import h
 
 from PySONIC.neurons import *
-from PySONIC.utils import getLookups2D, getLookups2Dfs, si_format
+from PySONIC.utils import si_format
 from PySONIC.postpro import findPeaks
 from PySONIC.constants import *
 

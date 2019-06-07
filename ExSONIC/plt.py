@@ -2,14 +2,14 @@
 # @Author: Theo Lemaire
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-03-15 02:14:48
+# @Last Modified time: 2019-06-07 13:58:45
 
 
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 
-from PySONIC.plt import getStimPulses
+from PySONIC.plt import SchemePlot
 
 
 def plotSignals(t, signals, states=None, ax=None, onset=None, lbls=None, fs=10, cmode='qual',
@@ -43,8 +43,8 @@ def plotSignals(t, signals, states=None, ax=None, onset=None, lbls=None, fs=10, 
 
     # Add stimulation patches if states provided
     if states is not None:
-        npatches, tpatch_on, tpatch_off = getStimPulses(t, states)
-        for i in range(npatches):
+        tpatch_on, tpatch_off = SchemePlot.getStimPulses(_, t, states)
+        for i in range(tpatch_on.size):
             ax.axvspan(tpatch_on[i], tpatch_off[i], edgecolor='none',
                        facecolor='#8A8A8A', alpha=0.2)
 
