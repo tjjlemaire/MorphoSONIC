@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
 # @Author: Theo Lemaire
+# @Email: theo.lemaire@epfl.ch
+# @Date:   2019-06-04 18:26:42
+# @Last Modified by:   Theo Lemaire
+# @Last Modified time: 2019-06-26 18:28:48
+# @Author: Theo Lemaire
 # @Date:   2018-08-21 19:48:04
 # @Last Modified by:   Theo Lemaire
 # @Last Modified time: 2019-01-11 10:20:22
@@ -69,13 +74,12 @@ def alias(state):
     return NEURON_aliases[state] if state in NEURON_aliases.keys() else state
 
 
-def array2Matrix(arr):
+def array_to_matrix(arr):
     ''' Convert 2D numpy array to Hoc Matrix.
 
         :param arr: 2D numpy array
         :return: HOC Matrix object
     '''
-
     nx, ny = arr.shape
     matrix = h.Matrix(nx, ny)
     for i in range(nx):
@@ -83,7 +87,7 @@ def array2Matrix(arr):
     return matrix
 
 
-def Vec2array(vec):
+def vec_to_array(vec):
     ''' Convert Hoc vector to numpy array.
 
         :param vec: HOC Vector object

@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
 # @Author: Theo Lemaire
+# @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-06-07 13:58:45
+# @Last Modified time: 2019-06-26 16:49:15
 
 
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 
-from PySONIC.plt import SchemePlot
+from PySONIC.plt import GroupedTimeSeries
 
 
 def plotSignals(t, signals, states=None, ax=None, onset=None, lbls=None, fs=10, cmode='qual',
@@ -43,7 +44,7 @@ def plotSignals(t, signals, states=None, ax=None, onset=None, lbls=None, fs=10, 
 
     # Add stimulation patches if states provided
     if states is not None:
-        tpatch_on, tpatch_off = SchemePlot.getStimPulses(_, t, states)
+        tpatch_on, tpatch_off = GroupedTimeSeries.getStimPulses(_, t, states)
         for i in range(tpatch_on.size):
             ax.axvspan(tpatch_on[i], tpatch_off[i], edgecolor='none',
                        facecolor='#8A8A8A', alpha=0.2)

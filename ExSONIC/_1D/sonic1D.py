@@ -1,4 +1,9 @@
 # -*- coding: utf-8 -*-
+# @Author: Theo Lemaire
+# @Email: theo.lemaire@epfl.ch
+# @Date:   2019-06-04 18:26:42
+# @Last Modified by:   Theo Lemaire
+# @Last Modified time: 2019-06-26 18:29:17
 # @Author: Theo
 # @Date:   2018-08-15 15:08:23
 # @Last Modified by:   Theo Lemaire
@@ -414,17 +419,17 @@ class Sonic1D(Sonic0D):
         self.integrate(tstim + toffset, tstim, PRF, DC, dt, atol)
 
         # Retrieve output variables
-        t = Vec2array(tprobe) * 1e-3  # s
-        stimon = Vec2array(stimon)
-        Qm = np.array(list(map(Vec2array, Qm))) * 1e-5  # C/cm2
-        Vmeff = np.array(list(map(Vec2array, Vmeff)))  # mV
+        t = vec_to_array(tprobe) * 1e-3  # s
+        stimon = vec_to_array(stimon)
+        Qm = np.array(list(map(vec_to_array, Qm))) * 1e-5  # C/cm2
+        Vmeff = np.array(list(map(vec_to_array, Vmeff)))  # mV
         # states = {
         #     key: [
-        #         fs * Vec2array(val['US']) + (1 - fs) * Vec2array(val['0'])
+        #         fs * vec_to_array(val['US']) + (1 - fs) * vec_to_array(val['0'])
         #         for val, fs in zip(states[key], self.nodeFs)
         #     ] for key in self.neuron.states
         # }
-        states = {key: np.array(list(map(Vec2array, val))) for key, val in states.items()}
+        states = {key: np.array(list(map(vec_to_array, val))) for key, val in states.items()}
 
         return t, stimon, Qm, Vmeff, states
 

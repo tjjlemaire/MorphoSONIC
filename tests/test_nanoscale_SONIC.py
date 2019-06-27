@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
 # @Author: Theo Lemaire
+# @Email: theo.lemaire@epfl.ch
+# @Date:   2019-06-04 18:26:42
+# @Last Modified by:   Theo Lemaire
+# @Last Modified time: 2019-06-26 16:56:11
+# @Author: Theo Lemaire
 # @Date:   2018-08-30 10:51:12
 # @Last Modified by:   Theo Lemaire
 # @Last Modified time: 2019-03-04 19:29:58
@@ -8,7 +13,8 @@ import sys
 import matplotlib.pyplot as plt
 from argparse import ArgumentParser
 
-from PySONIC.neurons import getNeuronsDict
+from PySONIC.parsers import TestParser
+from PySONIC.neurons import getPointNeuron
 from ExSONIC.utils import radialGeometry
 from ExSONIC._1D import SeriesConnector, runPlotAStim
 
@@ -30,7 +36,7 @@ def main():
     args = ap.parse_args()
 
     # Model parameters
-    neuron = getNeuronsDict()[args.neuron]()
+    neuron = getPointNeuron(args.neuron)
     rs = 1e2  # Ohm.cm
     config = 'first'
 

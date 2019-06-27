@@ -3,84 +3,51 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-06-27 14:41:06
+# @Last Modified time: 2019-06-27 15:11:32
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
 # @Last Modified time: 2019-06-07 13:59:37
 
-
 import numpy as np
+import pandas as pd
 from neuron import h
 
-from PySONIC.neurons import *
-from PySONIC.utils import si_format
-from PySONIC.postpro import findPeaks
-from PySONIC.constants import *
+from PySONIC.core import NeuronalBilayerSonophore
+from PySONIC.utils import si_format, timer
 
 from ..pyhoc import *
 from ..utils import getNmodlDir
 from ..constants import *
 
 
+class Node:
 
-class Sonic0D:
-    ''' Point-neuron SONIC model in NEURON. '''
-
-    def __init__(self, pneuron, a=None, Fdrive=None, fs=None, verbose=False):
+    def __init__(self, pneuron, verbose=False):
         ''' Initialization.
 
             :param pneuron: point-neuron model
-            :param a: sonophore diameter (nm)
-            :param Fdrive: ultrasound frequency (kHz)
             :param verbose: boolean stating whether to print out details
         '''
-
-        # Resolve modality based on input parameters
-        if a is None or Fdrive is None:
-            self.modality = 'Iinj'
-        else:
-            self.modality = 'US'
-
-        # if fs is not None and (fs > 1. or fs < 0.):
-        #     raise ValueError('fs ({}) must be within [0-1]'.format(fs))
-
         # Initialize arguments
         self.pneuron = pneuron
-        self.a = a if a is not None else 32.  # nm
-        # self.fs = fs if fs is not None else 1.
-        self.Fdrive = Fdrive if Fdrive is not None else 500.  # kHz
-        self.mechname = self.pneuron.name
         self.verbose = verbose
-        self.fs = fs
-
         if self.verbose:
             print('---------- Creating model: {} ----------'.format(self))
 
         # Load mechanisms and set function tables of appropriate membrane mechanism
         load_mechanisms(getNmodlDir(), self.pneuron.name)
-        self.setFuncTables(self.a, self.Fdrive, self.fs)
+        self.setFuncTables()
 
-        # Create section and set capacitance and membrane mechanism
+        # Create section and set membrane mechanism
         self.section = self.createSection('node0')
-        self.section.insert(self.mechname)
-
-        # Set sonophore membrane coverage fraction into mechanism
-        # setattr(self.section, 'fs_{}'.format(self.mechname), self.fs)
-
+        self.section.insert(self.pneuron.name)
 
     def __repr__(self):
-        ''' Explicit naming of the model instance. '''
-        return 'SONIC0D ({})'.format(self.strBiophysics())
+        return 'Node({})'.format(self.pneuron.name)
 
     def strBiophysics(self):
-        s = '{} neuron'.format(self.pneuron.name)
-        if self.modality == 'US':
-            s += ', a = {}m{}, f = {}Hz'.format(
-                si_format(self.a * 1e-9, space=' '),
-                ', fs = {:.0f}%'.format(self.fs * 1e2) if self.fs is not None else '',
-                si_format(self.Fdrive * 1e3, space=' '))
-        return s
+        return '{} neuron'.format(self.pneuron.name)
 
     def createSection(self, id):
         ''' Create morphological section.
@@ -89,54 +56,41 @@ class Sonic0D:
         '''
         return h.Section(name=id, cell=self)
 
+    def getLookup(self):
+        lkp = self.pneuron.getLookup()
+        lkp.refs['A'] = np.array([0.])
+        for k, v in lkp.items():
+            lkp[k] = np.array([v])
+        return lkp
 
-    def setFuncTables(self, a, Fdrive, fs=None):
-        ''' Set neuron-specific, sonophore diameter and US frequency dependent 2D interpolation tables
-            in the (amplitude, charge) space, and link them to FUNCTION_TABLEs in the MOD file of the
-            corresponding membrane mechanism.
-
-            :param a: sonophore diameter (nm)
-            :param Fdrive: US frequency (kHz)
+    def setFuncTables(self):
+        ''' Set neuron-specific interpolation tables along the charge dimension,
+            and link them to FUNCTION_TABLEs in the MOD file of the corresponding
+            membrane mechanism.
         '''
-
         if self.verbose:
-            print('loading membrane dynamics lookup tables for {} neuron'.format(self.mechname))
+            print('loading membrane dynamics lookup tables for {} neuron'.format(self.pneuron.name))
 
-        # Get lookups
-        if fs is None:
-            lkp2d = getNeuronLookup(self.pneuron.name).projectN({'a': a * 1e-9, 'f': Fdrive * 1e3})
-        else:
-            lkp2d = getNeuronLookup(
-                self.pneuron.name, a=self.a, Fdrive=Fdrive, fs=True).project('fs', fs)
+        # Get Lookup
+        lkp = self.getLookup()
 
         # Convert lookups independent variables to hoc vectors
-        self.Aref = h.Vector(lkp2d.refs['A'] * 1e-3)  # kPa
-        self.Qref = h.Vector(lkp2d.refs['Q'] * 1e5)   # nC/cm2
+        self.Aref = h.Vector(lkp.refs['A'] * 1e-3)  # kPa
+        self.Qref = h.Vector(lkp.refs['Q'] * 1e5)   # nC/cm2
 
         # Convert lookup tables to hoc matrices
         # !!! hoc lookup dictionary must be a member of the class,
         # otherwise the assignment below does not work properly !!!
-        self.lkp2d = {'V': array_to_matrix(lkp2d['V'])}  # mV
+        self.lkp = {'V': array_to_matrix(lkp['V'])}  # mV
         for rate in self.pneuron.rates:
-            self.lkp2d[rate] = array_to_matrix(lkp2d[rate] * 1e-3)  # ms-1
+            self.lkp[rate] = array_to_matrix(lkp[rate] * 1e-3)  # ms-1
 
         # Assign hoc matrices to 2D interpolation tables in membrane mechanism
-        for k, v in self.lkp2d.items():
-            setFuncTable(self.mechname, k, v, self.Aref, self.Qref)
-
-    def setUSdrive(self, Adrive):
-        ''' Set US stimulation amplitude (and set modality to "US").
-
-            :param Adrive: acoustic pressure amplitude (kPa)
-        '''
-        if self.verbose:
-            print('Setting acoustic stimulus amplitude: Adrive = {}Pa'
-                  .format(si_format(Adrive * 1e3, space=' ')))
-        setattr(self.section, 'Adrive_{}'.format(self.mechname), Adrive)
-        self.modality = 'US'
+        for k, v in self.lkp.items():
+            setFuncTable(self.pneuron.name, k, v, self.Aref, self.Qref)
 
     def setIinj(self, Astim):
-        ''' Set electrical stimulation amplitude (and set modality to "elec")
+        ''' Set electrical stimulation amplitude
 
             :param Astim: injected current density (mA/m2).
         '''
@@ -159,13 +113,12 @@ class Sonic0D:
         self.modality = 'Vext'
 
     def setStimON(self, value):
-        ''' Set US or electrical stimulation ON or OFF by updating the appropriate
-            mechanism/object parameter.
+        ''' Set stimulation ON or OFF.
 
             :param value: new stimulation state (0 = OFF, 1 = ON)
             :return: new stimulation state
         '''
-        setattr(self.section, 'stimon_{}'.format(self.mechname), value)
+        setattr(self.section, 'stimon_{}'.format(self.pneuron.name), value)
         if self.modality == 'Iinj':
             self.iclamp.amp = value * self.Iinj
         elif self.modality == 'Vext':
@@ -173,7 +126,7 @@ class Sonic0D:
         return value
 
     def toggleStim(self):
-        ''' Toggle US or electrical stimulation and set appropriate next toggle event. '''
+        ''' Toggle stimulation and set appropriate next toggle event. '''
         # OFF -> ON at pulse onset
         if self.stimon == 0:
             # print('t = {:.2f} ms: switching stim ON and setting next OFF event at {:.2f} ms'
@@ -242,7 +195,7 @@ class Sonic0D:
                 print('adaptive time step integration (atol = {})'.format(self.cvode.atol()))
 
         # Initialize
-        h.finitialize(self.pneuron.Qm0 * 1e5)  # Set initial membrane charge density
+        h.finitialize(self.pneuron.Qm0 * 1e5)  # nC/cm2
         self.stimon = self.setStimON(1)
         self.cvode.event(self.Ton, self.toggleStim)
 
@@ -256,6 +209,7 @@ class Sonic0D:
 
         return 0
 
+    @timer
     def simulate(self, tstim, toffset, PRF, DC, dt=None, atol=None):
         ''' Set appropriate recording vectors, integrate and return output variables.
 
@@ -269,26 +223,76 @@ class Sonic0D:
 
         # Set recording vectors
         t = setTimeProbe()
-        stimon = setStimProbe(self.section, self.mechname)
+        stim = setStimProbe(self.section, self.pneuron.name)
         Qm = setRangeProbe(self.section, 'v')
-        Vmeff = setRangeProbe(self.section, 'Vmeff_{}'.format(self.mechname))
-        states = []
-        for key in self.pneuron.statesNames():
-            states.append(setRangeProbe(self.section, '{}_{}'.format(alias(key), self.mechname)))
+        Vm = setRangeProbe(self.section, 'Vm_{}'.format(self.pneuron.name))
+        states = {k: setRangeProbe(self.section, '{}_{}'.format(alias(k), self.pneuron.name))
+                  for k in self.pneuron.statesNames()}
 
         # Integrate model
         self.integrate(tstim + toffset, tstim, PRF, DC, dt, atol)
 
-        # Retrieve output variables
-        t = vec_to_array(t) * 1e-3  # s
-        stimon = vec_to_array(stimon)
-        Qm = vec_to_array(Qm) * 1e-5  # C/cm2
-        Vmeff = vec_to_array(Vmeff)  # mV
-        states = [vec_to_array(state) for state in states]
-        y = np.vstack([Qm, Vmeff, np.array(states)])
+        # Store output in dataframe
+        data = pd.DataFrame({
+            't': vec_to_array(t) * 1e-3,  # s
+            'stimstate': vec_to_array(stim),
+            'Qm': vec_to_array(Qm) * 1e-5,  # C/cm2
+            'Vm': vec_to_array(Vm)         # mV
+        })
+        for k, v in states.items():
+            data[k] = vec_to_array(v)
 
-        # return output variables
-        return (t, y, stimon)
+        # Return dataframe
+        return data
+
+
+
+class SonicNode(Node):
+    ''' Point-neuron SONIC model in NEURON. '''
+
+    def __init__(self, pneuron, a=32., Fdrive=500., fs=1., verbose=False):
+        ''' Initialization.
+
+            :param pneuron: point-neuron model
+            :param a: sonophore diameter (nm)
+            :param Fdrive: ultrasound frequency (kHz)
+            :param fs: sonophore membrane coverage fraction (-)
+            :param verbose: boolean stating whether to print out details
+        '''
+
+        if fs > 1. or fs < 0.:
+            raise ValueError('fs ({}) must be within [0-1]'.format(fs))
+        self.nbls = NeuronalBilayerSonophore(a * 1e-9, pneuron, Fdrive * 1e3)
+        self.a = a
+        self.fs = fs
+        self.Fdrive = Fdrive
+        super().__init__(pneuron, verbose=verbose)
+
+    def __repr__(self):
+        return 'Sonic' + super().__repr__()
+
+    def strBiophysics(self):
+        return super().strBiophysics() + ', a = {}m{}, f = {}Hz'.format(
+            si_format(self.a * 1e-9, space=' '),
+            ', fs = {:.0f}%'.format(self.fs * 1e2) if self.fs is not None else '',
+            si_format(self.Fdrive * 1e3, space=' '))
+
+    def getLookup(self):
+        return self.nbls.getLookup2D(self.Fdrive * 1e3, self.fs)
+
+    def setUSdrive(self, Adrive):
+        ''' Set US stimulation amplitude (and set modality to "US").
+
+            :param Adrive: acoustic pressure amplitude (kPa)
+        '''
+        if self.verbose:
+            print('Setting acoustic stimulus amplitude: Adrive = {}Pa'
+                  .format(si_format(Adrive * 1e3, space=' ')))
+        setattr(self.section, 'Adrive_{}'.format(self.pneuron.name), Adrive)
+
+    def setStimON(self, value):
+        setattr(self.section, 'stimon_{}'.format(self.pneuron.name), value)
+        return value
 
     def titrateUS(self, tstim, toffset, PRF, DC, dt, atol, Arange=None):
         ''' Use a dichotomic recursive search to determine the threshold acoustic pressure

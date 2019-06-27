@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
 # @Author: Theo Lemaire
+# @Email: theo.lemaire@epfl.ch
+# @Date:   2019-06-04 18:26:42
+# @Last Modified by:   Theo Lemaire
+# @Last Modified time: 2019-06-27 11:50:15
+# @Author: Theo Lemaire
 # @Date:   2018-08-30 11:26:26
 # @Last Modified by:   Theo Lemaire
 # @Last Modified time: 2019-01-18 11:43:33
@@ -55,7 +60,7 @@ def main():
         if neuron.name == 'FH':
             Adrive = 500.  # kPa
         else:
-            Adrive = 50.  # kPa
+            Adrive = 100.  # kPa
         tstim = 100e-3  # s
         toffset = 50e-3  # s
         compare(neuron, Adrive, tstim, toffset, DC=0.5, a=a, Fdrive=Fdrive, verbose=args.verbose)
