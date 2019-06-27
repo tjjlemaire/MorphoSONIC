@@ -1,13 +1,9 @@
 # -*- coding: utf-8 -*-
 # @Author: Theo Lemaire
 # @Email: theo.lemaire@epfl.ch
-# @Date:   2019-06-04 18:26:42
+# @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-06-27 15:16:04
-# @Author: Theo
-# @Date:   2018-08-15 15:08:23
-# @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-03-15 02:44:21
+# @Last Modified time: 2019-06-27 15:30:23
 
 import numpy as np
 from itertools import repeat
@@ -22,30 +18,29 @@ from .._0D import Sonic0D
 from ..utils import VextPointSource
 from ..constants import *
 
+from .node import Node
 
 
-class Sonic1D(Sonic0D):
+class Cable:
     ''' Simple 1D extension of the SONIC model. '''
 
-    def __init__(self, neuron, rs, nodeD, nodeL, interD=0., interL=0., connector=None,
-                 nnodes=None, a=None, Fdrive=None, verbose=False):
+    def __init__(self, nodes, rs, nodeD, nodeL, interD=0., interL=0., connector=None, verbose=False):
         ''' Class constructor, defining the model's sections geometry, topology and biophysics.
             Note: internodes are not represented in the model but rather used to set appropriate
             axial resistances between node compartments.
 
-            :param neuron: neuron object
+            :param nodes: list of nodes
             :param rs: cytoplasmic resistivity (Ohm.cm)
             :param nodeD: list of node diameters (um) or single value (applied to all nodes)
             :param nodeL: list of node lengths (um) or single value (applied to all nodes)
             :param interD: list of internode diameters (um) or single value (applied to all internodes)
             :param interL: list of internode lengths (um) or single value (applied to all internodes)
-            :param nnodes: number of nodes (applied only if all parameters are passed as floats)
             :param connector: object used to connect sections together through a custom
                 axial current density mechanism
-            :param a: sonophore diameter (nm)
-            :param Fdrive: ultrasound frequency (kHz)
             :param verbose: boolean stating whether to print out details
         '''
+
+        self.nodes = nodes
 
         # Pre-process node parameters
         if nnodes is None:
@@ -59,28 +54,17 @@ class Sonic1D(Sonic0D):
             nodeD = [nodeD] * nnodes
         if isinstance(nodeL, float):
             nodeL = [nodeL] * nnodes
-        # if isinstance(nodeFs, float):
-        #     nodeFs = [nodeFs] * nnodes
 
         # Check consistency of node parameters
         if len(nodeD) != len(nodeL):
             raise ValueError('Inconsistent numbers of node diameters ({}) and lengths ({})'.format(
                 len(nodeD), len(nodeL)))
-        # if len(nodeD) != len(nodeFs):
-        #     raise ValueError(
-        #         'Inconsistent numbers of node diameters ({}) and coverages ({})'.format(
-        #             len(nodeD), len(nodeFs)))
-        # for i, fs in enumerate(nodeFs):
-        #     if fs > 1. or fs < 0.:
-        #         raise ValueError('nodeFs[{}] ({}) must be within [0-1]'.format(i, fs))
 
         # Pre-process internode parameters
         if isinstance(interD, float):
             interD = [interD] * (nnodes - 1)
         if isinstance(interL, float):
             interL = [interL] * (nnodes - 1)
-        # if isinstance(nodeFs, float):
-        #     nodeFs = [nodeFs] * (nnodes - 1)
 
         # Check consistency of internode parameters
         if len(interD) != nnodes - 1:
@@ -92,21 +76,15 @@ class Sonic1D(Sonic0D):
                 'Number of internode lengths ({}) does not match nnodes - 1 ({})'.format(
                     len(interD), nnodes - 1))
 
-
         # Convert vector inputs to arrays and assign class attributes
         self.nnodes = nnodes
-        self.nodeD = np.array(nodeD)  # um
-        self.nodeL = np.array(nodeL)  # um
-        # self.nodeFs = np.array(nodeFs)
+        self.nodeD = np.array(nodeD)    # um
+        self.nodeL = np.array(nodeL)    # um
         self.interD = np.array(interD)  # um
         self.interL = np.array(interL)  # um
         self.rs = rs  # Ohm.cm
         self.connector = connector
         self.has_vext_mech = False
-
-        # Initialize point-neuron model and delete its single section
-        super().__init__(neuron, a=a, Fdrive=Fdrive, verbose=verbose)
-        del self.section
 
         # Create node sections and set their geometry
         self.sections = self.createSections(['node{}'.format(i) for i in range(self.nnodes)])
@@ -125,7 +103,6 @@ class Sonic1D(Sonic0D):
             else:
                 self.buildCustomTopology()
 
-
     def getNodeCoordinates(self):
         ''' Return vector of node coordinates along axial dimension, centered at zero (um). '''
         xcoords = np.zeros(self.nnodes)
@@ -140,7 +117,7 @@ class Sonic1D(Sonic0D):
 
     def __repr__(self):
         ''' Explicit naming of the model instance. '''
-        return 'SONIC1D ({}, {})'.format(self.strBiophysics(), self.strNodes())
+        return 'Cable({}, {})'.format(self.strBiophysics(), self.strNodes())
         # 'classic_connect' if self.connector is None else repr(self.connector))
 
     def strNodes(self):
@@ -171,21 +148,18 @@ class Sonic1D(Sonic0D):
             self.mechname, self.strNodes(), self.strResistivity(), self.strGeom())
 
     def createSections(self, ids):
-        ''' Create morphological sections.
-
-            :param id: names of the sections.
-        '''
+        ''' Create morphological sections. '''
         if self.verbose:
             print('creating sections')
-        return list(map(super(Sonic1D, self).createSection, ids))
+        return [h.Section(name=id, cell=self) for if in ids]
 
     def defineGeometry(self):
-        ''' Set the geometry of the nodes sections. '''
+        ''' Set sections geometry. '''
         if self.verbose:
             print('defining sections geometry: {}'.format(self.strGeom()))
         for i, sec in enumerate(self.sections):
             sec.diam = self.nodeD[i]  # um
-            sec.L = self.nodeL[i]  # um
+            sec.L = self.nodeL[i]     # um
             sec.nseg = 1
 
     def defineBiophysics(self):
@@ -194,9 +168,6 @@ class Sonic1D(Sonic0D):
             print('defining membrane biophysics: {}'.format(self.strBiophysics()))
         for sec in self.sections:
             sec.insert(self.mechname)
-        # for sec, fs in zip(self.sections, self.nodeFs):
-        #     sec.insert(self.mechname)
-        #     setattr(sec, 'fs_{}'.format(self.mechname), fs)
 
     def relResistance(self, D, L):
         ''' Return relative resistance of cylindrical section based on its diameter and length. '''
@@ -237,7 +208,6 @@ class Sonic1D(Sonic0D):
         for sec in self.sections:
             sec.Ra *= self.neuron.Cm0 * 1e2
 
-
     def buildTopology(self):
         ''' Connect the sections in series through classic NEURON implementation. '''
         if self.verbose:
@@ -245,14 +215,12 @@ class Sonic1D(Sonic0D):
         for sec1, sec2 in zip(self.sections[:-1], self.sections[1:]):
             sec2.connect(sec1, 1, 0)
 
-
     def buildCustomTopology(self):
         if self.verbose:
             print('building custom {}-based topology'.format(self.connector.vref))
         list(map(self.connector.attach, self.sections))
         for sec1, sec2 in zip(self.sections[:-1], self.sections[1:]):
             self.connector.connect(sec1, sec2)
-
 
     def processInputs(self, values, config):
         ''' Return section specific inputs for a given configuration.
@@ -281,31 +249,6 @@ class Sonic1D(Sonic0D):
             values = np.array(values)
         return values
 
-
-    def setUSdrive(self, amps, config):
-        ''' Set section specific acoustic stimulation amplitudes.
-
-            :param amps: model-sized vector of acoustic amplitudes (kPa) or single value
-            :return: section-specific labels
-        '''
-        # Process inputs
-        if self.connector is None:
-            raise ValueError(
-                'attempting to perform A-STIM simulation with standard "v-based" connection scheme')
-
-        # Set acoustic amplitudes
-        amps = self.processInputs(amps, config)  # kPa
-        if self.verbose:
-            print('Setting acoustic amplitudes: Adrive = [{}] kPa'.format(
-                ' - '.join('{:.0f}'.format(Adrive) for Adrive in amps)))
-        for sec, Adrive in zip(self.sections, amps):
-            setattr(sec, 'Adrive_{}'.format(self.mechname), Adrive)
-        self.modality = 'US'
-
-        # Return section-specific labels
-        return ['node {} ({:.0f} kPa)'.format(i + 1, A) for i, A in enumerate(amps)]
-
-
     def setIinj(self, amps, config):
         ''' Set section specific electrical stimulation amplitudes.
 
@@ -330,7 +273,6 @@ class Sonic1D(Sonic0D):
 
         # return node-specific labels
         return ['node {} ({:.0f} $mA/m^2$)'.format(i + 1, A) for i, A in enumerate(amps)]
-
 
     def setVext(self, Vexts):
         ''' Insert extracellular mechanism into node sections and set extracellular potential values.
@@ -358,7 +300,6 @@ class Sonic1D(Sonic0D):
 
         # return node-specific labels
         return ['node {} ({:.0f} $mV$)'.format(i + 1, Vext) for i, Vext in enumerate(Vexts)]
-
 
     def setStimON(self, value):
         ''' Set US or electrical stimulation ON or OFF by updating the appropriate
