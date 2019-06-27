@@ -21,7 +21,6 @@ UNITS {
 NEURON {
     SUFFIX STN
 
-    : Constituting currents
     NONSPECIFIC_CURRENT iNa
     NONSPECIFIC_CURRENT iKd
     NONSPECIFIC_CURRENT iA
@@ -30,9 +29,8 @@ NEURON {
     NONSPECIFIC_CURRENT iKCa
     NONSPECIFIC_CURRENT iLeak
 
-    : RANGE variables
-    RANGE Adrive, Vmeff : section specific
-    RANGE stimon : common to all sections (but set as RANGE to be accessible from caller)
+    RANGE Adrive, Vm : section specific
+    RANGE stimon     : common to all sections (but set as RANGE to be accessible from caller)
 }
 
 
@@ -43,11 +41,9 @@ CONSTANT {
 
 
 PARAMETER {
-    : Parameters set by python/hoc caller
-    stimon : Stimulation state
+    stimon       : Stimulation state
     Adrive (kPa) : Stimulation amplitude
 
-    : membrane properties
     cm = 1              (uF/cm2)
     ENa = 60            (mV)
     EK = -90            (mV)
@@ -64,41 +60,34 @@ PARAMETER {
     kx_d2 = 2e-8       (M)
     thetax_r = 1.7e-7  (M)
     kx_r = -8e-8       (M)
-
     tau_d2 = 130       (ms)
     tau_r = 2          (ms)
-
-    Cai0 = 5e-9       (M)
-    Cao = 2e-3        (M)
+    Cai0 = 5e-9        (M)
+    Cao = 2e-3         (M)
     KCa = 2            (1/ms)
-
     T = 306.15         (K)
-
     depth              (m)  : depth of sub-membrane space
-    iCa2Cai  :conversion factor from Calcium current (mA/cm2) to Calcium concentration derivative (M/ms)
+    iCa2Cai                 :conversion factor from iCa (mA/cm2) to Cai derivative (M/ms)
     ECa                (mV)
 }
 
 STATE {
-    : Gating states
-    m  : iNa activation gate
-    h  : iNa inactivation gate
-    n  : iKd activation gate
-    a  : iA activation gate
-    b  : iA inactivation gate
-    p  : iCaT activation gate
-    q  : iCaT inactivation gate
-    c  : iCaL activation gate
-    d1 : iCaL inactivation gate
-    d2 : iCaL inactivation gate
-    r  : iCaK activation gate
-
+    m       : iNa activation gate
+    h       : iNa inactivation gate
+    n       : iKd activation gate
+    a       : iA activation gate
+    b       : iA inactivation gate
+    p       : iCaT activation gate
+    q       : iCaT inactivation gate
+    c       : iCaL activation gate
+    d1      : iCaL inactivation gate
+    d2      : iCaL inactivation gate
+    r       : iCaK activation gate
     Cai (M) : submembrane Calcium concentration
 }
 
 ASSIGNED {
-    : Variables computed during the simulation and whose value can be retrieved
-    Vmeff   (mV)
+    Vm      (mV)
     v       (mV)
     iNa     (mA/cm2)
     iKd     (mA/cm2)
@@ -109,8 +98,7 @@ ASSIGNED {
     iLeak   (mA/cm2)
 }
 
-: Function tables to interpolate effective variables
-FUNCTION_TABLE V(A(kPa), Q(nC/cm2))      (mV)
+FUNCTION_TABLE V(A(kPa), Q(nC/cm2))       (mV)
 FUNCTION_TABLE alpham(A(kPa), Q(nC/cm2))  (/ms)
 FUNCTION_TABLE betam(A(kPa), Q(nC/cm2))   (/ms)
 FUNCTION_TABLE alphah(A(kPa), Q(nC/cm2))  (/ms)
@@ -149,7 +137,6 @@ FUNCTION nernst(z, Cin (M), Cout (M), T (K)) (mV) {
 
 
 INITIAL {
-    : Set initial states values
     m = alpham(0, v) / (alpham(0, v) + betam(0, v))
     h = alphah(0, v) / (alphah(0, v) + betah(0, v))
     n = alphan(0, v) / (alphan(0, v) + betan(0, v))
@@ -164,36 +151,28 @@ INITIAL {
     Cai = Cai0
 
     ECa = nernst(2, Cai0, Cao, T)
-    Vmeff = V(0, v)
-    iCaT = gCaTbar * p * p * q * (Vmeff - ECa)
-    iCaL = gCaLbar * c * c * d1 * d2 * (Vmeff - ECa)
+    Vm = V(0, v)
+    iCaT = gCaTbar * p * p * q * (Vm - ECa)
+    iCaL = gCaLbar * c * c * d1 * d2 * (Vm - ECa)
     depth = -(iCaT + iCaL) / (2 * FARADAY * KCa * Cai) * 1e-5
     iCa2Cai = 1e-5 / (2 * depth * FARADAY)
-:    printf("depth = %.2e, iCa2Cai = %.2e \n", depth, iCa2Cai)
+    :printf("depth = %.2e, iCa2Cai = %.2e \n", depth, iCa2Cai)
 }
 
 BREAKPOINT {
-    : Integrate states
     SOLVE states METHOD cnexp
-
-    : Compute effective membrane potential
-    Vmeff = V(Adrive * stimon, v)
-
-    : Compute Calcium reversal potential
+    Vm = V(Adrive * stimon, v)
     ECa = nernst(2, Cai, Cao, T)
-
-    : Compute ionic currents
-    iNa = gNabar * m * m * m * h * (Vmeff - ENa)
-    iKd = gKdbar * n * n * n * n * (Vmeff - EK)
-    iA = gAbar * a * a * b * (Vmeff - EK)
-    iCaT = gCaTbar * p * p * q * (Vmeff - ECa)
-    iCaL = gCaLbar * c * c * d1 * d2 * (Vmeff - ECa)
-    iKCa = gKCabar * r * r * (Vmeff - EK)
-    iLeak = gLeak * (Vmeff - ELeak)
+    iNa = gNabar * m * m * m * h * (Vm - ENa)
+    iKd = gKdbar * n * n * n * n * (Vm - EK)
+    iA = gAbar * a * a * b * (Vm - EK)
+    iCaT = gCaTbar * p * p * q * (Vm - ECa)
+    iCaL = gCaLbar * c * c * d1 * d2 * (Vm - ECa)
+    iKCa = gKCabar * r * r * (Vm - EK)
+    iLeak = gLeak * (Vm - ELeak)
 }
 
 DERIVATIVE states {
-    : Gating states derivatives
     m' = alpham(Adrive * stimon, v) * (1 - m) - betam(Adrive * stimon, v) * m
     h' = alphah(Adrive * stimon, v) * (1 - h) - betah(Adrive * stimon, v) * h
     n' = alphan(Adrive * stimon, v) * (1 - n) - betan(Adrive * stimon, v) * n
@@ -203,23 +182,10 @@ DERIVATIVE states {
     b' = alphab(Adrive * stimon, v) * (1 - b) - betab(Adrive * stimon, v) * b
     c' = alphac(Adrive * stimon, v) * (1 - c) - betac(Adrive * stimon, v) * c
     d1' = alphad1(Adrive * stimon, v) * (1 - d1) - betad1(Adrive * stimon, v) * d1
-
     d2' = (d2inf(Cai) - d2) / tau_d2
     r' = (rinf(Cai) - r) / tau_r
-
-    : Compute Calcium reversal potential
     ECa = nernst(2, Cai, Cao, T)
-
-    iCaT = gCaTbar * p * p * q * (Vmeff - ECa)
-    iCaL = gCaLbar * c * c * d1 * d2 * (Vmeff - ECa)
+    iCaT = gCaTbar * p * p * q * (Vm - ECa)
+    iCaL = gCaLbar * c * c * d1 * d2 * (Vm - ECa)
     Cai' = - iCa2Cai * (iCaT + iCaL) - Cai * KCa
-
-    COMMENT
-    if (t > 999. && t < 1000.) {
-        printf("t = %.2f ms, Q = %.3f nC/cm2, Vm = %.3f mV, Cai = %.3f uM,", t, v, Vmeff, Cai * 1e6)
-        printf("p = %.4f, q = %.4f,", p, q)
-        printf("c = %.4f, d1 = %.4f, d2 = %.4f,", c, d1, d2)
-        printf("ECa = %.2f mV, iCaT = %.3f A/m2, iCaL = %.3f A/m2\n", ECa, iCaT * 1e1, iCaL * 1e1)
-    }
-    ENDCOMMENT
 }

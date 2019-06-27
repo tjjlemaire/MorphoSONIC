@@ -21,24 +21,20 @@ UNITS {
 NEURON {
     SUFFIX RE
 
-    : Constituting currents
     NONSPECIFIC_CURRENT iNa
     NONSPECIFIC_CURRENT iKd
     NONSPECIFIC_CURRENT iCaT
     NONSPECIFIC_CURRENT iLeak
 
-    : RANGE variables
-    RANGE Adrive, Vmeff : section specific
-    RANGE stimon : common to all sections (but set as RANGE to be accessible from caller)
+    RANGE Adrive, Vm : section specific
+    RANGE stimon     : common to all sections (but set as RANGE to be accessible from caller)
 }
 
 
 PARAMETER {
-    : Parameters set by python/hoc caller
-    stimon : Stimulation state
+    stimon       : Stimulation state
     Adrive (kPa) : Stimulation amplitude
 
-    : membrane properties
     cm = 1              (uF/cm2)
     ENa = 50            (mV)
     ECa = 120           (mV)
@@ -51,7 +47,6 @@ PARAMETER {
 }
 
 STATE {
-    : Gating states
     m  : iNa activation gate
     h  : iNa inactivation gate
     n  : iKd activation gate
@@ -60,8 +55,7 @@ STATE {
 }
 
 ASSIGNED {
-    : Variables computed during the simulation and whose value can be retrieved
-    Vmeff   (mV)
+    Vm      (mV)
     v       (mV)
     iNa     (mA/cm2)
     iKd     (mA/cm2)
@@ -69,8 +63,7 @@ ASSIGNED {
     iLeak   (mA/cm2)
 }
 
-: Function tables to interpolate effective variables
-FUNCTION_TABLE V(A(kPa), Q(nC/cm2))      (mV)
+FUNCTION_TABLE V(A(kPa), Q(nC/cm2))       (mV)
 FUNCTION_TABLE alpham(A(kPa), Q(nC/cm2))  (/ms)
 FUNCTION_TABLE betam(A(kPa), Q(nC/cm2))   (/ms)
 FUNCTION_TABLE alphah(A(kPa), Q(nC/cm2))  (/ms)
@@ -83,7 +76,6 @@ FUNCTION_TABLE alphau(A(kPa), Q(nC/cm2))  (/ms)
 FUNCTION_TABLE betau(A(kPa), Q(nC/cm2))   (/ms)
 
 INITIAL {
-    : Set initial states values
     m = alpham(0, v) / (alpham(0, v) + betam(0, v))
     h = alphah(0, v) / (alphah(0, v) + betah(0, v))
     n = alphan(0, v) / (alphan(0, v) + betan(0, v))
@@ -92,21 +84,15 @@ INITIAL {
 }
 
 BREAKPOINT {
-    : Integrate states
     SOLVE states METHOD cnexp
-
-    : Compute effective membrane potential
-    Vmeff = V(Adrive * stimon, v)
-
-    : Compute ionic currents
-    iNa = gNabar * m * m * m * h * (Vmeff - ENa)
-    iKd = gKdbar * n * n * n * n * (Vmeff - EK)
-    iCaT = gCaTbar * s * s * u * (Vmeff - ECa)
-    iLeak = gLeak * (Vmeff - ELeak)
+    Vm = V(Adrive * stimon, v)
+    iNa = gNabar * m * m * m * h * (Vm - ENa)
+    iKd = gKdbar * n * n * n * n * (Vm - EK)
+    iCaT = gCaTbar * s * s * u * (Vm - ECa)
+    iLeak = gLeak * (Vm - ELeak)
 }
 
 DERIVATIVE states {
-    : Gating states derivatives
     m' = alpham(Adrive * stimon, v) * (1 - m) - betam(Adrive * stimon, v) * m
     h' = alphah(Adrive * stimon, v) * (1 - h) - betah(Adrive * stimon, v) * h
     n' = alphan(Adrive * stimon, v) * (1 - n) - betan(Adrive * stimon, v) * n

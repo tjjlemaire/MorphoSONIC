@@ -24,15 +24,13 @@ UNITS {
 NEURON {
 	SUFFIX FH
 
-    : Constituting currents
     NONSPECIFIC_CURRENT iNa
     NONSPECIFIC_CURRENT iKd
     NONSPECIFIC_CURRENT iP
     NONSPECIFIC_CURRENT iLeak
 
-    : RANGE variables
-    RANGE Adrive, Vmeff : section specific
-    RANGE stimon : common to all sections (but set as RANGE to be accessible from caller)
+    RANGE Adrive, Vm : section specific
+    RANGE stimon     : common to all sections (but set as RANGE to be accessible from caller)
 }
 
 CONSTANT {
@@ -42,21 +40,16 @@ CONSTANT {
 
 
 PARAMETER {
-    : Parameters set by python/hoc caller
-    stimon : Stimulation state
+    stimon       : Stimulation state
     Adrive (kPa) : Stimulation amplitude
-
     q10
 
-    : membrane properties
     pNabar = 8e-3     (cm/s)
 	pPbar = .54e-3    (cm/s)
 	pkbar = 1.2e-3    (cm/s)
 	gLeak = 30.3e-3   (S/cm2)
 	ELeak = -69.74    (mV)
 	Tcelsius = 20.00  (degC)
-
-	: ionic concentrations
 	Nai = 13.74e-3    (M)
     Nao = 114.5e-3    (M)
     Ki = 120e-3       (M)
@@ -64,7 +57,6 @@ PARAMETER {
 }
 
 STATE {
-    : Gating states
     m  : iNa activation gate
     h  : iNa inactivation gate
     n  : iKd activation gate
@@ -72,8 +64,7 @@ STATE {
 }
 
 ASSIGNED {
-    : Variables computed during the simulation and whose value can be retrieved
-    Vmeff   (mV)
+    Vm       (mV)
     v        (mV)
     iNa      (mA/cm2)
     iKd      (mA/cm2)
@@ -81,7 +72,6 @@ ASSIGNED {
     iLeak    (mA/cm2)
 }
 
-: Function tables to interpolate effective variables
 FUNCTION_TABLE V(A(kPa), Q(nC/cm2))       (mV)
 FUNCTION_TABLE alpham(A(kPa), Q(nC/cm2))  (/ms)
 FUNCTION_TABLE betam(A(kPa), Q(nC/cm2))   (/ms)
@@ -93,7 +83,6 @@ FUNCTION_TABLE alphap(A(kPa), Q(nC/cm2))  (/ms)
 FUNCTION_TABLE betap(A(kPa), Q(nC/cm2))   (/ms)
 
 INITIAL {
-    : Set initial states values
     q10 = 3^((Tcelsius - 20) / 10)
     m = alpham(0, v) / (alpham(0, v) + betam(0, v))
     h = alphah(0, v) / (alphah(0, v) + betah(0, v))
@@ -103,24 +92,17 @@ INITIAL {
 
 BREAKPOINT {
 	LOCAL ghkNa, ghkK
-
-    : Integrate states
     SOLVE states METHOD cnexp
-
-    : Compute effective membrane potential
-    Vmeff = V(Adrive * stimon, v)
-
-    : compute ionic currents
-    ghkNa = ghkDrive(Vmeff, Nai, Nao)
-    ghkK = ghkDrive(Vmeff, Ki, Ko)
+    Vm = V(Adrive * stimon, v)
+    ghkNa = ghkDrive(Vm, Nai, Nao)
+    ghkK = ghkDrive(Vm, Ki, Ko)
     iNa = pNabar * m * m * h * ghkNa
 	iKd = pkbar * n * n * ghkK
     iP = pPbar * p * p * ghkNa
-	iLeak = gLeak * (Vmeff - ELeak)
+	iLeak = gLeak * (Vm - ELeak)
 }
 
 FUNCTION ghkDrive(v(mV), Ci(M), Co(M)) {
-	:assume a single charge
 	LOCAL x, ECi, ECo
 	x = FARADAY * v / (R*(Tcelsius+273.15)) * 1e-3
 	ECi = Ci*efun(-x)
@@ -137,7 +119,6 @@ FUNCTION vtrap(x, y) {
 }
 
 DERIVATIVE states {
-    : States derivatives
     m' = alpham(Adrive * stimon, v) * (1 - m) - betam(Adrive * stimon, v) * m
     h' = alphah(Adrive * stimon, v) * (1 - h) - betah(Adrive * stimon, v) * h
     n' = alphan(Adrive * stimon, v) * (1 - n) - betan(Adrive * stimon, v) * n

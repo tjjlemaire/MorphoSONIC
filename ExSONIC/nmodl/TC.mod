@@ -28,7 +28,6 @@ UNITS {
 NEURON {
     SUFFIX TC
 
-    : Constituting currents
     NONSPECIFIC_CURRENT iNa
     NONSPECIFIC_CURRENT iKd
     NONSPECIFIC_CURRENT iKl
@@ -36,9 +35,8 @@ NEURON {
     NONSPECIFIC_CURRENT iCaT
     NONSPECIFIC_CURRENT iLeak
 
-    : RANGE variables
-    RANGE Adrive, Vmeff : section specific
-    RANGE stimon : common to all sections (but set as RANGE to be accessible from caller)
+    RANGE Adrive, Vm : section specific
+    RANGE stimon     : common to all sections (but set as RANGE to be accessible from caller)
 }
 
 CONSTANT {
@@ -47,11 +45,9 @@ CONSTANT {
 
 
 PARAMETER {
-    : Parameters set by python/hoc caller
-    stimon : Stimulation state
+    stimon       : Stimulation state
     Adrive (kPa) : Stimulation amplitude
 
-    : membrane properties
     cm = 1              (uF/cm2)
     ENa = 50            (mV)
     ECa = 120           (mV)
@@ -65,37 +61,32 @@ PARAMETER {
     gHbar = 1.75e-5     (S/cm2)
     gLeak = 1e-5        (S/cm2)
 
-    : iH Calcium dependence properties
     k1 = 2.5e19         (1/M*M*M*M*ms)    : CB protein Calcium-driven activation rate
     k2 = 0.0004         (1/ms)            : CB protein inactivation rate
     k3 = 0.1            (1/ms)            : CB protein iH channel binding rate
     k4  = 0.001         (1/ms)            : CB protein iH channel unbinding rate
     nca = 4                               : number of Calcium binding sites on CB protein
 
-    : submembrane Calcium evolution properties
     depth = 1e-7        (m)   : depth of shell
-    taur = 5            (ms)   : rate of calcium removal
+    taur = 5            (ms)  : rate of calcium removal
     camin = 5e-8        (M)   : minimal intracellular Calcium concentration
 
 }
 
 STATE {
-    : Gating states
-    m  : iNa activation gate
-    h  : iNa inactivation gate
-    n  : iKd activation gate
-    s  : iCaT activation gate
-    u  : iCaT inactivation gate
-    C1  : iH channel closed state
-    O1  : iH channel open state
-
-    Cai (M) : submembrane Calcium concentration
+    m        : iNa activation gate
+    h        : iNa inactivation gate
+    n        : iKd activation gate
+    s        : iCaT activation gate
+    u        : iCaT inactivation gate
+    C1       : iH channel closed state
+    O1       : iH channel open state
     P0       : proportion of unbound CB protein
+    Cai (M)  : submembrane Calcium concentration
 }
 
 ASSIGNED {
-    : Variables computed during the simulation and whose value can be retrieved
-    Vmeff    (mV)
+    Vm       (mV)
     v        (mV)
     iNa      (mA/cm2)
     iKd      (mA/cm2)
@@ -105,8 +96,7 @@ ASSIGNED {
     iLeak    (mA/cm2)
 }
 
-: Function tables to interpolate effective variables
-FUNCTION_TABLE V(A(kPa), Q(nC/cm2))      (mV)
+FUNCTION_TABLE V(A(kPa), Q(nC/cm2))       (mV)
 FUNCTION_TABLE alpham(A(kPa), Q(nC/cm2))  (/ms)
 FUNCTION_TABLE betam(A(kPa), Q(nC/cm2))   (/ms)
 FUNCTION_TABLE alphah(A(kPa), Q(nC/cm2))  (/ms)
@@ -131,54 +121,39 @@ FUNCTION iondrive(i (mA/cm2), val, d(nm)) (M/ms) {
 }
 
 INITIAL {
-    : Set initial states values
     m = alpham(0, v) / (alpham(0, v) + betam(0, v))
     h = alphah(0, v) / (alphah(0, v) + betah(0, v))
     n = alphan(0, v) / (alphan(0, v) + betan(0, v))
     s = alphas(0, v) / (alphas(0, v) + betas(0, v))
     u = alphau(0, v) / (alphau(0, v) + betau(0, v))
-
-    : Compute steady-state Calcium concentration
     iCaT = gCaTbar * s * s * u * (V(0, v) - ECa)
     Cai = camin + taur * iondrive(iCaT, 2, depth)
-
-    : Compute steady values for the kinetics system of Ih
     P0 = k2 / (k2 + k1 * npow(Cai, nca))
     O1 = k4 / (k3 * (1 - P0) + k4 * (1 + betao(0, v) / alphao(0, v)))
     C1 = betao(0, v) / alphao(0, v) * O1
 }
 
 BREAKPOINT {
-    : Integrate states
     SOLVE states METHOD cnexp
-
-    : Check iH states and restrict them if needed
     if(O1 < 0.) {O1 = 0.}
     if(O1 > 1.) {O1 = 1.}
     if(C1 < 0.) {C1 = 0.}
     if(C1 > 1.) {C1 = 1.}
-
-    : Compute effective membrane potential
-    Vmeff = V(Adrive * stimon, v)
-
-    : compute ionic currents
-    iNa = gNabar * m * m * m * h * (Vmeff - ENa)
-    iKd = gKdbar * n * n * n * n * (Vmeff - EK)
-    iKl = gKLeak * (Vmeff - EK)
-    iCaT = gCaTbar * s * s * u * (Vmeff - ECa)
-    iH = gHbar * (O1 + 2 * (1 - O1 - C1)) * (Vmeff - EH)
-    iLeak = gLeak * (Vmeff - ELeak)
+    Vm = V(Adrive * stimon, v)
+    iNa = gNabar * m * m * m * h * (Vm - ENa)
+    iKd = gKdbar * n * n * n * n * (Vm - EK)
+    iKl = gKLeak * (Vm - EK)
+    iCaT = gCaTbar * s * s * u * (Vm - ECa)
+    iH = gHbar * (O1 + 2 * (1 - O1 - C1)) * (Vm - EH)
+    iLeak = gLeak * (Vm - ELeak)
 }
 
 DERIVATIVE states {
-    : Gating states derivatives
     m' = alpham(Adrive * stimon, v) * (1 - m) - betam(Adrive * stimon, v) * m
     h' = alphah(Adrive * stimon, v) * (1 - h) - betah(Adrive * stimon, v) * h
     n' = alphan(Adrive * stimon, v) * (1 - n) - betan(Adrive * stimon, v) * n
     s' = alphas(Adrive * stimon, v) * (1 - s) - betas(Adrive * stimon, v) * s
     u' = alphau(Adrive * stimon, v) * (1 - u) - betau(Adrive * stimon, v) * u
-
-    : Compute derivatives of variables for the kinetics system of Ih
     Cai' = (camin - Cai) / taur + iondrive(iCaT, 2, depth)
     P0' = k2 * (1 - P0) - k1 * P0 * npow(Cai, nca)
     C1' = betao(Adrive * stimon, v) * O1 - alphao(Adrive * stimon, v) * C1
