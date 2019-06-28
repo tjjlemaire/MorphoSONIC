@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-30 11:26:26
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-06-28 17:31:59
+# @Last Modified time: 2019-06-28 19:54:36
 
 import time
 import numpy as np
@@ -38,8 +38,8 @@ class TestNode(TestBase):
                 fig = self.compare(pneuron, Astim, tstim, toffset)
 
     def test_ASTIM(self, is_profiled=False):
-        a = 32.          # nm
-        Fdrive = 500.    # kHz
+        a = 32e-9        # nm
+        Fdrive = 500e3   # kHz
         tstim = 100e-3   # s
         toffset = 50e-3  # s
         DC = 0.5         # (-)
@@ -47,13 +47,13 @@ class TestNode(TestBase):
             if name not in ('template', 'LeechP', 'LeechT', 'LeechR'):
                 pneuron = neuron_class()
                 if pneuron.name == 'FH':
-                    Adrive = 300.    # kPa
+                    Adrive = 300e3  # kPa
                 else:
-                    Adrive = 100.    # kPa
+                    Adrive = 100e3  # kPa
                 fig = self.compare(pneuron, Adrive, tstim, toffset, DC=DC, a=a, Fdrive=Fdrive)
 
     @staticmethod
-    def compare(neuron, A, tstim, toffset, PRF=100., DC=1., a=None, Fdrive=None,
+    def compare(pneuron, A, tstim, toffset, PRF=100., DC=1., a=None, Fdrive=None,
                 dt=None, atol=None):
         ''' Compare results of NEURON and Python based A-STIM or E-STIM simulations of the point-neuron
             SONIC model.
@@ -74,7 +74,7 @@ class TestNode(TestBase):
         for ax in axes[:2]:
             ax.set_xlabel('time (ms)', fontsize=fs)
         ax = axes[0]
-        ax.set_ylim(neuron.Qbounds() * 1e5)
+        ax.set_ylim(pneuron.Qbounds() * 1e5)
         ax.set_ylabel('Qm (nC/cm2)', fontsize=fs)
         ax.set_title('membrane charge density', fontsize=fs + 2)
         ax = axes[1]
@@ -89,19 +89,19 @@ class TestNode(TestBase):
         ax.set_ylim(1e-3, 1e2)
 
         # Initialize Python and NEURON models
-        args = [tstim, toffset, PRF, DC]
+        args = [A, tstim, toffset, PRF, DC]
         if a is not None:
-            nrn_model = SonicNode(neuron, a=a, Fdrive=Fdrive)
-            py_model = NeuronalBilayerSonophore(a * 1e-9, neuron)
-            py_args = [Fdrive * 1e3, A * 1e3] + args
+            nrn_model = SonicNode(pneuron, a=a, Fdrive=Fdrive)
+            py_model = NeuronalBilayerSonophore(a, pneuron, Fdrive=Fdrive)
+            py_args = [Fdrive] + args
         else:
-            nrn_model = IintraNode(neuron)
-            py_model = neuron
-            py_args = [A] + args
+            nrn_model = IintraNode(pneuron)
+            py_model = pneuron
+            py_args = args
 
         # Run NEURON and Python simulations
         data, tcomp = {}, {}
-        data['NEURON'], tcomp['NEURON'] = nrn_model.simulate(A, *args, dt, atol)
+        data['NEURON'], tcomp['NEURON'] = nrn_model.simulate(*args, dt, atol)
         data['Python'], tcomp['Python'] = py_model.simulate(*py_args)
 
         # Get pulses timing
@@ -112,8 +112,8 @@ class TestNode(TestBase):
         tonset = -0.05 * (np.ptp(data['Python']['t']))
         for k in comp_keys:
             tplt = np.hstack((np.array([tonset, 0.]), data[k]['t'].values)) * 1e3
-            axes[0].plot(tplt, np.hstack((np.ones(2) * neuron.Qm0, data[k]['Qm'])) * 1e5, label=k)
-            axes[1].plot(tplt, np.hstack((np.ones(2) * neuron.Vm0, data[k]['Vm'])), label=k)
+            axes[0].plot(tplt, np.hstack((np.ones(2) * pneuron.Qm0, data[k]['Qm'])) * 1e5, label=k)
+            axes[1].plot(tplt, np.hstack((np.ones(2) * pneuron.Vm0, data[k]['Vm'])), label=k)
 
         # Plot stim patches on both graphs
         for ax in axes[:2]:

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2017-02-13 18:16:09
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-06-28 17:35:04
+# @Last Modified time: 2019-06-28 19:57:00
 
 ''' Run A-STIM simulations of a specific point-neuron. '''
 
@@ -27,14 +27,13 @@ def main():
     # Run A-STIM batch
     logger.info("Starting A-STIM simulation batch")
     pkl_filepaths = []
-    args['amp'] *= 1e-3
     inputs = [args[k] for k in ['amp', 'tstim', 'toffset', 'PRF', 'DC']]
     queue = PointNeuron.simQueue(*inputs, outputdir=args['outputdir'])
     for a in args['radius']:
         for pneuron in args['neuron']:
             for Fdrive in args['freq']:
                 for fs in args['fs']:
-                    node = SonicNode(pneuron, a=a * 1e9, Fdrive=Fdrive * 1e-3, fs=fs)
+                    node = SonicNode(pneuron, a=a, Fdrive=Fdrive, fs=fs)
                     batch = Batch(node.runAndSave, queue)
                     pkl_filepaths += batch(loglevel=args['loglevel'])
 

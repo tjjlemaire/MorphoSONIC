@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-06-28 17:26:47
+# @Last Modified time: 2019-06-28 19:54:58
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
@@ -32,13 +32,16 @@ class Node(metaclass=abc.ABCMeta):
         ''' Keyword used to characterize stimulation modality. '''
         raise NotImplementedError
 
-    def __init__(self, pneuron):
+    def __init__(self, pneuron, id=None):
         ''' Initialization.
 
             :param pneuron: point-neuron model
         '''
         # Initialize arguments
         self.pneuron = pneuron
+        if id is None:
+            id = self.__repr__()
+        self.id = id
         logger.debug('Creating {} model'.format(self))
 
         # Load mechanisms and set function tables of appropriate membrane mechanism
@@ -46,7 +49,7 @@ class Node(metaclass=abc.ABCMeta):
         self.setFuncTables()
 
         # Create section and set membrane mechanism
-        self.section = self.createSection('node0')
+        self.section = self.createSection(self.id)
         self.section.insert(self.pneuron.name)
 
     def __repr__(self):
@@ -198,6 +201,16 @@ class Node(metaclass=abc.ABCMeta):
 
         return 0
 
+    def setProbes(self):
+        ''' Set recording vectors. '''
+        t = setTimeProbe()
+        stim = setStimProbe(self.section, self.pneuron.name)
+        Qm = setRangeProbe(self.section, 'v')
+        Vm = setRangeProbe(self.section, 'Vm_{}'.format(self.pneuron.name))
+        states = {k: setRangeProbe(self.section, '{}_{}'.format(alias(k), self.pneuron.name))
+                  for k in self.pneuron.statesNames()}
+        return t, stim, Qm, Vm, states
+
     @timer
     def simulate(self, A, tstim, toffset, PRF, DC, dt=None, atol=None):
         ''' Set appropriate recording vectors, integrate and return output variables.
@@ -210,7 +223,6 @@ class Node(metaclass=abc.ABCMeta):
             :param dt: integration time step for fixed time step method (s)
             :param atol: absolute error tolerance for adaptive time step method (default = 1e-3)
         '''
-
         logger.info(
             '%s: simulation @ %s = %s%s, t = %ss (%ss offset)%s',
             self, self.modality['name'],
@@ -220,17 +232,10 @@ class Node(metaclass=abc.ABCMeta):
                 si_format(PRF, 2, space=' '), DC * 1e2) if DC < 1.0 else ''))
 
         # Set recording vectors
-        t = setTimeProbe()
-        stim = setStimProbe(self.section, self.pneuron.name)
-        Qm = setRangeProbe(self.section, 'v')
-        Vm = setRangeProbe(self.section, 'Vm_{}'.format(self.pneuron.name))
-        states = {k: setRangeProbe(self.section, '{}_{}'.format(alias(k), self.pneuron.name))
-                  for k in self.pneuron.statesNames()}
+        t, stim, Qm, Vm, states = self.setProbes()
 
-        # Set stimulus amplitude
+        # Set stimulus amplitude and integrate model
         self.setStimAmp(A)
-
-        # Integrate model
         self.integrate(tstim + toffset, tstim, PRF, DC, dt, atol)
 
         # Store output in dataframe
@@ -366,38 +371,37 @@ class SonicNode(Node):
     modality = {
         'name': 'A_US',
         'unit': 'Pa',
-        'factor': 1e3
+        'factor': 1e0
     }
 
-    def __init__(self, pneuron, a=32., Fdrive=500., fs=1.):
+    def __init__(self, pneuron, id=None, a=32e-9, Fdrive=500e3, fs=1.):
         ''' Initialization.
 
             :param pneuron: point-neuron model
-            :param a: sonophore diameter (nm)
-            :param Fdrive: ultrasound frequency (kHz)
+            :param a: sonophore diameter (m)
+            :param Fdrive: ultrasound frequency (Hz)
             :param fs: sonophore membrane coverage fraction (-)
         '''
-
         if fs > 1. or fs < 0.:
             raise ValueError('fs ({}) must be within [0-1]'.format(fs))
-        self.nbls = NeuronalBilayerSonophore(a * 1e-9, pneuron, Fdrive * 1e3)
+        self.nbls = NeuronalBilayerSonophore(a, pneuron, Fdrive)
         self.a = a
         self.fs = fs
         self.Fdrive = Fdrive
-        super().__init__(pneuron)
+        super().__init__(pneuron, id=id)
 
     def __repr__(self):
         return '{}({:.1f} nm, {}, {:.0f} kHz)'.format(
-            self.__class__.__name__, self.a, self.pneuron, self.Fdrive)
+            self.__class__.__name__, self.a * 1e9, self.pneuron, self.Fdrive * 1e-3)
 
     def strBiophysics(self):
         return super().strBiophysics() + ', a = {}m{}, f = {}Hz'.format(
-            si_format(self.a * 1e-9, space=' '),
+            si_format(self.a, space=' '),
             ', fs = {:.0f}%'.format(self.fs * 1e2) if self.fs is not None else '',
-            si_format(self.Fdrive * 1e3, space=' '))
+            si_format(self.Fdrive, space=' '))
 
     def getLookup(self):
-        return self.nbls.getLookup2D(self.Fdrive * 1e3, self.fs)
+        return self.nbls.getLookup2D(self.Fdrive, self.fs)
 
     def setStimAmp(self, Adrive):
         ''' Set US stimulation amplitude (and set modality to "US").
@@ -408,4 +412,4 @@ class SonicNode(Node):
         setattr(self.section, 'Adrive_{}'.format(self.pneuron.name), Adrive)
 
     def filecode(self, *args):
-        return self.nbls.filecode(self.Fdrive * 1e3, *args, self.fs * 1e2, 'NEURON')
+        return self.nbls.filecode(self.Fdrive, *args, self.fs, 'NEURON')
