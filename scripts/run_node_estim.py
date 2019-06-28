@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2017-08-24 11:55:07
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-06-28 17:16:08
+# @Last Modified time: 2019-06-28 17:35:12
 
 ''' Run E-STIM simulations of a specific point-neuron. '''
 
@@ -13,7 +13,7 @@ from PySONIC.core import Batch, PointNeuron
 from PySONIC.utils import logger
 from PySONIC.plt import GroupedTimeSeries
 from PySONIC.parsers import EStimParser
-from ExSONIC._0D import IintraNode
+from ExSONIC.core import IintraNode
 
 
 def main():
