@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-06-27 15:30:23
+# @Last Modified time: 2019-06-28 17:30:38
 
 import numpy as np
 from itertools import repeat
@@ -13,12 +13,10 @@ from PySONIC.utils import si_format, pow10_format
 from PySONIC.constants import *
 from PySONIC.postpro import findPeaks
 
-from ..pyhoc import *
-from .._0D import Sonic0D
+from .pyhoc import *
+from .node import IintraNode, SonicNode
 from ..utils import VextPointSource
 from ..constants import *
-
-from .node import Node
 
 
 class Cable:
@@ -151,7 +149,7 @@ class Cable:
         ''' Create morphological sections. '''
         if self.verbose:
             print('creating sections')
-        return [h.Section(name=id, cell=self) for if in ids]
+        return [h.Section(name=id, cell=self) for id in ids]
 
     def defineGeometry(self):
         ''' Set sections geometry. '''

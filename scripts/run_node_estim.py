@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2017-08-24 11:55:07
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-06-28 16:19:31
+# @Last Modified time: 2019-06-28 17:16:08
 
 ''' Run E-STIM simulations of a specific point-neuron. '''
 

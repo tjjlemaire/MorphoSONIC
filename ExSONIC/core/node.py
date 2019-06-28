@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-06-28 17:07:46
+# @Last Modified time: 2019-06-28 17:26:47
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
@@ -18,7 +18,7 @@ from neuron import h
 from PySONIC.core import NeuronalBilayerSonophore
 from PySONIC.utils import si_format, timer, logger
 
-from ..pyhoc import *
+from .pyhoc import *
 from ..utils import getNmodlDir
 from ..constants import *
 

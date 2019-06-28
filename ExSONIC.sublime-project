@@ -20,16 +20,12 @@
 				"index.rst",
 				"*.gitignore",
 				"__init__.py",
-				"*.c"
+				"*.c",
+				"*.sh",
 			],
 			"folder_exclude_patterns":
 			[
-				"deprECated",
-				"docs",
-				"lookups",
-				"notebooks",
-				"graphs",
-				"templates",
+				"__pycache__",
 				"*.egg-info"
 			],
 			"path": "."
