@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-06-28 20:54:40
+# @Last Modified time: 2019-06-28 23:38:30
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
@@ -16,9 +16,9 @@ from scipy.interpolate import interp1d
 import pandas as pd
 from neuron import h
 
-from PySONIC.constants import DT_EFFECTIVE
+from PySONIC.constants import *
 from PySONIC.core import NeuronalBilayerSonophore
-from PySONIC.utils import si_format, timer, logger
+from PySONIC.utils import si_format, timer, logger, binarySearch, plural
 
 from .pyhoc import *
 from ..utils import getNmodlDir
@@ -180,13 +180,13 @@ class Node(metaclass=abc.ABCMeta):
         if dt is not None:
             h.dt = dt
             self.cvode.active(0)
-            print('fixed time step integration (dt = {} ms)'.format(h.dt))
+            logger.debug('fixed time step integration (dt = {} ms)'.format(h.dt))
         else:
             self.cvode.active(1)
             if atol is not None:
                 def_atol = self.cvode.atol()
                 self.cvode.atol(atol)
-                print('adaptive time step integration (atol = {})'.format(self.cvode.atol()))
+                logger.debug('adaptive time step integration (atol = {})'.format(self.cvode.atol()))
 
         # Initialize
         h.finitialize(self.pneuron.Qm0 * 1e5)  # nC/cm2
@@ -250,6 +250,13 @@ class Node(metaclass=abc.ABCMeta):
         for k, v in states.items():
             data[k] = vec_to_array(v)
 
+        # Resample data to regular sampling rate
+        data = self.resample(data, DT_EFFECTIVE)
+
+        # Detect spikes on data
+        nspikes = self.pneuron.getNSpikes(data)
+        logger.debug('{} spike{} detected'.format(nspikes, plural(nspikes)))
+
         return self.resample(data, DT_EFFECTIVE)
 
     @staticmethod
@@ -264,7 +271,7 @@ class Node(metaclass=abc.ABCMeta):
             new_data[key] = interp1d(t, data[key].values, kind=kind)(tnew)
         return pd.DataFrame(new_data)
 
-    def titrate(self, tstim, toffset, PRF=100., DC=1., fs=1., xfunc=None):
+    def titrate(self, tstim, toffset, PRF=100., DC=1., xfunc=None):
         ''' Use a binary search to determine the threshold amplitude needed to obtain
             neural excitation for a given duration, PRF and duty cycle.
 
@@ -272,7 +279,6 @@ class Node(metaclass=abc.ABCMeta):
             :param toffset: duration of the offset (s)
             :param PRF: pulse repetition frequency (Hz)
             :param DC: pulse duty cycle (-)
-            :param fs: sonophore membrane coverage fraction (-)
             :param method: integration method
             :param xfunc: function determining whether condition is reached from simulation output
             :return: determined threshold amplitude (Pa)
@@ -281,66 +287,39 @@ class Node(metaclass=abc.ABCMeta):
         if xfunc is None:
             xfunc = self.pneuron.titrationFunc
 
-        # Default amplitude interval
-        Arange = [0., self.getLookup().refs['A'].max()]
-
         return binarySearch(
             lambda x: xfunc(self.simulate(*x)[0]),
-            [Fdrive, tstim, toffset, PRF, DC, fs, method], 1, self.Arange, self.A_conv_thr
-        )
-
-    # def titrate(self, tstim, toffset, PRF, DC, dt, atol, Arange=None):
-    #     ''' Use a binary search to determine the threshold excitation amplitude.
-
-    #         :param tstim: stimulus duration (s)
-    #         :param toffset: duration of the offset (s)
-    #         :param PRF: pulse repetition frequency (Hz)
-    #         :param DC: pulse duty cycle (-)
-    #         :param dt: integration time step
-    #         :param atol: integration error tolerance
-    #         :param Arange: amplitude search interval
-    #         :return: threshold excitation amplitude (kPa)
-    #     '''
-
-    #     # Determine amplitude interval if needed
-    #     if Arange is None:
-    #         Arange = (self.Aref.min(), self.Aref.max())  # in modality units
-    #     A = (Arange[0] + Arange[1]) / 2
-
-    #     # Run simulation and detect spikes on ith trace
-    #     data, _ = self.simulate(A, tstim, toffset, PRF, DC, dt, atol)
-    #     ipeaks, *_ = findPeaks(data['Qm'].values, mph=SPIKE_MIN_QAMP, mpp=SPIKE_MIN_QPROM)
-    #     nspikes = ipeaks.size
-
-    #     # If accurate threshold is found, return simulation results
-    #     if (Arange[1] - Arange[0]) <= DELTA_US_AMP_MIN and nspikes == 1:
-    #         print('threshold amplitude: {}Pa'.format(si_format(A * 1e3, 2, space=' ')))
-    #         return A
-
-    #     # Otherwise, refine titration interval and iterate recursively
-    #     else:
-    #         if nspikes == 0:
-    #             # if Adrive too close to max then stop
-    #             if (self.Aref.max() - A) <= DELTA_US_AMP_MIN:
-    #                 print('no threshold amplitude found within (0-{:.0f}) kPa search interval'.format(
-    #                     self.Aref.max()))
-    #                 return np.nan
-    #             Arange = (A, Arange[1])
-    #         else:
-    #             Arange = (Arange[0], A)
-    #         return self.titrate(tstim, toffset, PRF, DC, dt, atol, Arange=Arange)
+            [tstim, toffset, PRF, DC], 0, self.Arange, self.A_conv_thr)
 
     @property
     @abc.abstractmethod
     def filecode(self, *args):
         raise NotImplementedError
 
+    def checkAmplitude(self, args):
+        ''' If no (None) amplitude provided in the list of input parameters,
+            perform a titration to find the threshold amplitude and add it to the list.
+        '''
+        if None in args:
+            iA = args.index(None)
+            new_args = [x for x in args if x is not None]
+            Athr = self.titrate(*new_args)
+            if np.isnan(Athr):
+                logger.error('Could not find threshold excitation amplitude')
+                return None
+            new_args.insert(iA, Athr)
+            args = new_args
+        return args
+
+    def meta(self, *args):
+        return self.pneuron.meta(*args)
+
     def runAndSave(self, outdir, *args):
         ''' Simulate the model for specific parameters and save the results
             in a specific output directory. '''
-        args = self.pneuron.checkAmplitude(args)
+        args = self.checkAmplitude(args)
         data, tcomp = self.simulate(*args)
-        meta = self.pneuron.meta(*args)
+        meta = self.meta(*args)
         meta['tcomp'] = tcomp
         fpath = '{}/{}.pkl'.format(outdir, self.filecode(*args))
         with open(fpath, 'wb') as fh:
@@ -357,6 +336,8 @@ class IintraNode(Node):
         'unit': 'A/m2',
         'factor': 1e-3
     }
+    Arange = (0., 2 * AMP_UPPER_BOUND_ESTIM)
+    A_conv_thr = THRESHOLD_CONV_RANGE_ESTIM
 
     def setStimAmp(self, Astim):
         ''' Set electrical stimulation amplitude
@@ -386,6 +367,8 @@ class VextNode(Node):
         'unit': 'V',
         'factor': 1e-3
     }
+    Arange = ...
+    A_conv_thr = ...
 
     def setStimAmp(self, Vext):
         ''' Insert extracellular mechanism into section and set extracellular potential value.
@@ -410,6 +393,7 @@ class SonicNode(Node):
         'unit': 'Pa',
         'factor': 1e0
     }
+    A_conv_thr = THRESHOLD_CONV_RANGE_ASTIM
 
     def __init__(self, pneuron, id=None, a=32e-9, Fdrive=500e3, fs=1.):
         ''' Initialization.
@@ -426,6 +410,7 @@ class SonicNode(Node):
         self.fs = fs
         self.Fdrive = Fdrive
         super().__init__(pneuron, id=id)
+        self.Arange = (0., self.getLookup().refs['A'].max())
 
     def __repr__(self):
         return '{}({:.1f} nm, {}, {:.0f} kHz)'.format(
@@ -441,12 +426,15 @@ class SonicNode(Node):
         return self.nbls.getLookup2D(self.Fdrive, self.fs)
 
     def setStimAmp(self, Adrive):
-        ''' Set US stimulation amplitude (and set modality to "US").
+        ''' Set US stimulation amplitude.
 
-            :param Adrive: acoustic pressure amplitude (kPa)
+            :param Adrive: acoustic pressure amplitude (Pa)
         '''
         self.printStimAmp(Adrive)
-        setattr(self.section, 'Adrive_{}'.format(self.pneuron.name), Adrive)
+        setattr(self.section, 'Adrive_{}'.format(self.pneuron.name), Adrive * 1e-3)
 
     def filecode(self, *args):
         return self.nbls.filecode(self.Fdrive, *args, self.fs, 'NEURON')
+
+    def meta(self, *args):
+        return self.nbls.meta(self.Fdrive, *args, self.fs, 'NEURON')
