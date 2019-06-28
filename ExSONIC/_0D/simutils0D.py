@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 16:41:08
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-06-27 15:10:48
+# @Last Modified time: 2019-06-28 15:29:11
 
 import time
 import numpy as np
@@ -14,7 +14,7 @@ from PySONIC.utils import si_format, pow10_format
 from PySONIC.core import NeuronalBilayerSonophore
 from PySONIC.plt import GroupedTimeSeries
 
-from .node import Node, SonicNode
+from .node import IintraNode, SonicNode
 
 
 def compare(neuron, A, tstim, toffset, PRF=100., DC=1., a=None, Fdrive=None, dt=None, atol=None,
@@ -23,7 +23,6 @@ def compare(neuron, A, tstim, toffset, PRF=100., DC=1., a=None, Fdrive=None, dt=
         SONIC model.
     '''
     comp_keys = ['Python', 'NEURON']
-    modality = {True: 'Iinj', False: 'US'}[a is None]
 
     # Create comparative figure
     fs = 10
@@ -36,8 +35,6 @@ def compare(neuron, A, tstim, toffset, PRF=100., DC=1., a=None, Fdrive=None, dt=
         for item in ax.get_xticklabels() + ax.get_xticklabels():
             item.set_fontsize(fs)
     fig.subplots_adjust(top=0.8, left=0.05, right=0.95)
-    Aunit = 'A/m2' if modality == 'Iinj' else 'Pa'
-    Afactor = 1e-3 if modality == 'Iinj' else 1e3
     for ax in axes[:2]:
         ax.set_xlabel('time (ms)', fontsize=fs)
     ax = axes[0]
@@ -55,28 +52,21 @@ def compare(neuron, A, tstim, toffset, PRF=100., DC=1., a=None, Fdrive=None, dt=
     ax.set_yscale('log')
     ax.set_ylim(1e-3, 1e2)
 
-    data, tcomp = {}, {}
-
-    # Run NEURON simulation
-    key = 'NEURON'
-    if modality == 'US':
-        nrn_model = SonicNode(neuron, a=a, Fdrive=Fdrive, verbose=verbose)
-        nrn_model.setUSdrive(A)
-    elif modality == 'Iinj':
-        nrn_model = Node(neuron)
-        nrn_model.setIinj(A)
-    data[key], tcomp[key] = nrn_model.simulate(tstim, toffset, PRF, DC, dt, atol)
-
-    # Run Python stimulation
-    key = 'Python'
+    # Initialize Python and NEURON models
     args = [tstim, toffset, PRF, DC]
-    if modality == 'US':
+    if a is not None:
+        nrn_model = SonicNode(neuron, a=a, Fdrive=Fdrive)
         py_model = NeuronalBilayerSonophore(a * 1e-9, neuron)
-        args = [Fdrive * 1e3, A * 1e3] + args
-    elif modality == 'Iinj':
+        py_args = [Fdrive * 1e3, A * 1e3] + args
+    else:
+        nrn_model = IintraNode(neuron)
         py_model = neuron
-        args = [A] + args
-    data[key], tcomp[key] = py_model.simulate(*args)
+        py_args = [A] + args
+
+    # Run NEURON and Python simulations
+    data, tcomp = {}, {}
+    data['NEURON'], tcomp['NEURON'] = nrn_model.simulate(A, *args, dt, atol)
+    data['Python'], tcomp['Python'] = py_model.simulate(*py_args)
 
     # Get pulses timing
     tpatch_on, tpatch_off = GroupedTimeSeries.getStimPulses(
@@ -107,7 +97,9 @@ def compare(neuron, A, tstim, toffset, PRF=100., DC=1., a=None, Fdrive=None, dt=
 
     # Add figure title
     fig.suptitle('{}, A = {}{}, {}s'.format(
-        nrn_model.strBiophysics(), si_format(A * Afactor, space=' '), Aunit, si_format(tstim, space=' '),
+        nrn_model.strBiophysics(),
+        si_format(A * nrn_model.modality['factor'], space=' '), nrn_model.modality['unit'],
+        si_format(tstim, space=' '),
         'adaptive time step' if dt is None else 'dt = ${}$ ms'.format(pow10_format(dt * 1e3))),
         fontsize=18)
 

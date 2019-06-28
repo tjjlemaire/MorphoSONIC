@@ -3,37 +3,43 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-06-27 15:11:32
+# @Last Modified time: 2019-06-28 17:07:46
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
 # @Last Modified time: 2019-06-07 13:59:37
 
+import pickle
+import abc
 import numpy as np
 import pandas as pd
 from neuron import h
 
 from PySONIC.core import NeuronalBilayerSonophore
-from PySONIC.utils import si_format, timer
+from PySONIC.utils import si_format, timer, logger
 
 from ..pyhoc import *
 from ..utils import getNmodlDir
 from ..constants import *
 
 
-class Node:
+class Node(metaclass=abc.ABCMeta):
+    ''' Generic node interface. '''
 
-    def __init__(self, pneuron, verbose=False):
+    @property
+    @abc.abstractmethod
+    def modality(self):
+        ''' Keyword used to characterize stimulation modality. '''
+        raise NotImplementedError
+
+    def __init__(self, pneuron):
         ''' Initialization.
 
             :param pneuron: point-neuron model
-            :param verbose: boolean stating whether to print out details
         '''
         # Initialize arguments
         self.pneuron = pneuron
-        self.verbose = verbose
-        if self.verbose:
-            print('---------- Creating model: {} ----------'.format(self))
+        logger.debug('Creating {} model'.format(self))
 
         # Load mechanisms and set function tables of appropriate membrane mechanism
         load_mechanisms(getNmodlDir(), self.pneuron.name)
@@ -44,7 +50,7 @@ class Node:
         self.section.insert(self.pneuron.name)
 
     def __repr__(self):
-        return 'Node({})'.format(self.pneuron.name)
+        return '{}({})'.format(self.__class__.__name__, self.pneuron)
 
     def strBiophysics(self):
         return '{} neuron'.format(self.pneuron.name)
@@ -68,8 +74,7 @@ class Node:
             and link them to FUNCTION_TABLEs in the MOD file of the corresponding
             membrane mechanism.
         '''
-        if self.verbose:
-            print('loading membrane dynamics lookup tables for {} neuron'.format(self.pneuron.name))
+        logger.debug('loading %s membrane dynamics lookup tables', self.pneuron.name)
 
         # Get Lookup
         lkp = self.getLookup()
@@ -89,28 +94,16 @@ class Node:
         for k, v in self.lkp.items():
             setFuncTable(self.pneuron.name, k, v, self.Aref, self.Qref)
 
-    def setIinj(self, Astim):
-        ''' Set electrical stimulation amplitude
+    def printStimAmp(self, value):
+        logger.debug('Stimulus amplitude: {} = {}{}'.format(
+            self.modality['name'],
+            si_format(value * self.modality['factor'], space=' ', precision=2),
+            self.modality['unit']))
 
-            :param Astim: injected current density (mA/m2).
-        '''
-        self.Iinj = Astim * self.section(0.5).area() * 1e-6  # nA
-        if self.verbose:
-            print('Setting electrical stimulus amplitude: Iinj = {}A'
-                  .format(si_format(self.Iinj * 1e-9, 2, space=' ')))
-        self.iclamp = h.IClamp(self.section(0.5))
-        self.iclamp.delay = 0  # we want to exert control over amp starting at 0 ms
-        self.iclamp.dur = 1e9  # dur must be long enough to span all our changes
-        self.modality = 'Iinj'
-
-    def setVext(self, Vext):
-        ''' Insert extracellular mechanism into section and set extracellular potential value.
-
-            :param Vext: extracellular potential (mV).
-        '''
-        insertVext(self.section)
-        self.Vext = Vext
-        self.modality = 'Vext'
+    @property
+    @abc.abstractmethod
+    def setStimAmp(self, value):
+        raise NotImplementedError
 
     def setStimON(self, value):
         ''' Set stimulation ON or OFF.
@@ -119,10 +112,6 @@ class Node:
             :return: new stimulation state
         '''
         setattr(self.section, 'stimon_{}'.format(self.pneuron.name), value)
-        if self.modality == 'Iinj':
-            self.iclamp.amp = value * self.Iinj
-        elif self.modality == 'Vext':
-            self.section.e_extracellular = value * self.Vext
         return value
 
     def toggleStim(self):
@@ -210,9 +199,10 @@ class Node:
         return 0
 
     @timer
-    def simulate(self, tstim, toffset, PRF, DC, dt=None, atol=None):
+    def simulate(self, A, tstim, toffset, PRF, DC, dt=None, atol=None):
         ''' Set appropriate recording vectors, integrate and return output variables.
 
+            :param A: stimulus amplitude (in modality units)
             :param tstim: stimulus duration (s)
             :param toffset: stimulus offset duration (s)
             :param PRF: pulse repetition frequency (Hz)
@@ -221,6 +211,14 @@ class Node:
             :param atol: absolute error tolerance for adaptive time step method (default = 1e-3)
         '''
 
+        logger.info(
+            '%s: simulation @ %s = %s%s, t = %ss (%ss offset)%s',
+            self, self.modality['name'],
+            si_format(A * self.modality['factor'], space=' ', precision=2), self.modality['unit'],
+            *si_format([tstim, toffset], 1, space=' '),
+            (', PRF = {}Hz, DC = {:.2f}%'.format(
+                si_format(PRF, 2, space=' '), DC * 1e2) if DC < 1.0 else ''))
+
         # Set recording vectors
         t = setTimeProbe()
         stim = setStimProbe(self.section, self.pneuron.name)
@@ -228,6 +226,9 @@ class Node:
         Vm = setRangeProbe(self.section, 'Vm_{}'.format(self.pneuron.name))
         states = {k: setRangeProbe(self.section, '{}_{}'.format(alias(k), self.pneuron.name))
                   for k in self.pneuron.statesNames()}
+
+        # Set stimulus amplitude
+        self.setStimAmp(A)
 
         # Integrate model
         self.integrate(tstim + toffset, tstim, PRF, DC, dt, atol)
@@ -245,19 +246,136 @@ class Node:
         # Return dataframe
         return data
 
+    def titrate(self, tstim, toffset, PRF, DC, dt, atol, Arange=None):
+        ''' Use a binary search to determine the threshold excitation amplitude.
+
+            :param tstim: stimulus duration (s)
+            :param toffset: duration of the offset (s)
+            :param PRF: pulse repetition frequency (Hz)
+            :param DC: pulse duty cycle (-)
+            :param dt: integration time step
+            :param atol: integration error tolerance
+            :param Arange: amplitude search interval
+            :return: threshold excitation amplitude (kPa)
+        '''
+
+        # Determine amplitude interval if needed
+        if Arange is None:
+            Arange = (0, self.Aref.max())  # kPa
+        A = (Arange[0] + Arange[1]) / 2  # kPa
+
+        # Run simulation and detect spikes on ith trace
+        t, y, stimon = self.simulate(A, tstim, toffset, PRF, DC, dt, atol)
+        Qm = y[0, :]
+        ipeaks, *_ = findPeaks(Qm, mph=SPIKE_MIN_QAMP, mpp=SPIKE_MIN_QPROM)
+        nspikes = ipeaks.size
+
+        # If accurate threshold is found, return simulation results
+        if (Arange[1] - Arange[0]) <= DELTA_US_AMP_MIN and nspikes == 1:
+            print('threshold amplitude: {}Pa'.format(si_format(A * 1e3, 2, space=' ')))
+            return A
+
+        # Otherwise, refine titration interval and iterate recursively
+        else:
+            if nspikes == 0:
+                # if Adrive too close to max then stop
+                if (self.Aref.max() - A) <= DELTA_US_AMP_MIN:
+                    print('no threshold amplitude found within (0-{:.0f}) kPa search interval'.format(
+                        self.Aref.max()))
+                    return np.nan
+                Arange = (A, Arange[1])
+            else:
+                Arange = (Arange[0], A)
+            return self.titrate(tstim, toffset, PRF, DC, dt, atol, Arange=Arange)
+
+    @property
+    @abc.abstractmethod
+    def filecode(self, *args):
+        raise NotImplementedError
+
+    def runAndSave(self, outdir, *args):
+        ''' Simulate the model for specific parameters and save the results
+            in a specific output directory. '''
+        args = self.pneuron.checkAmplitude(args)
+        data, tcomp = self.simulate(*args)
+        meta = self.pneuron.meta(*args)
+        meta['tcomp'] = tcomp
+        fpath = '{}/{}.pkl'.format(outdir, self.filecode(*args))
+        with open(fpath, 'wb') as fh:
+            pickle.dump({'meta': meta, 'data': data}, fh)
+        logger.debug('simulation data exported to "%s"', fpath)
+        return fpath
+
+
+class IintraNode(Node):
+    ''' Node used for simulations with intracellular current. '''
+
+    modality = {
+        'name': 'I_intra',
+        'unit': 'A/m2',
+        'factor': 1e-3
+    }
+
+    def setStimAmp(self, Astim):
+        ''' Set electrical stimulation amplitude
+
+            :param Astim: injected current density (mA/m2).
+        '''
+        self.printStimAmp(Astim)
+        self.Iinj = Astim * self.section(0.5).area() * 1e-6  # nA
+        self.iclamp = h.IClamp(self.section(0.5))
+        self.iclamp.delay = 0  # we want to exert control over amp starting at 0 ms
+        self.iclamp.dur = 1e9  # dur must be long enough to span all our changes
+
+    def setStimON(self, value):
+        value = super().setStimON(value)
+        self.iclamp.amp = value * self.Iinj
+        return value
+
+    def filecode(self, *args):
+        return self.pneuron.filecode(*args) + '_NEURON'
+
+
+class VextNode(Node):
+    ''' Node used for simulations with extracellular potential. '''
+
+    modality = {
+        'name': 'V_ext',
+        'unit': 'V',
+        'factor': 1e-3
+    }
+
+    def setStimAmp(self, Vext):
+        ''' Insert extracellular mechanism into section and set extracellular potential value.
+
+            :param Vext: extracellular potential (mV).
+        '''
+        self.printStimAmp(Vext)
+        insertVext(self.section)
+        self.Vext = Vext
+
+    def setStimON(self, value):
+        value = super().setStimON(value)
+        self.section.e_extracellular = value * self.Vext
+        return value
 
 
 class SonicNode(Node):
-    ''' Point-neuron SONIC model in NEURON. '''
+    ''' Node used for simulations with US stimulus. '''
 
-    def __init__(self, pneuron, a=32., Fdrive=500., fs=1., verbose=False):
+    modality = {
+        'name': 'A_US',
+        'unit': 'Pa',
+        'factor': 1e3
+    }
+
+    def __init__(self, pneuron, a=32., Fdrive=500., fs=1.):
         ''' Initialization.
 
             :param pneuron: point-neuron model
             :param a: sonophore diameter (nm)
             :param Fdrive: ultrasound frequency (kHz)
             :param fs: sonophore membrane coverage fraction (-)
-            :param verbose: boolean stating whether to print out details
         '''
 
         if fs > 1. or fs < 0.:
@@ -266,10 +384,11 @@ class SonicNode(Node):
         self.a = a
         self.fs = fs
         self.Fdrive = Fdrive
-        super().__init__(pneuron, verbose=verbose)
+        super().__init__(pneuron)
 
     def __repr__(self):
-        return 'Sonic' + super().__repr__()
+        return '{}({:.1f} nm, {}, {:.0f} kHz)'.format(
+            self.__class__.__name__, self.a, self.pneuron, self.Fdrive)
 
     def strBiophysics(self):
         return super().strBiophysics() + ', a = {}m{}, f = {}Hz'.format(
@@ -280,60 +399,13 @@ class SonicNode(Node):
     def getLookup(self):
         return self.nbls.getLookup2D(self.Fdrive * 1e3, self.fs)
 
-    def setUSdrive(self, Adrive):
+    def setStimAmp(self, Adrive):
         ''' Set US stimulation amplitude (and set modality to "US").
 
             :param Adrive: acoustic pressure amplitude (kPa)
         '''
-        if self.verbose:
-            print('Setting acoustic stimulus amplitude: Adrive = {}Pa'
-                  .format(si_format(Adrive * 1e3, space=' ')))
+        self.printStimAmp(Adrive)
         setattr(self.section, 'Adrive_{}'.format(self.pneuron.name), Adrive)
 
-    def setStimON(self, value):
-        setattr(self.section, 'stimon_{}'.format(self.pneuron.name), value)
-        return value
-
-    def titrateUS(self, tstim, toffset, PRF, DC, dt, atol, Arange=None):
-        ''' Use a dichotomic recursive search to determine the threshold acoustic pressure
-            amplitude needed to obtain neural excitation for a given duration, PRF and duty cycle.
-
-            :param tstim: stimulus duration (s)
-            :param toffset: duration of the offset (s)
-            :param PRF: pulse repetition frequency (Hz)
-            :param DC: pulse duty cycle (-)
-            :param dt: integration time step
-            :param atol: integration error tolerance
-            :param Arange: search interval for Adrive, iteratively refined (kPa)
-            :return: threshold excitation amplitude (kPa)
-        '''
-
-        # Determine amplitude interval if needed
-        if Arange is None:
-            Arange = (0, self.Aref.max())  # kPa
-        Adrive = (Arange[0] + Arange[1]) / 2  # kPa
-        self.setUSdrive(Adrive)
-
-        # Run simulation and detect spikes on ith trace
-        t, y, stimon = self.simulate(tstim, toffset, PRF, DC, dt, atol)
-        Qm = y[0, :]
-        ipeaks, *_ = findPeaks(Qm, mph=SPIKE_MIN_QAMP, mpp=SPIKE_MIN_QPROM)
-        nspikes = ipeaks.size
-
-        # If accurate threshold is found, return simulation results
-        if (Arange[1] - Arange[0]) <= DELTA_US_AMP_MIN and nspikes == 1:
-            print('threshold amplitude: {}Pa'.format(si_format(Adrive * 1e3, 2, space=' ')))
-            return Adrive
-
-        # Otherwise, refine titration interval and iterate recursively
-        else:
-            if nspikes == 0:
-                # if Adrive too close to max then stop
-                if (self.Aref.max() - Adrive) <= DELTA_US_AMP_MIN:
-                    print('no threshold amplitude found within (0-{:.0f}) kPa search interval'.format(
-                        self.Aref.max()))
-                    return np.nan
-                Arange = (Adrive, Arange[1])
-            else:
-                Arange = (Arange[0], Adrive)
-            return self.titrateUS(tstim, toffset, PRF, DC, dt, atol, Arange=Arange)
+    def filecode(self, *args):
+        return self.nbls.filecode(self.Fdrive * 1e3, *args, self.fs * 1e2, 'NEURON')

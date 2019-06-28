@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-06-26 18:28:48
+# @Last Modified time: 2019-06-28 13:59:40
 # @Author: Theo Lemaire
 # @Date:   2018-08-21 19:48:04
 # @Last Modified by:   Theo Lemaire
@@ -119,7 +119,7 @@ def setFuncTable(mechname, fname, matrix, xref, yref):
     return fillTable(matrix._ref_x[0][0], nx, xref._ref_x[0], ny, yref._ref_x[0])
 
 
-def attachIClamp(sec, dur, amp, delay=0, loc=0.5):
+def attachIClamp(sec, amp, delay=0, dur=1e9, loc=0.5):
     ''' Attach a current Clamp to a section.
 
         :param sec: section to attach the current clamp.
@@ -130,10 +130,9 @@ def attachIClamp(sec, dur, amp, delay=0, loc=0.5):
         :return: IClamp object (must be returned to caller space to be effective)
     '''
     pulse = h.IClamp(sec(loc))
-    pulse.delay = delay
-    pulse.dur = dur
-    pulse.amp = amp  # nA
-
+    pulse.delay = delay  # ms
+    pulse.dur = dur      # ms
+    pulse.amp = amp      # nA
     return pulse
 
 
