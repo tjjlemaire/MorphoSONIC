@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-06-28 19:54:58
+# @Last Modified time: 2019-06-28 20:54:40
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
@@ -12,9 +12,11 @@
 import pickle
 import abc
 import numpy as np
+from scipy.interpolate import interp1d
 import pandas as pd
 from neuron import h
 
+from PySONIC.constants import DT_EFFECTIVE
 from PySONIC.core import NeuronalBilayerSonophore
 from PySONIC.utils import si_format, timer, logger
 
@@ -248,50 +250,85 @@ class Node(metaclass=abc.ABCMeta):
         for k, v in states.items():
             data[k] = vec_to_array(v)
 
-        # Return dataframe
-        return data
+        return self.resample(data, DT_EFFECTIVE)
 
-    def titrate(self, tstim, toffset, PRF, DC, dt, atol, Arange=None):
-        ''' Use a binary search to determine the threshold excitation amplitude.
+    @staticmethod
+    def resample(data, dt):
+        ''' Resample dataframe at regular time step. '''
+        t = data['t'].values
+        n = int(np.ptp(t) / dt) + 1
+        tnew = np.linspace(t.min(), t.max(), n)
+        new_data = {}
+        for key in data:
+            kind = 'nearest' if key == 'stimstate' else 'linear'
+            new_data[key] = interp1d(t, data[key].values, kind=kind)(tnew)
+        return pd.DataFrame(new_data)
 
-            :param tstim: stimulus duration (s)
+    def titrate(self, tstim, toffset, PRF=100., DC=1., fs=1., xfunc=None):
+        ''' Use a binary search to determine the threshold amplitude needed to obtain
+            neural excitation for a given duration, PRF and duty cycle.
+
+            :param tstim: duration of US stimulation (s)
             :param toffset: duration of the offset (s)
             :param PRF: pulse repetition frequency (Hz)
             :param DC: pulse duty cycle (-)
-            :param dt: integration time step
-            :param atol: integration error tolerance
-            :param Arange: amplitude search interval
-            :return: threshold excitation amplitude (kPa)
+            :param fs: sonophore membrane coverage fraction (-)
+            :param method: integration method
+            :param xfunc: function determining whether condition is reached from simulation output
+            :return: determined threshold amplitude (Pa)
         '''
+        # Default output function
+        if xfunc is None:
+            xfunc = self.pneuron.titrationFunc
 
-        # Determine amplitude interval if needed
-        if Arange is None:
-            Arange = (0, self.Aref.max())  # kPa
-        A = (Arange[0] + Arange[1]) / 2  # kPa
+        # Default amplitude interval
+        Arange = [0., self.getLookup().refs['A'].max()]
 
-        # Run simulation and detect spikes on ith trace
-        t, y, stimon = self.simulate(A, tstim, toffset, PRF, DC, dt, atol)
-        Qm = y[0, :]
-        ipeaks, *_ = findPeaks(Qm, mph=SPIKE_MIN_QAMP, mpp=SPIKE_MIN_QPROM)
-        nspikes = ipeaks.size
+        return binarySearch(
+            lambda x: xfunc(self.simulate(*x)[0]),
+            [Fdrive, tstim, toffset, PRF, DC, fs, method], 1, self.Arange, self.A_conv_thr
+        )
 
-        # If accurate threshold is found, return simulation results
-        if (Arange[1] - Arange[0]) <= DELTA_US_AMP_MIN and nspikes == 1:
-            print('threshold amplitude: {}Pa'.format(si_format(A * 1e3, 2, space=' ')))
-            return A
+    # def titrate(self, tstim, toffset, PRF, DC, dt, atol, Arange=None):
+    #     ''' Use a binary search to determine the threshold excitation amplitude.
 
-        # Otherwise, refine titration interval and iterate recursively
-        else:
-            if nspikes == 0:
-                # if Adrive too close to max then stop
-                if (self.Aref.max() - A) <= DELTA_US_AMP_MIN:
-                    print('no threshold amplitude found within (0-{:.0f}) kPa search interval'.format(
-                        self.Aref.max()))
-                    return np.nan
-                Arange = (A, Arange[1])
-            else:
-                Arange = (Arange[0], A)
-            return self.titrate(tstim, toffset, PRF, DC, dt, atol, Arange=Arange)
+    #         :param tstim: stimulus duration (s)
+    #         :param toffset: duration of the offset (s)
+    #         :param PRF: pulse repetition frequency (Hz)
+    #         :param DC: pulse duty cycle (-)
+    #         :param dt: integration time step
+    #         :param atol: integration error tolerance
+    #         :param Arange: amplitude search interval
+    #         :return: threshold excitation amplitude (kPa)
+    #     '''
+
+    #     # Determine amplitude interval if needed
+    #     if Arange is None:
+    #         Arange = (self.Aref.min(), self.Aref.max())  # in modality units
+    #     A = (Arange[0] + Arange[1]) / 2
+
+    #     # Run simulation and detect spikes on ith trace
+    #     data, _ = self.simulate(A, tstim, toffset, PRF, DC, dt, atol)
+    #     ipeaks, *_ = findPeaks(data['Qm'].values, mph=SPIKE_MIN_QAMP, mpp=SPIKE_MIN_QPROM)
+    #     nspikes = ipeaks.size
+
+    #     # If accurate threshold is found, return simulation results
+    #     if (Arange[1] - Arange[0]) <= DELTA_US_AMP_MIN and nspikes == 1:
+    #         print('threshold amplitude: {}Pa'.format(si_format(A * 1e3, 2, space=' ')))
+    #         return A
+
+    #     # Otherwise, refine titration interval and iterate recursively
+    #     else:
+    #         if nspikes == 0:
+    #             # if Adrive too close to max then stop
+    #             if (self.Aref.max() - A) <= DELTA_US_AMP_MIN:
+    #                 print('no threshold amplitude found within (0-{:.0f}) kPa search interval'.format(
+    #                     self.Aref.max()))
+    #                 return np.nan
+    #             Arange = (A, Arange[1])
+    #         else:
+    #             Arange = (Arange[0], A)
+    #         return self.titrate(tstim, toffset, PRF, DC, dt, atol, Arange=Arange)
 
     @property
     @abc.abstractmethod
