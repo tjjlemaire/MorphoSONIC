@@ -3,61 +3,206 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-03-18 21:17:03
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-06-17 10:56:34
+# @Last Modified time: 2019-06-30 01:45:37
 
+import pprint
 import inspect
 import re
 from time import gmtime, strftime
 
 from PySONIC.constants import FARADAY, Rg
+from PySONIC.core import PointNeuronTranslator
 
 
-def escaped_pow(x):
-    return ' * '.join([x.group(1)] * int(x.group(2)))
-
-
-class NmodlGenerator:
+class NmodlGenerator(PointNeuronTranslator):
 
     tabreturn = '\n   '
     NEURON_protected_vars = ['O', 'C']
+    func_table_pattern = 'FUNCTION_TABLE {}(A(kPa), Q(nC/cm2)) ({})'
+    current_pattern = 'NONSPECIFIC_CURRENT {} : {}'
+    conductance_pattern = '(g)([A-Za-z0-9_]*)(Leak|bar)'
+    reversal_potential_pattern = '(E)([A-Za-z0-9_]+)'
+    time_constant_pattern = '(tau)([A-Za-z0-9_]+)'
+    rate_constant_pattern = '(k)([0-9_]+)'
+    ion_concentration_pattern = '(Cai|Nai)([A-Za-z0-9_]*)'
 
-    def __init__(self, pneuron):
-        self.pneuron = pneuron
-        self.translated_states = [self.translateState(s) for s in self.pneuron.states]
+    def __init__(self, pclass):
+        super().__init__(pclass, verbose=False)
+        self.params = {}
+        self.ftables_dict = {'V': self.func_table_pattern.format('V', 'mV')}
+        self.dstates_str = self.parseDerStates()
+        self.sstates_str = self.parseSteadyStates()
+        self.currents_desc = {}
+        self.currents = self.parseCurrents()
 
-    def allBlocks(self):
-        return '\n\n'.join([
-            self.title(),
-            self.description(),
-            self.constants(),
-            self.tscale(),
-            self.neuron_block(),
-            self.parameter_block(),
-            self.state_block(),
-            self.assigned_block(),
-            self.function_tables(),
-            self.initial_block(),
-            self.breakpoint_block(),
-            self.derivative_block()
-        ])
+    @classmethod
+    def translateState(cls, state):
+        return '{}{}'.format(state, '1' if state in cls.NEURON_protected_vars else '')
 
-    def print(self):
-        print(self.allBlocks())
+    @staticmethod
+    def escapedPow(x):
+        return ' * '.join([x.group(1)] * int(x.group(2)))
 
-    def dump(self, outfile):
-        with open(outfile, "w") as fh:
-            fh.write(self.allBlocks())
+    @classmethod
+    def replacePowerExponents(cls, expr):
+        return re.sub(r'([A-Za-z][A-Za-z0-9]*)\*\*([0-9])', cls.escapedPow, expr)
 
-    def translateState(self, state):
-        return '{}{}'.format(state, '1' if state in self.NEURON_protected_vars else '')
+    @staticmethod
+    def getDocstring(func):
+        return inspect.getdoc(func).replace('\n', ' ').strip()
+
+    @staticmethod
+    def funcTableExpr(fname, fargs):
+        return '{}({})'.format(fname, fargs)
+
+    def addToFuncTables(self, expr):
+        ''' Add function table corresponding to function expression '''
+        for pattern in [self.alphax_pattern, self.betax_pattern]:
+            if pattern.match(expr):
+                self.ftables_dict[expr] = self.func_table_pattern.format(expr, '/ms')
+        if self.taux_pattern.match(expr):
+            self.ftables_dict[expr] = self.func_table_pattern.format(expr, 'ms')
+        if self.xinf_pattern.match(expr):
+            self.ftables_dict[expr] = self.func_table_pattern.format(expr, '')
+
+    def addToParameters(self, s):
+        ''' Add MOD parameters for each class attribute used in Python expression. '''
+        class_attr_matches  = self.getClassAttributeCalls(s)
+        for m in class_attr_matches:
+            attr_name = m.group(2)
+            attr_val = getattr(self.pclass, attr_name)
+            if not inspect.isroutine(attr_val):
+                if re.match(self.conductance_pattern, attr_name):
+                    self.params[attr_name] = {'val': attr_val * 1e-4, 'unit': 'S/cm2'}
+                elif re.match(self.reversal_potential_pattern, attr_name):
+                    self.params[attr_name] = {'val': attr_val, 'unit': 'mV'}
+                elif re.match(self.time_constant_pattern, attr_name):
+                    self.params[attr_name] = {'val': attr_val * 1e3, 'unit': 'ms'}
+                elif re.match(self.rate_constant_pattern, attr_name):
+                    self.params[attr_name] = {'val': attr_val * 1e-3, 'unit': '/ms'}
+                elif re.match(self.ion_concentration_pattern, attr_name):
+                    self.params[attr_name] = {'val': attr_val, 'unit': 'M'}
+                else:
+                    self.params[attr_name] = {'val': attr_val, 'unit': ''}
+
+    def translateExpr(self, expr, lkp_args=None, desc_dict=None):
+        ''' Translate Python expression into MOD expression, by parsing all
+            internal function calls recursively.
+        '''
+
+        # Get all function calls in expression
+        matches = self.getFuncCalls(expr)
+
+        # For each function call
+        for m in matches:
+
+            # Get function name and arguments
+            fcall, fname, fargs = self.getFuncArgs(m)
+
+            # If sole argument is Vm and lookup replacement mode is active
+            if lkp_args is not None and len(fargs) == 1 and fargs[0] == 'Vm':
+                # Add lookup to the list of function tables
+                self.addToFuncTables(fname)
+
+                # Replace function call by equivalent function table call
+                new_fcall = self.funcTableExpr(fname, lkp_args)
+                expr = expr.replace(fcall, new_fcall)
+
+            # If numpy function, remove "np" prefix assuming that function is in MOD library
+            elif fcall.startswith('np.'):
+                expr = expr.replace(fcall, fcall.split('np.')[1])
+
+            # Otherwise
+            else:
+                # Get function object
+                func = getattr(self.pclass, fname)
+
+                # If description mode active
+                if desc_dict is not None:
+                    # Add function docstring fo description dictionary
+                    desc_dict[fname] = self.getDocstring(func)
+
+                # Get function source code lines
+                func_lines = inspect.getsource(func).split("'''", 2)[-1].splitlines()
+                code_lines = []
+                for line in func_lines:
+                    stripped_line = line.strip()
+                    if len(stripped_line) > 0:
+                        if not any(stripped_line.startswith(x) for x in ['@', 'def']):
+                            code_lines.append(stripped_line)
+
+                # If function contains multiple statements, raise error
+                if len(code_lines) > 1 and not code_lines[0].startswith('return'):
+                    raise ValueError('cannot parse multi-statement function {}'.format(fname))
+
+                # Join lines into new nested expression and remove comments
+                func_exp = ''.join(code_lines).split('return ', 1)[1].split('#', 1)[0].strip()
+
+                # Translate internal calls in nested expression recursively
+                expr = expr.replace(fcall, self.translateExpr(func_exp, lkp_args=lkp_args))
+
+        # Add potential MOD parameters if class atributes were used in expression
+        self.addToParameters(expr)
+
+        # Remove comments and strip off all references to class or instance
+        expr = expr.replace('self.', '').replace('cls.', '').split('#', 1)[0].strip()
+
+        # Replace integer power exponents by multiplications
+        expr = self.replacePowerExponents(expr)
+
+        # Replace states getters (x['...']) by MOD translated states
+        matches = re.finditer(r"(x\[')([A-Za-z0-9_]+)('\])", expr)
+        for m in matches:
+            left, state, right = m.groups()
+            expr = expr.replace("{}{}{}".format(left, state, right), self.translateState(state))
+
+        # Return expression
+        return expr
+
+    def parseDerStates(self):
+        ''' Parse neuron's derStates method to construct adapted DERIVATIVE block. '''
+        dstates_str = self.parseLambdaDict(
+            self.pclass.derStates(),
+            lambda *args: self.translateExpr(*args, lkp_args='Adrive * stimon, v'))
+        if self.verbose:
+            print('---------- derStates ----------')
+            pprint.PrettyPrinter(indent=4).pprint(dstates_str)
+            print('---------- function tables ----------')
+            pprint.PrettyPrinter(indent=4).pprint(self.ftables_dict)
+        return dstates_str
+
+    def parseSteadyStates(self):
+        ''' Parse neuron's steadyStates method to construct adapted INITIAL block. '''
+        sstates_str = self.parseLambdaDict(
+            self.pclass.steadyStates(),
+            lambda *args: self.translateExpr(*args, lkp_args='0, v'))
+        if self.verbose:
+            print('---------- steadyStates ----------')
+            pprint.PrettyPrinter(indent=4).pprint(sstates_str)
+        return sstates_str
+
+    def parseCurrents(self):
+        ''' Parse neuron's currents method to construct adapted BREAKPOINT block. '''
+        currents_str = self.parseLambdaDict(
+            self.pclass.currents(),
+            lambda *args: self.translateExpr(*args, desc_dict=self.currents_desc))
+        if self.verbose:
+            print('---------- currents ----------')
+            pprint.PrettyPrinter(indent=4).pprint(currents_str)
+        return currents_str
 
     def title(self):
-        return 'TITLE {} membrane mechanism'.format(self.pneuron.name)
+        return 'TITLE {} membrane mechanism'.format(self.pclass.name)
 
     def description(self):
         return '\n'.join([
             'COMMENT',
-            self.pneuron.getDesc(),
+            'Equations governing the effective membrane dynamics of a {}'.format(self.pclass.description()),
+            'upon electrical / ultrasonic stimulation, based on the SONIC model.',
+            '',
+            'Reference: Lemaire, T., Neufeld, E., Kuster, N., and Micera, S. (2019).',
+            'Understanding ultrasound neuromodulation using a computationally efficient',
+            'and interpretable model of intramembrane cavitation. J. Neural Eng.',
             '',
             '@Author: Theo Lemaire, EPFL',
             '@Date: {}'.format(strftime("%Y-%m-%d", gmtime())),
@@ -67,7 +212,7 @@ class NmodlGenerator:
 
     def constants(self):
         block = [
-            'FARADAY = {:.5e}     (coul)     : moles do not appear in units'.format(FARADAY),
+            'FARADAY = {:.5e}   (coul)     : moles do not appear in units'.format(FARADAY),
             'R = {:.5e}         (J/mol/K)  : Universal gas constant'.format(Rg)
         ]
         return 'CONSTANT {{{}{}\n}}'.format(self.tabreturn, self.tabreturn.join(block))
@@ -75,110 +220,82 @@ class NmodlGenerator:
     def tscale(self):
         return 'INDEPENDENT {t FROM 0 TO 1 WITH 1 (ms)}'
 
-    def neuron_block(self):
+    def neuronBlock(self):
         block = [
-            'SUFFIX {}'.format(self.pneuron.name),
+            'SUFFIX {}'.format(self.pclass.name),
             '',
-            ': Constituting currents',
-            *['NONSPECIFIC_CURRENT {}'.format(i) for i in self.pneuron.getCurrentsNames()],
+            *[self.current_pattern.format(k, v) for k, v in self.currents_desc.items()],
             '',
-            ': RANGE variables',
-            'RANGE Adrive, Vmeff : section specific',
-            'RANGE stimon : common to all sections (but set as RANGE to be accessible from caller)'
+            'RANGE Adrive, Vm : section specific',
+            'RANGE stimon     : common to all sections (but set as RANGE to be accessible from caller)'
         ]
         return 'NEURON {{{}{}\n}}'.format(self.tabreturn, self.tabreturn.join(block))
 
-    def parameter_block(self):
+    def parameterBlock(self):
         block = [
-            ': Parameters set by python/hoc caller',
-            'stimon : Stimulation state',
+            'stimon       : Stimulation state',
             'Adrive (kPa) : Stimulation amplitude',
             '',
-            ': Membrane properties',
-            'cm = {} (uF/cm2)'.format(self.pneuron.Cm0 * 1e2)
+            'cm = {} (uF/cm2)'.format(self.pclass.Cm0 * 1e2)
         ]
-
-        # Reversal potentials
-        possibles_E = list(set(['Na', 'K', 'Ca'] + [i[1:] for i in self.pneuron.getCurrentsNames()]))
-        for x in possibles_E:
-            nernst_pot = 'E{}'.format(x)
-            if hasattr(self.pneuron, nernst_pot):
-                block.append('{} = {} (mV)'.format(
-                    nernst_pot, getattr(self.pneuron, nernst_pot)))
-
-        # Conductances / permeabilities
-        for i in self.pneuron.getCurrentsNames():
-            suffix = '{}{}'.format(i[1:], '' if 'Leak' in i else 'bar')
-            factors = {'g': 1e-4, 'p': 1e2}
-            units = {'g': 'S/cm2', 'p': 'cm/s'}
-            for prefix in ['g', 'p']:
-                attr = '{}{}'.format(prefix, suffix)
-                if hasattr(self.pneuron, attr):
-                    val = getattr(self.pneuron, attr) * factors[prefix]
-                    block.append('{} = {} ({})'.format(attr, val, units[prefix]))
+        for k, v in self.params.items():
+            block.append('{} = {} ({})'.format(k, v['val'], v['unit']))
 
         return 'PARAMETER {{{}{}\n}}'.format(self.tabreturn, self.tabreturn.join(block))
 
-    def state_block(self):
-        block = [': Standard gating states', *self.translated_states]
+    def stateBlock(self):
+        block = ['{} : {}'.format(self.translateState(name), desc)
+                 for name, desc in self.pclass.states.items()]
         return 'STATE {{{}{}\n}}'.format(self.tabreturn, self.tabreturn.join(block))
 
-    def assigned_block(self):
+    def assignedBlock(self):
         block = [
-            ': Variables computed during the simulation and whose value can be retrieved',
-            'Vmeff (mV)',
-            'v (mV)',
-            *['{} (mA/cm2)'.format(i) for i in self.pneuron.getCurrentsNames()]
+            'v  (nC/cm2)',
+            'Vm (mV)',
+            *['{} (mA/cm2)'.format(k) for k in self.currents_desc.keys()]
         ]
         return 'ASSIGNED {{{}{}\n}}'.format(self.tabreturn, self.tabreturn.join(block))
 
     def function_tables(self):
-        block = [
-            ': Function tables to interpolate effective variables',
-            'FUNCTION_TABLE V(A(kPa), Q(nC/cm2)) (mV)',
-            *['FUNCTION_TABLE {}(A(kPa), Q(nC/cm2)) (mV)'.format(r) for r in self.pneuron.rates]
-        ]
-        return '\n'.join(block)
+        return '\n'.join(self.ftables_dict.values())
 
-    def initial_block(self):
-        block = [': Set initial states values']
-        for s in self.pneuron.states:
-            if s in self.pneuron.getGates():
-                block.append('{0} = alpha{1}(0, v) / (alpha{1}(0, v) + beta{1}(0, v))'.format(
-                    self.translateState(s), s.lower()))
-            else:
-                block.append('{} = ???'.format(self.translateState(s)))
-
+    def initialBlock(self):
+        block = ['{} = {}'.format(k, v) for k, v in self.sstates_str.items()]
         return 'INITIAL {{{}{}\n}}'.format(self.tabreturn, self.tabreturn.join(block))
 
-    def breakpoint_block(self):
+    def breakpointBlock(self):
         block = [
-            ': Integrate states',
             'SOLVE states METHOD cnexp',
-            '',
-            ': Compute effective membrane potential',
-            'Vmeff = V(Adrive * stimon, v)',
-            '',
-            ': Compute ionic currents'
+            'Vm = V(Adrive * stimon, v)'
         ]
-        for i in self.pneuron.getCurrentsNames():
-            func_exp = inspect.getsource(getattr(self.pneuron, i)).splitlines()[-1]
-            func_exp = func_exp[func_exp.find('return') + 7:]
-            func_exp = func_exp.replace('self.', '').replace('Vm', 'Vmeff')
-            func_exp = re.sub(r'([A-Za-z][A-Za-z0-9]*)\*\*([0-9])', escaped_pow, func_exp)
-            block.append('{} = {}'.format(i, func_exp))
+        for k, v in self.currents.items():
+            block.append('{} = {}'.format(k, v))
 
         return 'BREAKPOINT {{{}{}\n}}'.format(self.tabreturn, self.tabreturn.join(block))
 
-    def derivative_block(self):
-        block = [': Gating states derivatives']
-        for s in self.pneuron.states:
-            if s in self.pneuron.getGates():
-                block.append(
-                    '{0}\' = alpha{1}{2} * (1 - {0}) - beta{1}{2} * {0}'.format(
-                        self.translateState(s), s.lower(), '(Adrive * stimon, v)')
-                )
-            else:
-                block.append('{}\' = ???'.format(self.translateState(s)))
-
+    def derivativeBlock(self):
+        block = ['{} = {}'.format(k, v) for k, v in self.dstates_str.items()]
         return 'DERIVATIVE states {{{}{}\n}}'.format(self.tabreturn, self.tabreturn.join(block))
+
+    def allBlocks(self):
+        return '\n\n'.join([
+            self.title(),
+            self.description(),
+            self.constants(),
+            self.tscale(),
+            self.neuronBlock(),
+            self.parameterBlock(),
+            self.stateBlock(),
+            self.assignedBlock(),
+            self.function_tables(),
+            self.initialBlock(),
+            self.breakpointBlock(),
+            self.derivativeBlock()
+        ])
+
+    def print(self):
+        print(self.allBlocks())
+
+    def dump(self, outfile):
+        with open(outfile, "w") as fh:
+            fh.write(self.allBlocks())

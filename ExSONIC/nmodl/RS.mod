@@ -11,13 +11,6 @@ ENDCOMMENT
 
 INDEPENDENT {t FROM 0 TO 1 WITH 1 (ms)}
 
-UNITS {
-    (mA) = (milliamp)
-    (mV) = (millivolt)
-    (uF) = (microfarad)
-    (kPa) = (kilopascal)
-}
-
 NEURON {
     SUFFIX RS
 
@@ -52,15 +45,15 @@ STATE {
 }
 
 ASSIGNED {
+    v         (nC/cm2)
     Vm        (mV)
-    v         (mV)
     iNa       (mA/cm2)
     iKd       (mA/cm2)
     iM        (mA/cm2)
     iLeak     (mA/cm2)
 }
 
-FUNCTION_TABLE V(A(kPa), Q(nC/cm2))      (mV)
+FUNCTION_TABLE V(A(kPa), Q(nC/cm2))       (mV)
 FUNCTION_TABLE alpham(A(kPa), Q(nC/cm2))  (/ms)
 FUNCTION_TABLE betam(A(kPa), Q(nC/cm2))   (/ms)
 FUNCTION_TABLE alphah(A(kPa), Q(nC/cm2))  (/ms)

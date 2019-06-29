@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-06-28 23:38:30
+# @Last Modified time: 2019-06-28 23:43:53
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
@@ -367,8 +367,8 @@ class VextNode(Node):
         'unit': 'V',
         'factor': 1e-3
     }
-    Arange = ...
-    A_conv_thr = ...
+    Arange = None
+    A_conv_thr = None
 
     def setStimAmp(self, Vext):
         ''' Insert extracellular mechanism into section and set extracellular potential value.
@@ -383,6 +383,9 @@ class VextNode(Node):
         value = super().setStimON(value)
         self.section.e_extracellular = value * self.Vext
         return value
+
+    def filecode(self, *args):
+        return 'Vext_' + self.pneuron.filecode(*args) + '_NEURON'
 
 
 class SonicNode(Node):
