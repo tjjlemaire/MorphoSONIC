@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-03-18 21:17:03
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-07-01 07:17:41
+# @Last Modified time: 2019-07-01 18:01:03
 
 import pprint
 import inspect
@@ -143,12 +143,17 @@ class NmodlTranslator(PointNeuronTranslator):
                 if len(code_lines) > 1 and not code_lines[0].startswith('return'):
                     raise ValueError('cannot parse multi-statement function {}'.format(fname))
 
-                # TODO: get function signature, map each argument to its caller name, and
-                # replace arguments use in the function expression by their caller name
-                # print(fargs, inspect.signature(func))
-
                 # Join lines into new nested expression and remove comments
                 func_exp = ''.join(code_lines).split('return ', 1)[1].split('#', 1)[0].strip()
+
+                # Replace arguments from function signature by their caler name in return expression
+                sig_fargs = list(inspect.signature(func).parameters.keys())
+                if len(sig_fargs) != len(fargs):
+                    raise ValueError('number of argumens not matching function signature')
+                print(fargs, sig_fargs)
+                for arg, sig_arg in zip(fargs, sig_fargs):
+                    func_exp = func_exp.replace(sig_arg, arg)
+                print(func_exp)
 
                 # Translate internal calls in nested expression recursively
                 expr = expr.replace(fcall, '({})'.format(self.translateExpr(func_exp, lkp_args=lkp_args)))
