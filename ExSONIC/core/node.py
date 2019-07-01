@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-06-28 23:43:53
+# @Last Modified time: 2019-07-01 17:39:03
 # @Author: Theo Lemaire
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
@@ -17,8 +17,8 @@ import pandas as pd
 from neuron import h
 
 from PySONIC.constants import *
-from PySONIC.core import NeuronalBilayerSonophore
-from PySONIC.utils import si_format, timer, logger, binarySearch, plural
+from PySONIC.core import Model, PointNeuron, NeuronalBilayerSonophore
+from PySONIC.utils import si_format, timer, logger, binarySearch, plural, debug
 
 from .pyhoc import *
 from ..utils import getNmodlDir
@@ -189,7 +189,7 @@ class Node(metaclass=abc.ABCMeta):
                 logger.debug('adaptive time step integration (atol = {})'.format(self.cvode.atol()))
 
         # Initialize
-        h.finitialize(self.pneuron.Qm0 * 1e5)  # nC/cm2
+        h.finitialize(self.pneuron.Qm0() * 1e5)  # nC/cm2
         self.stimon = self.setStimON(1)
         self.cvode.event(self.Ton, self.toggleStim)
 
@@ -213,7 +213,13 @@ class Node(metaclass=abc.ABCMeta):
                   for k in self.pneuron.statesNames()}
         return t, stim, Qm, Vm, states
 
-    @timer
+    @staticmethod
+    def getNSpikes(data):
+        return PointNeuron.getNSpikes(data)
+
+    @Model.logNSpikes
+    @Model.checkTitrate('A')
+    @Model.addMeta
     def simulate(self, A, tstim, toffset, PRF, DC, dt=None, atol=None):
         ''' Set appropriate recording vectors, integrate and return output variables.
 
@@ -251,13 +257,10 @@ class Node(metaclass=abc.ABCMeta):
             data[k] = vec_to_array(v)
 
         # Resample data to regular sampling rate
-        data = self.resample(data, DT_EFFECTIVE)
-
-        # Detect spikes on data
-        nspikes = self.pneuron.getNSpikes(data)
-        logger.debug('{} spike{} detected'.format(nspikes, plural(nspikes)))
-
         return self.resample(data, DT_EFFECTIVE)
+
+    def meta(self, A, tstim, toffset, PRF, DC):
+        return self.pneuron.meta(A, tstim, toffset, PRF, DC)
 
     @staticmethod
     def resample(data, dt):
@@ -296,31 +299,9 @@ class Node(metaclass=abc.ABCMeta):
     def filecode(self, *args):
         raise NotImplementedError
 
-    def checkAmplitude(self, args):
-        ''' If no (None) amplitude provided in the list of input parameters,
-            perform a titration to find the threshold amplitude and add it to the list.
-        '''
-        if None in args:
-            iA = args.index(None)
-            new_args = [x for x in args if x is not None]
-            Athr = self.titrate(*new_args)
-            if np.isnan(Athr):
-                logger.error('Could not find threshold excitation amplitude')
-                return None
-            new_args.insert(iA, Athr)
-            args = new_args
-        return args
-
-    def meta(self, *args):
-        return self.pneuron.meta(*args)
-
-    def runAndSave(self, outdir, *args):
-        ''' Simulate the model for specific parameters and save the results
-            in a specific output directory. '''
-        args = self.checkAmplitude(args)
-        data, tcomp = self.simulate(*args)
-        meta = self.meta(*args)
-        meta['tcomp'] = tcomp
+    def simAndSave(self, outdir, *args):
+        ''' Simulate the model and save the results in a specific output directory. '''
+        data, meta = self.simulate(*args)
         fpath = '{}/{}.pkl'.format(outdir, self.filecode(*args))
         with open(fpath, 'wb') as fh:
             pickle.dump({'meta': meta, 'data': data}, fh)
@@ -439,5 +420,5 @@ class SonicNode(Node):
     def filecode(self, *args):
         return self.nbls.filecode(self.Fdrive, *args, self.fs, 'NEURON')
 
-    def meta(self, *args):
-        return self.nbls.meta(self.Fdrive, *args, self.fs, 'NEURON')
+    def meta(self, A, tstim, toffset, PRF, DC):
+        return self.nbls.meta(self.Fdrive, A, tstim, toffset, PRF, DC, self.fs, 'NEURON')

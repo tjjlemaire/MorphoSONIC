@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-03-18 21:17:03
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-06-30 01:45:37
+# @Last Modified time: 2019-07-01 07:17:41
 
 import pprint
 import inspect
@@ -14,7 +14,7 @@ from PySONIC.constants import FARADAY, Rg
 from PySONIC.core import PointNeuronTranslator
 
 
-class NmodlGenerator(PointNeuronTranslator):
+class NmodlTranslator(PointNeuronTranslator):
 
     tabreturn = '\n   '
     NEURON_protected_vars = ['O', 'C']
@@ -89,6 +89,11 @@ class NmodlGenerator(PointNeuronTranslator):
         ''' Translate Python expression into MOD expression, by parsing all
             internal function calls recursively.
         '''
+        # Replace states getters (x['...']) by MOD translated states
+        matches = re.finditer(r"(x\[')([A-Za-z0-9_]+)('\])", expr)
+        for m in matches:
+            left, state, right = m.groups()
+            expr = expr.replace("{}{}{}".format(left, state, right), self.translateState(state))
 
         # Get all function calls in expression
         matches = self.getFuncCalls(expr)
@@ -98,6 +103,9 @@ class NmodlGenerator(PointNeuronTranslator):
 
             # Get function name and arguments
             fcall, fname, fargs = self.getFuncArgs(m)
+
+            # Add potential MOD parameters if class atributes were used in function args
+            self.addToParameters(fcall)
 
             # If sole argument is Vm and lookup replacement mode is active
             if lkp_args is not None and len(fargs) == 1 and fargs[0] == 'Vm':
@@ -135,11 +143,15 @@ class NmodlGenerator(PointNeuronTranslator):
                 if len(code_lines) > 1 and not code_lines[0].startswith('return'):
                     raise ValueError('cannot parse multi-statement function {}'.format(fname))
 
+                # TODO: get function signature, map each argument to its caller name, and
+                # replace arguments use in the function expression by their caller name
+                # print(fargs, inspect.signature(func))
+
                 # Join lines into new nested expression and remove comments
                 func_exp = ''.join(code_lines).split('return ', 1)[1].split('#', 1)[0].strip()
 
                 # Translate internal calls in nested expression recursively
-                expr = expr.replace(fcall, self.translateExpr(func_exp, lkp_args=lkp_args))
+                expr = expr.replace(fcall, '({})'.format(self.translateExpr(func_exp, lkp_args=lkp_args)))
 
         # Add potential MOD parameters if class atributes were used in expression
         self.addToParameters(expr)
@@ -149,12 +161,6 @@ class NmodlGenerator(PointNeuronTranslator):
 
         # Replace integer power exponents by multiplications
         expr = self.replacePowerExponents(expr)
-
-        # Replace states getters (x['...']) by MOD translated states
-        matches = re.finditer(r"(x\[')([A-Za-z0-9_]+)('\])", expr)
-        for m in matches:
-            left, state, right = m.groups()
-            expr = expr.replace("{}{}{}".format(left, state, right), self.translateState(state))
 
         # Return expression
         return expr

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-30 11:26:26
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-06-28 19:54:36
+# @Last Modified time: 2019-07-01 17:26:00
 
 import time
 import numpy as np
@@ -100,9 +100,11 @@ class TestNode(TestBase):
             py_args = args
 
         # Run NEURON and Python simulations
-        data, tcomp = {}, {}
-        data['NEURON'], tcomp['NEURON'] = nrn_model.simulate(*args, dt, atol)
-        data['Python'], tcomp['Python'] = py_model.simulate(*py_args)
+        data, meta = {}, {}
+        print(args)
+        data['NEURON'], meta['NEURON'] = nrn_model.simulate(*args, dt, atol)
+        data['Python'], meta['Python'] = py_model.simulate(*py_args)
+        tcomp = {k: v['tcomp'] for k, v in meta.items()}
 
         # Get pulses timing
         tpatch_on, tpatch_off = GroupedTimeSeries.getStimPulses(
@@ -112,7 +114,7 @@ class TestNode(TestBase):
         tonset = -0.05 * (np.ptp(data['Python']['t']))
         for k in comp_keys:
             tplt = np.hstack((np.array([tonset, 0.]), data[k]['t'].values)) * 1e3
-            axes[0].plot(tplt, np.hstack((np.ones(2) * pneuron.Qm0, data[k]['Qm'])) * 1e5, label=k)
+            axes[0].plot(tplt, np.hstack((np.ones(2) * pneuron.Qm0(), data[k]['Qm'])) * 1e5, label=k)
             axes[1].plot(tplt, np.hstack((np.ones(2) * pneuron.Vm0, data[k]['Vm'])), label=k)
 
         # Plot stim patches on both graphs

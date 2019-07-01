@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2017-08-24 11:55:07
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-06-28 17:35:12
+# @Last Modified time: 2019-07-01 17:15:13
 
 ''' Run E-STIM simulations of a specific point-neuron. '''
 
@@ -26,20 +26,16 @@ def main():
 
     # Run E-STIM batch
     logger.info("Starting E-STIM simulation batch")
-    pkl_filepaths = []
-    inputs = [args[k] for k in ['amp', 'tstim', 'toffset', 'PRF', 'DC']]
-    queue = PointNeuron.simQueue(*inputs, outputdir=args['outputdir'])
+    queue = PointNeuron.simQueue(*parser.parseSimInputs(args), outputdir=args['outputdir'])
+    output = []
     for pneuron in args['neuron']:
         node = IintraNode(pneuron)
-        batch = Batch(node.runAndSave, queue)
-        pkl_filepaths += batch(loglevel=args['loglevel'])
+        batch = Batch(node.simAndSave if args['save'] else node.simulate, queue)
+        output += batch(loglevel=args['loglevel'])
 
     # Plot resulting profiles
     if args['plot'] is not None:
-        scheme_plot = GroupedTimeSeries(pkl_filepaths, pltscheme=args['pltscheme'])
-        scheme_plot.render(spikes=args['spikes'])
-        plt.show()
-
+        parser.parsePlot(args, output)
 
 if __name__ == '__main__':
     main()
