@@ -3,14 +3,14 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-03-18 21:17:03
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-07-01 18:01:03
+# @Last Modified time: 2019-07-01 18:30:44
 
 import pprint
 import inspect
 import re
 from time import gmtime, strftime
 
-from PySONIC.constants import FARADAY, Rg
+from PySONIC.constants import getConstantsDict
 from PySONIC.core import PointNeuronTranslator
 
 
@@ -29,6 +29,7 @@ class NmodlTranslator(PointNeuronTranslator):
     def __init__(self, pclass):
         super().__init__(pclass, verbose=False)
         self.params = {}
+        self.constants = {}
         self.ftables_dict = {'V': self.func_table_pattern.format('V', 'mV')}
         self.dstates_str = self.parseDerStates()
         self.sstates_str = self.parseSteadyStates()
@@ -66,11 +67,13 @@ class NmodlTranslator(PointNeuronTranslator):
             self.ftables_dict[expr] = self.func_table_pattern.format(expr, '')
 
     def addToParameters(self, s):
-        ''' Add MOD parameters for each class attribute used in Python expression. '''
+        ''' Add MOD parameters for each class attribute and constants used in Python expression. '''
         class_attr_matches  = self.getClassAttributeCalls(s)
+        attrs = {}
         for m in class_attr_matches:
             attr_name = m.group(2)
-            attr_val = getattr(self.pclass, attr_name)
+            attrs[attr_name] = getattr(self.pclass, attr_name)
+        for attr_name, attr_val in attrs.items():
             if not inspect.isroutine(attr_val):
                 if re.match(self.conductance_pattern, attr_name):
                     self.params[attr_name] = {'val': attr_val * 1e-4, 'unit': 'S/cm2'}
@@ -85,10 +88,20 @@ class NmodlTranslator(PointNeuronTranslator):
                 else:
                     self.params[attr_name] = {'val': attr_val, 'unit': ''}
 
+    def addToConstants(self, s):
+        for k, v in getConstantsDict().items():
+            if k in s:
+                self.constants[k] = v
+
     def translateExpr(self, expr, lkp_args=None, desc_dict=None):
         ''' Translate Python expression into MOD expression, by parsing all
             internal function calls recursively.
         '''
+
+        # Add potential MOD parameters if class atributes were used in expression
+        self.addToParameters(expr)
+        self.addToConstants(expr)
+
         # Replace states getters (x['...']) by MOD translated states
         matches = re.finditer(r"(x\[')([A-Za-z0-9_]+)('\])", expr)
         for m in matches:
@@ -103,9 +116,6 @@ class NmodlTranslator(PointNeuronTranslator):
 
             # Get function name and arguments
             fcall, fname, fargs = self.getFuncArgs(m)
-
-            # Add potential MOD parameters if class atributes were used in function args
-            self.addToParameters(fcall)
 
             # If sole argument is Vm and lookup replacement mode is active
             if lkp_args is not None and len(fargs) == 1 and fargs[0] == 'Vm':
@@ -149,11 +159,12 @@ class NmodlTranslator(PointNeuronTranslator):
                 # Replace arguments from function signature by their caler name in return expression
                 sig_fargs = list(inspect.signature(func).parameters.keys())
                 if len(sig_fargs) != len(fargs):
-                    raise ValueError('number of argumens not matching function signature')
-                print(fargs, sig_fargs)
+                    raise ValueError(
+                        f'number of argumens not matching function signature: {fargs} {sig_fargs}')
                 for arg, sig_arg in zip(fargs, sig_fargs):
-                    func_exp = func_exp.replace(sig_arg, arg)
-                print(func_exp)
+                    if arg != sig_arg:
+                        print(f'replacing {sig_arg} by {arg} in {fname} expression')
+                        func_exp = func_exp.replace(sig_arg, arg)
 
                 # Translate internal calls in nested expression recursively
                 expr = expr.replace(fcall, '({})'.format(self.translateExpr(func_exp, lkp_args=lkp_args)))
@@ -221,11 +232,8 @@ class NmodlTranslator(PointNeuronTranslator):
             'ENDCOMMENT'
         ])
 
-    def constants(self):
-        block = [
-            'FARADAY = {:.5e}   (coul)     : moles do not appear in units'.format(FARADAY),
-            'R = {:.5e}         (J/mol/K)  : Universal gas constant'.format(Rg)
-        ]
+    def constants_block(self):
+        block = [f'{k} = {v}' for k , v in self.constants.items()]
         return 'CONSTANT {{{}{}\n}}'.format(self.tabreturn, self.tabreturn.join(block))
 
     def tscale(self):
@@ -292,7 +300,7 @@ class NmodlTranslator(PointNeuronTranslator):
         return '\n\n'.join([
             self.title(),
             self.description(),
-            self.constants(),
+            self.constants_block(),
             self.tscale(),
             self.neuronBlock(),
             self.parameterBlock(),
