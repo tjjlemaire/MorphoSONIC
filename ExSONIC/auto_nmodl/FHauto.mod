@@ -23,7 +23,7 @@ CONSTANT {
 INDEPENDENT {t FROM 0 TO 1 WITH 1 (ms)}
 
 NEURON {
-   SUFFIX FH
+   SUFFIX FHauto
    NONSPECIFIC_CURRENT iNa : Sodium current
    NONSPECIFIC_CURRENT iKd : delayed-rectifier Potassium current
    NONSPECIFIC_CURRENT iP : non-specific delayed current

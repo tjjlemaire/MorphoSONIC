@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-07-04 23:37:29
+# @Last Modified time: 2019-07-05 01:12:07
 
 import pickle
 import abc
@@ -30,7 +30,7 @@ class Node(metaclass=abc.ABCMeta):
         ''' Keyword used to characterize stimulation modality. '''
         raise NotImplementedError
 
-    def __init__(self, pneuron, id=None, auto_nmodl=True):
+    def __init__(self, pneuron, id=None, auto_nmodl=False):
         ''' Initialization.
 
             :param pneuron: point-neuron model
@@ -44,12 +44,15 @@ class Node(metaclass=abc.ABCMeta):
 
         # Load mechanisms and set function tables of appropriate membrane mechanism
         self.auto_nmodl = auto_nmodl
-        load_mechanisms(self.getNmodlDir(), self.pneuron.name)
+        self.mechname = self.pneuron.name
+        if self.auto_nmodl:
+            self.mechname += 'auto'
+        load_mechanisms(self.getNmodlDir(), self.mechname)
         self.setFuncTables()
 
         # Create section and set membrane mechanism
         self.section = self.createSection(self.id)
-        self.section.insert(self.pneuron.name)
+        self.section.insert(self.mechname)
 
     def __repr__(self):
         return '{}({})'.format(self.__class__.__name__, self.pneuron)
@@ -85,7 +88,7 @@ class Node(metaclass=abc.ABCMeta):
             and link them to FUNCTION_TABLEs in the MOD file of the corresponding
             membrane mechanism.
         '''
-        logger.debug('loading %s membrane dynamics lookup tables', self.pneuron.name)
+        logger.debug('loading %s membrane dynamics lookup tables', self.mechname)
 
         # Get Lookup
         lkp = self.getLookup()
@@ -98,21 +101,16 @@ class Node(metaclass=abc.ABCMeta):
         # !!! hoc lookup dictionary must be a member of the class,
         # otherwise the assignment below does not work properly !!!
         self.lkp = {'V': array_to_matrix(lkp['V'])}  # mV
-
-        if self.auto_nmodl:
-            for ratex in self.pneuron.alphax_list.union(self.pneuron.betax_list):
-                self.lkp[ratex] = array_to_matrix(lkp[ratex] * 1e-3)  # ms-1
-            for taux in self.pneuron.taux_list:
-                self.lkp[taux] = array_to_matrix(lkp[taux] * 1e3)  # ms
-            for xinf in self.pneuron.xinf_list:
-                self.lkp[xinf] = array_to_matrix(lkp[xinf])  # (-)
-        else:
-            for rate in self.pneuron.rates:
-                self.lkp[rate] = array_to_matrix(lkp[rate] * 1e-3)  # ms-1
+        for ratex in self.pneuron.alphax_list.union(self.pneuron.betax_list):
+            self.lkp[ratex] = array_to_matrix(lkp[ratex] * 1e-3)  # ms-1
+        for taux in self.pneuron.taux_list:
+            self.lkp[taux] = array_to_matrix(lkp[taux] * 1e3)  # ms
+        for xinf in self.pneuron.xinf_list:
+            self.lkp[xinf] = array_to_matrix(lkp[xinf])  # (-)
 
         # Assign hoc matrices to 2D interpolation tables in membrane mechanism
         for k, v in self.lkp.items():
-            setFuncTable(self.pneuron.name, k, v, self.Aref, self.Qref)
+            setFuncTable(self.mechname, k, v, self.Aref, self.Qref)
 
     def printStimAmp(self, value):
         logger.debug('Stimulus amplitude: {} = {}{}'.format(
@@ -131,7 +129,7 @@ class Node(metaclass=abc.ABCMeta):
             :param value: new stimulation state (0 = OFF, 1 = ON)
             :return: new stimulation state
         '''
-        setattr(self.section, 'stimon_{}'.format(self.pneuron.name), value)
+        setattr(self.section, 'stimon_{}'.format(self.mechname), value)
         return value
 
     def toggleStim(self):
@@ -204,13 +202,24 @@ class Node(metaclass=abc.ABCMeta):
                 logger.debug('adaptive time step integration (atol = {})'.format(self.cvode.atol()))
 
         # Initialize
+        self.stimon = self.setStimON(0)
+        print(f'A = {getattr(self.section(0.5), self.mechname).Adrive} kPa')
+        print('finitialize')
         h.finitialize(self.pneuron.Qm0() * 1e5)  # nC/cm2
         self.stimon = self.setStimON(1)
         self.cvode.event(self.Ton, self.toggleStim)
 
         # Integrate
+        i = 0
         while h.t < tstop:
+            # if i < 5:
+            #     print(f't = {h.t} ms')
+            #     print(f'Qm = {self.section(0.5).v} nC/cm2')
+            #     print(f'Vmeff = {getattr(self.section(0.5), self.mechname).Vm} mV')
+            #     print(f'iCaT = {getattr(self.section(0.5), self.mechname).iCaT} mA/cm2')
+            #     print('')
             h.fadvance()
+            i += 1
 
         # Set absolute error tolerance back to default value if changed
         if atol is not None:
@@ -221,10 +230,10 @@ class Node(metaclass=abc.ABCMeta):
     def setProbes(self):
         ''' Set recording vectors. '''
         t = setTimeProbe()
-        stim = setStimProbe(self.section, self.pneuron.name)
+        stim = setStimProbe(self.section, self.mechname)
         Qm = setRangeProbe(self.section, 'v')
-        Vm = setRangeProbe(self.section, 'Vm_{}'.format(self.pneuron.name))
-        states = {k: setRangeProbe(self.section, '{}_{}'.format(alias(k), self.pneuron.name))
+        Vm = setRangeProbe(self.section, 'Vm_{}'.format(self.mechname))
+        states = {k: setRangeProbe(self.section, '{}_{}'.format(alias(k), self.mechname))
                   for k in self.pneuron.statesNames()}
         return t, stim, Qm, Vm, states
 
@@ -335,6 +344,8 @@ class IintraNode(Node):
     Arange = (0., 2 * AMP_UPPER_BOUND_ESTIM)
     A_conv_thr = THRESHOLD_CONV_RANGE_ESTIM
 
+
+
     def setStimAmp(self, Astim):
         ''' Set electrical stimulation amplitude
 
@@ -394,7 +405,7 @@ class SonicNode(Node):
     }
     A_conv_thr = THRESHOLD_CONV_RANGE_ASTIM
 
-    def __init__(self, pneuron, id=None, a=32e-9, Fdrive=500e3, fs=1.):
+    def __init__(self, pneuron, id=None, a=32e-9, Fdrive=500e3, fs=1., auto_nmodl=False):
         ''' Initialization.
 
             :param pneuron: point-neuron model
@@ -408,7 +419,7 @@ class SonicNode(Node):
         self.a = a
         self.fs = fs
         self.Fdrive = Fdrive
-        super().__init__(pneuron, id=id)
+        super().__init__(pneuron, id=id, auto_nmodl=auto_nmodl)
         self.Arange = (0., self.getLookup().refs['A'].max())
 
     def __repr__(self):
@@ -430,7 +441,7 @@ class SonicNode(Node):
             :param Adrive: acoustic pressure amplitude (Pa)
         '''
         self.printStimAmp(Adrive)
-        setattr(self.section, 'Adrive_{}'.format(self.pneuron.name), Adrive * 1e-3)
+        setattr(self.section, 'Adrive_{}'.format(self.mechname), Adrive * 1e-3)
 
     def filecode(self, *args):
         return self.nbls.filecode(self.Fdrive, *args, self.fs, 'NEURON')

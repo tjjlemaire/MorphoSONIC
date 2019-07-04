@@ -96,19 +96,19 @@ ASSIGNED {
     iLeak    (mA/cm2)
 }
 
-FUNCTION_TABLE V(A(kPa), Q(nC/cm2))       (mV)
-FUNCTION_TABLE alpham(A(kPa), Q(nC/cm2))  (/ms)
-FUNCTION_TABLE betam(A(kPa), Q(nC/cm2))   (/ms)
-FUNCTION_TABLE alphah(A(kPa), Q(nC/cm2))  (/ms)
-FUNCTION_TABLE betah(A(kPa), Q(nC/cm2))   (/ms)
-FUNCTION_TABLE alphan(A(kPa), Q(nC/cm2))  (/ms)
-FUNCTION_TABLE betan(A(kPa), Q(nC/cm2))   (/ms)
-FUNCTION_TABLE alphas(A(kPa), Q(nC/cm2))  (/ms)
-FUNCTION_TABLE betas(A(kPa), Q(nC/cm2))   (/ms)
-FUNCTION_TABLE alphau(A(kPa), Q(nC/cm2))  (/ms)
-FUNCTION_TABLE betau(A(kPa), Q(nC/cm2))   (/ms)
-FUNCTION_TABLE alphao(A(kPa), Q(nC/cm2))  (/ms)
-FUNCTION_TABLE betao(A(kPa), Q(nC/cm2))   (/ms)
+FUNCTION_TABLE V(A(kPa), Q(nC/cm2)) (mV)
+FUNCTION_TABLE alpham(A(kPa), Q(nC/cm2)) (/ms)
+FUNCTION_TABLE betam(A(kPa), Q(nC/cm2)) (/ms)
+FUNCTION_TABLE alphah(A(kPa), Q(nC/cm2)) (/ms)
+FUNCTION_TABLE betah(A(kPa), Q(nC/cm2)) (/ms)
+FUNCTION_TABLE alphan(A(kPa), Q(nC/cm2)) (/ms)
+FUNCTION_TABLE betan(A(kPa), Q(nC/cm2)) (/ms)
+FUNCTION_TABLE sinf(A(kPa), Q(nC/cm2)) ()
+FUNCTION_TABLE taus(A(kPa), Q(nC/cm2)) (ms)
+FUNCTION_TABLE uinf(A(kPa), Q(nC/cm2)) ()
+FUNCTION_TABLE tauu(A(kPa), Q(nC/cm2)) (ms)
+FUNCTION_TABLE betao(A(kPa), Q(nC/cm2)) (/ms)
+FUNCTION_TABLE alphao(A(kPa), Q(nC/cm2)) (/ms)
 
 FUNCTION npow(x, n) {
     : Raise a quantity to a given power exponent
@@ -124,8 +124,8 @@ INITIAL {
     m = alpham(0, v) / (alpham(0, v) + betam(0, v))
     h = alphah(0, v) / (alphah(0, v) + betah(0, v))
     n = alphan(0, v) / (alphan(0, v) + betan(0, v))
-    s = alphas(0, v) / (alphas(0, v) + betas(0, v))
-    u = alphau(0, v) / (alphau(0, v) + betau(0, v))
+    s = sinf(0, v)
+    u = uinf(0, v)
     iCaT = gCaTbar * s * s * u * (V(0, v) - ECa)
     Cai = camin + taur * iondrive(iCaT, 2, depth)
     P0 = k2 / (k2 + k1 * npow(Cai, nca))
@@ -152,8 +152,9 @@ DERIVATIVE states {
     m' = alpham(Adrive * stimon, v) * (1 - m) - betam(Adrive * stimon, v) * m
     h' = alphah(Adrive * stimon, v) * (1 - h) - betah(Adrive * stimon, v) * h
     n' = alphan(Adrive * stimon, v) * (1 - n) - betan(Adrive * stimon, v) * n
-    s' = alphas(Adrive * stimon, v) * (1 - s) - betas(Adrive * stimon, v) * s
-    u' = alphau(Adrive * stimon, v) * (1 - u) - betau(Adrive * stimon, v) * u
+    s' = (sinf(Adrive * stimon, v) - s) / taus(Adrive * stimon, v)
+    u' = (uinf(Adrive * stimon, v) - u) / tauu(Adrive * stimon, v)
+
     Cai' = (camin - Cai) / taur + iondrive(iCaT, 2, depth)
     P0' = k2 * (1 - P0) - k1 * P0 * npow(Cai, nca)
     C1' = betao(Adrive * stimon, v) * O1 - alphao(Adrive * stimon, v) * C1

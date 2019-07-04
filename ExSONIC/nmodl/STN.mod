@@ -98,25 +98,25 @@ ASSIGNED {
     iLeak   (mA/cm2)
 }
 
-FUNCTION_TABLE V(A(kPa), Q(nC/cm2))       (mV)
-FUNCTION_TABLE alpham(A(kPa), Q(nC/cm2))  (/ms)
-FUNCTION_TABLE betam(A(kPa), Q(nC/cm2))   (/ms)
-FUNCTION_TABLE alphah(A(kPa), Q(nC/cm2))  (/ms)
-FUNCTION_TABLE betah(A(kPa), Q(nC/cm2))   (/ms)
-FUNCTION_TABLE alphan(A(kPa), Q(nC/cm2))  (/ms)
-FUNCTION_TABLE betan(A(kPa), Q(nC/cm2))   (/ms)
-FUNCTION_TABLE alphaa(A(kPa), Q(nC/cm2))  (/ms)
-FUNCTION_TABLE betaa(A(kPa), Q(nC/cm2))   (/ms)
-FUNCTION_TABLE alphab(A(kPa), Q(nC/cm2))  (/ms)
-FUNCTION_TABLE betab(A(kPa), Q(nC/cm2))   (/ms)
-FUNCTION_TABLE alphap(A(kPa), Q(nC/cm2))  (/ms)
-FUNCTION_TABLE betap(A(kPa), Q(nC/cm2))   (/ms)
-FUNCTION_TABLE alphaq(A(kPa), Q(nC/cm2))  (/ms)
-FUNCTION_TABLE betaq(A(kPa), Q(nC/cm2))   (/ms)
-FUNCTION_TABLE alphac(A(kPa), Q(nC/cm2))  (/ms)
-FUNCTION_TABLE betac(A(kPa), Q(nC/cm2))   (/ms)
-FUNCTION_TABLE alphad1(A(kPa), Q(nC/cm2))  (/ms)
-FUNCTION_TABLE betad1(A(kPa), Q(nC/cm2))   (/ms)
+FUNCTION_TABLE V(A(kPa), Q(nC/cm2)) (mV)
+FUNCTION_TABLE ainf(A(kPa), Q(nC/cm2)) ()
+FUNCTION_TABLE taua(A(kPa), Q(nC/cm2)) (ms)
+FUNCTION_TABLE binf(A(kPa), Q(nC/cm2)) ()
+FUNCTION_TABLE taub(A(kPa), Q(nC/cm2)) (ms)
+FUNCTION_TABLE cinf(A(kPa), Q(nC/cm2)) ()
+FUNCTION_TABLE tauc(A(kPa), Q(nC/cm2)) (ms)
+FUNCTION_TABLE d1inf(A(kPa), Q(nC/cm2)) ()
+FUNCTION_TABLE taud1(A(kPa), Q(nC/cm2)) (ms)
+FUNCTION_TABLE minf(A(kPa), Q(nC/cm2)) ()
+FUNCTION_TABLE taum(A(kPa), Q(nC/cm2)) (ms)
+FUNCTION_TABLE hinf(A(kPa), Q(nC/cm2)) ()
+FUNCTION_TABLE tauh(A(kPa), Q(nC/cm2)) (ms)
+FUNCTION_TABLE ninf(A(kPa), Q(nC/cm2)) ()
+FUNCTION_TABLE taun(A(kPa), Q(nC/cm2)) (ms)
+FUNCTION_TABLE pinf(A(kPa), Q(nC/cm2)) ()
+FUNCTION_TABLE taup(A(kPa), Q(nC/cm2)) (ms)
+FUNCTION_TABLE qinf(A(kPa), Q(nC/cm2)) ()
+FUNCTION_TABLE tauq(A(kPa), Q(nC/cm2)) (ms)
 
 
 FUNCTION xinf(var, theta, k) {
@@ -137,15 +137,15 @@ FUNCTION nernst(z, Cin (M), Cout (M), T (K)) (mV) {
 
 
 INITIAL {
-    m = alpham(0, v) / (alpham(0, v) + betam(0, v))
-    h = alphah(0, v) / (alphah(0, v) + betah(0, v))
-    n = alphan(0, v) / (alphan(0, v) + betan(0, v))
-    p = alphap(0, v) / (alphap(0, v) + betap(0, v))
-    q = alphaq(0, v) / (alphaq(0, v) + betaq(0, v))
-    a = alphaa(0, v) / (alphaa(0, v) + betaa(0, v))
-    b = alphab(0, v) / (alphab(0, v) + betab(0, v))
-    c = alphac(0, v) / (alphac(0, v) + betac(0, v))
-    d1 = alphad1(0, v) / (alphad1(0, v) + betad1(0, v))
+    m = minf(0, v)
+    h = hinf(0, v)
+    n = ninf(0, v)
+    p = pinf(0, v)
+    q = qinf(0, v)
+    a = ainf(0, v)
+    b = binf(0, v)
+    c = cinf(0, v)
+    d1 = d1inf(0, v)
     d2 = d2inf(Cai0)
     r = rinf(Cai0)
     Cai = Cai0
@@ -173,15 +173,15 @@ BREAKPOINT {
 }
 
 DERIVATIVE states {
-    m' = alpham(Adrive * stimon, v) * (1 - m) - betam(Adrive * stimon, v) * m
-    h' = alphah(Adrive * stimon, v) * (1 - h) - betah(Adrive * stimon, v) * h
-    n' = alphan(Adrive * stimon, v) * (1 - n) - betan(Adrive * stimon, v) * n
-    p' = alphap(Adrive * stimon, v) * (1 - p) - betap(Adrive * stimon, v) * p
-    q' = alphaq(Adrive * stimon, v) * (1 - q) - betaq(Adrive * stimon, v) * q
-    a' = alphaa(Adrive * stimon, v) * (1 - a) - betaa(Adrive * stimon, v) * a
-    b' = alphab(Adrive * stimon, v) * (1 - b) - betab(Adrive * stimon, v) * b
-    c' = alphac(Adrive * stimon, v) * (1 - c) - betac(Adrive * stimon, v) * c
-    d1' = alphad1(Adrive * stimon, v) * (1 - d1) - betad1(Adrive * stimon, v) * d1
+        m' = (minf(Adrive * stimon, v) - m) / taum(Adrive * stimon, v)
+    h' = (hinf(Adrive * stimon, v) - h) / tauh(Adrive * stimon, v)
+    n' = (ninf(Adrive * stimon, v) - n) / taun(Adrive * stimon, v)
+    p' = (pinf(Adrive * stimon, v) - p) / taup(Adrive * stimon, v)
+    q' = (qinf(Adrive * stimon, v) - q) / tauq(Adrive * stimon, v)
+    a' = (ainf(Adrive * stimon, v) - a) / taua(Adrive * stimon, v)
+    b' = (binf(Adrive * stimon, v) - b) / taub(Adrive * stimon, v)
+    c' = (cinf(Adrive * stimon, v) - c) / tauc(Adrive * stimon, v)
+    d1' = (d1inf(Adrive * stimon, v) - d1) / taud1(Adrive * stimon, v)
     d2' = (d2inf(Cai) - d2) / tau_d2
     r' = (rinf(Cai) - r) / tau_r
     ECa = nernst(2, Cai, Cao, T)

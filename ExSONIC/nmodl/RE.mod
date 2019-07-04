@@ -63,24 +63,24 @@ ASSIGNED {
     iLeak   (mA/cm2)
 }
 
-FUNCTION_TABLE V(A(kPa), Q(nC/cm2))       (mV)
-FUNCTION_TABLE alpham(A(kPa), Q(nC/cm2))  (/ms)
-FUNCTION_TABLE betam(A(kPa), Q(nC/cm2))   (/ms)
-FUNCTION_TABLE alphah(A(kPa), Q(nC/cm2))  (/ms)
-FUNCTION_TABLE betah(A(kPa), Q(nC/cm2))   (/ms)
-FUNCTION_TABLE alphan(A(kPa), Q(nC/cm2))  (/ms)
-FUNCTION_TABLE betan(A(kPa), Q(nC/cm2))   (/ms)
-FUNCTION_TABLE alphas(A(kPa), Q(nC/cm2))  (/ms)
-FUNCTION_TABLE betas(A(kPa), Q(nC/cm2))   (/ms)
-FUNCTION_TABLE alphau(A(kPa), Q(nC/cm2))  (/ms)
-FUNCTION_TABLE betau(A(kPa), Q(nC/cm2))   (/ms)
+FUNCTION_TABLE V(A(kPa), Q(nC/cm2)) (mV)
+FUNCTION_TABLE alpham(A(kPa), Q(nC/cm2)) (/ms)
+FUNCTION_TABLE betam(A(kPa), Q(nC/cm2)) (/ms)
+FUNCTION_TABLE alphah(A(kPa), Q(nC/cm2)) (/ms)
+FUNCTION_TABLE betah(A(kPa), Q(nC/cm2)) (/ms)
+FUNCTION_TABLE alphan(A(kPa), Q(nC/cm2)) (/ms)
+FUNCTION_TABLE betan(A(kPa), Q(nC/cm2)) (/ms)
+FUNCTION_TABLE sinf(A(kPa), Q(nC/cm2)) ()
+FUNCTION_TABLE taus(A(kPa), Q(nC/cm2)) (ms)
+FUNCTION_TABLE uinf(A(kPa), Q(nC/cm2)) ()
+FUNCTION_TABLE tauu(A(kPa), Q(nC/cm2)) (ms)
 
 INITIAL {
     m = alpham(0, v) / (alpham(0, v) + betam(0, v))
     h = alphah(0, v) / (alphah(0, v) + betah(0, v))
     n = alphan(0, v) / (alphan(0, v) + betan(0, v))
-    s = alphas(0, v) / (alphas(0, v) + betas(0, v))
-    u = alphau(0, v) / (alphau(0, v) + betau(0, v))
+    s = sinf(0, v)
+    u = uinf(0, v)
 }
 
 BREAKPOINT {
@@ -96,6 +96,6 @@ DERIVATIVE states {
     m' = alpham(Adrive * stimon, v) * (1 - m) - betam(Adrive * stimon, v) * m
     h' = alphah(Adrive * stimon, v) * (1 - h) - betah(Adrive * stimon, v) * h
     n' = alphan(Adrive * stimon, v) * (1 - n) - betan(Adrive * stimon, v) * n
-    s' = alphas(Adrive * stimon, v) * (1 - s) - betas(Adrive * stimon, v) * s
-    u' = alphau(Adrive * stimon, v) * (1 - u) - betau(Adrive * stimon, v) * u
+    s' = (sinf(Adrive * stimon, v) - s) / taus(Adrive * stimon, v)
+    u' = (uinf(Adrive * stimon, v) - u) / tauu(Adrive * stimon, v)
 }

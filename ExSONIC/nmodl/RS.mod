@@ -53,21 +53,21 @@ ASSIGNED {
     iLeak     (mA/cm2)
 }
 
-FUNCTION_TABLE V(A(kPa), Q(nC/cm2))       (mV)
-FUNCTION_TABLE alpham(A(kPa), Q(nC/cm2))  (/ms)
-FUNCTION_TABLE betam(A(kPa), Q(nC/cm2))   (/ms)
-FUNCTION_TABLE alphah(A(kPa), Q(nC/cm2))  (/ms)
-FUNCTION_TABLE betah(A(kPa), Q(nC/cm2))   (/ms)
-FUNCTION_TABLE alphan(A(kPa), Q(nC/cm2))  (/ms)
-FUNCTION_TABLE betan(A(kPa), Q(nC/cm2))   (/ms)
-FUNCTION_TABLE alphap(A(kPa), Q(nC/cm2))  (/ms)
-FUNCTION_TABLE betap(A(kPa), Q(nC/cm2))   (/ms)
+FUNCTION_TABLE V(A(kPa), Q(nC/cm2)) (mV)
+FUNCTION_TABLE alpham(A(kPa), Q(nC/cm2)) (/ms)
+FUNCTION_TABLE betam(A(kPa), Q(nC/cm2)) (/ms)
+FUNCTION_TABLE alphah(A(kPa), Q(nC/cm2)) (/ms)
+FUNCTION_TABLE betah(A(kPa), Q(nC/cm2)) (/ms)
+FUNCTION_TABLE alphan(A(kPa), Q(nC/cm2)) (/ms)
+FUNCTION_TABLE betan(A(kPa), Q(nC/cm2)) (/ms)
+FUNCTION_TABLE pinf(A(kPa), Q(nC/cm2)) ()
+FUNCTION_TABLE taup(A(kPa), Q(nC/cm2)) (ms)
 
 INITIAL {
     m = alpham(0, v) / (alpham(0, v) + betam(0, v))
     h = alphah(0, v) / (alphah(0, v) + betah(0, v))
     n = alphan(0, v) / (alphan(0, v) + betan(0, v))
-    p = alphap(0, v) / (alphap(0, v) + betap(0, v))
+    p = pinf(0, v)
 }
 
 BREAKPOINT {
@@ -83,5 +83,5 @@ DERIVATIVE states {
     m' = alpham(Adrive * stimon, v) * (1 - m) - betam(Adrive * stimon, v) * m
     h' = alphah(Adrive * stimon, v) * (1 - h) - betah(Adrive * stimon, v) * h
     n' = alphan(Adrive * stimon, v) * (1 - n) - betan(Adrive * stimon, v) * n
-    p' = alphap(Adrive * stimon, v) * (1 - p) - betap(Adrive * stimon, v) * p
+    p' = (pinf(Adrive * stimon, v) - p) / taup(Adrive * stimon, v)
 }

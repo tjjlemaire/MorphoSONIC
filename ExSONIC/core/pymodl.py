@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-03-18 21:17:03
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-07-04 23:29:41
+# @Last Modified time: 2019-07-05 00:26:12
 
 import logging
 import pprint
@@ -408,7 +408,7 @@ class NmodlTranslator(PointNeuronTranslator):
     def neuronBlock(self):
         ''' Create the NEURON block of the MOD file. '''
         block = [
-            'SUFFIX {}'.format(self.pclass.name),
+            'SUFFIX {}auto'.format(self.pclass.name),
             *[self.current_pattern.format(k, v) for k, v in self.currents_desc.items()],
             'RANGE Adrive, Vm : section specific',
             'RANGE stimon     : common to all sections (but set as RANGE to be accessible from caller)'
