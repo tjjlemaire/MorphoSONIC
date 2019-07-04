@@ -3,8 +3,9 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-03-18 21:17:03
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-07-04 17:42:15
+# @Last Modified time: 2019-07-04 23:29:41
 
+import logging
 import pprint
 import inspect
 import re
@@ -12,26 +13,14 @@ from time import gmtime, strftime
 
 from PySONIC.constants import getConstantsDict
 from PySONIC.core import PointNeuronTranslator
+from PySONIC.utils import logger
 
 
 class NmodlTranslator(PointNeuronTranslator):
 
-    # Generic regexp patterns
-    variable_pattern = r'[a-zA-Z_][a-zA-Z0-9_]*'
-    class_attribute_pattern = r'(cls.)({})'.format(variable_pattern)
-    strict_func_pattern = r'({})\('.format(variable_pattern)
-    loose_func_pattern = r'({}\.)?{}'.format(variable_pattern, strict_func_pattern)
-
-    # Neuron-specific regexp patterns
-    conductance_pattern = r'(g)([A-Za-z0-9_]*)(Leak|bar)'
-    reversal_potential_pattern = r'(E)([A-Za-z0-9_]+)'
-    time_constant_pattern = r'(tau)([A-Za-z0-9_]+)'
-    rate_constant_pattern = r'(k)([0-9_]+)'
-    ion_concentration_pattern = r'(Cai|Nai)([A-Za-z0-9_]*)'
-
     # MOD specific formatting
-    NEURON_protected_vars = ['O', 'C']
     tabreturn = '\n   '
+    NEURON_protected_vars = ['O', 'C']
     AQ_func_table_pattern = 'FUNCTION_TABLE {}(A(kPa), Q(nC/cm2)) ({})'
     current_pattern = 'NONSPECIFIC_CURRENT {} : {}'
 
@@ -43,7 +32,7 @@ class NmodlTranslator(PointNeuronTranslator):
         super().__init__(pclass, verbose=verbose)
 
         # Initialize class containers
-        self.conserved_funcs = []
+        self.funcs_to_preserve = []
         self.params = {}
         self.constants = {}
         self.currents_desc = {}
@@ -59,52 +48,26 @@ class NmodlTranslator(PointNeuronTranslator):
         self.adjustFuncTableCalls()
 
     @classmethod
-    def getClassAttributeCalls(cls, s):
-        ''' Find attribute calls in expression. '''
-        return re.finditer(cls.class_attribute_pattern, s)
+    def replace(cls, s, old, new, level=0):
+        ''' Replace substring in expression. '''
+        logger.debug(f'{cls.getIndent(level)}replacing {old} by {new}')
+        return s.replace(old, new)
 
-    @classmethod
-    def getFuncCalls(cls, s):
-        ''' Get all function calls in expression. '''
-        return [m for m in re.finditer(cls.loose_func_pattern, s)]
-
-    def parseFuncFields(self, m, expr, level=0):
-        ''' Parse a function call with all its relevant fields: name, arguments, and prefix. '''
-        fprefix, fname = m.groups()
-        fcall = fname
-        if fprefix:
-            fcall = '{}{}'.format(fprefix, fname)
-        else:
-            fprefix = ''
-        fclosure = self.getClosure(expr[m.end():])
-        fclosure = self.translateExpr(fclosure, level=level + 1)
-        fcall = f'{fcall}({fclosure})'
-        fargs = [x.strip() for x in fclosure.split(',')]
-        i = 0
-        while i < len(fargs):
-            j = fargs[i].find('(')
-            if j == -1:
-                i += 1
-            else:
-                try:
-                    self.getClosure(fargs[i][j + 1:])
-                    i += 1
-                except ValueError:
-                    fargs[i:i + 2] = [', '.join(fargs[i:i + 2])]
-
-        return fcall, fname, fargs, fprefix
+    def replaceFuncCallByFuncExpr(self, s, fcall, fexpr, level=0):
+        ''' Replace a function call by its translated return expression. '''
+        return self.replace(
+            s, fcall, self.translateExpr(fexpr, level=level + 1), level=level)
 
     def parseLambdaDict(self, pclass_method_name):
         is_current_expr = pclass_method_name == 'currents'
         pclass_method = getattr(self.pclass, pclass_method_name)
-        print(f'------------ parsing {pclass_method_name} ------------')
+        logger.info(f'parsing {pclass_method_name}')
         parsed_lambda_dict = super().parseLambdaDict(
             pclass_method(),
             lambda *args: self.translateExpr(*args, is_current_expr=is_current_expr))
         for k in parsed_lambda_dict.keys():
             parsed_lambda_dict[self.translateState(k)] = parsed_lambda_dict.pop(k)
-        if self.verbose:
-            print(f'---------- {pclass_method_name} ----------')
+        if logger.getEffectiveLevel() <= logging.DEBUG:
             pprint.PrettyPrinter(indent=4).pprint(parsed_lambda_dict)
         return parsed_lambda_dict
 
@@ -112,35 +75,84 @@ class NmodlTranslator(PointNeuronTranslator):
     def translateState(cls, state):
         ''' Translate a state name for MOD compatibility if needed. '''
         if state in cls.NEURON_protected_vars:
-            print(f'REPLACING {state} by {state}1')
+            logger.debug(f'REPLACING {state} by {state}1')
             state += '1'
         return state
 
-    def replacePowerExponents(self, expr):
+    @classmethod
+    def translateDictAccessedStates(cls, s):
+        ''' Replace dictionary accessors (xxx['...']) by MOD translated states. '''
+        return re.sub(cls.dict_accessor_pattern, lambda x: cls.translateState(x.group(3)), s)
+
+    @classmethod
+    def translateVariableStates(cls, s):
+        ''' Translate states found as variables in expression by MOD aliases. '''
+
+        # Identify correctly preceded variables in expression,
+        # and replace states by MOD aliases if any
+        s = re.sub(
+            cls.preceded_variable_pattern,
+            lambda x: f'{x.group(1)}{cls.translateState(x.group(2))}',
+            s)
+
+        # Do the exact same with correctly followed variables
+        s = re.sub(
+            cls.followed_variable_pattern,
+            lambda x: f'{cls.translateState(x.group(1))}{x.group(2)}',
+            s)
+
+        # Return translated expression
+        return s
+
+    def translatePowerExponents(self, expr):
         ''' Replace power exponents in expression. '''
 
         # Replace explicit integer power exponents by multiplications
         expr = re.sub(
-            r'([A-Za-z][A-Za-z0-9_]*)\*\*([0-9]+)',
+            r'({})\*\*({})'.format(self.variable_pattern, self.integer_pattern),
             lambda x: ' * '.join([x.group(1)] * int(x.group(2))),
             expr)
 
-        # If parametrized power exponents (not necessarily integers) are present
+        # If power exponents remain in expression
         if '**' in expr:
-            # Replace them by call to npow function
-            expr = re.sub(
-                r'([A-Za-z][A-Za-z0-9_]*)\*\*([A-Za-z0-9][A-Za-z0-9_.]*)',
-                lambda x: f'npow({x.group(1)}, {x.group(2)})',
-                expr)
-
-            # add npow function (with MOD power notation) to functions dictionary
+            # Add npow function (with MOD power notation) to functions dictionary
             self.functions_dict['npow'] = {'args': ['x', 'n'], 'expr': 'x^n'}
+
+            # Replace both parametrized anf float power exponents by call to npow function
+            for pattern in [self.variable_pattern, self.float_pattern]:
+                expr = re.sub(
+                    r'({})\*\*({})'.format(self.variable_pattern, pattern),
+                    lambda x: f'npow({x.group(1)}, {x.group(2)})',
+                    expr)
 
         return expr
 
+    @classmethod
+    def getFuncReturnExpr(cls, func):
+        ''' Get function return expression merged in one line and stripped from comments. '''
+
+        # Get function source code
+        code_lines = cls.getFuncSource(func)
+
+        # If function does not end with return statement, raise error
+        if not code_lines[-1].startswith('return'):
+            raise ValueError(f'{func.__name__} does not end with return statement')
+
+        # Remove comments on all lines
+        code_lines = [cls.removeLineComments(cl) for cl in code_lines]
+
+        # Remove return statement on last line
+        code_lines[-1] = code_lines[-1].split('return ')[-1]
+
+        return '\n'.join(code_lines)
+
+        # # Join return statement lines and remove comments
+        # fexpr = ''.join(code_lines).split('return ', 1)[1]
+        # return cls.removeLineComments(fexpr)
+
     def addToFuncTables(self, fname, level=0):
         ''' Add a function table corresponding to function name '''
-        print(f'{self.getIndent(level)}adding {fname} to FUNCTION TABLES')
+        logger.debug(f'{self.getIndent(level)}adding {fname} to FUNCTION TABLES')
         if self.alphax_pattern.match(fname):
             self.ftables_dict[fname] = self.AQ_func_table_pattern.format(fname, '/ms')
         elif self.betax_pattern.match(fname):
@@ -155,12 +167,21 @@ class NmodlTranslator(PointNeuronTranslator):
     def addToFunctions(self, fname, fargs, fexpr, level=0):
         ''' Add a function corresponding to the function name, arguments and expression. '''
         if fname not in self.functions_dict:
-            print(f'adding {fname} to FUNCTIONS')
-            self.functions_dict [fname] = {
+            logger.debug(f'adding {fname} to FUNCTIONS')
+
+            # Detect potential local variables
+            local_vars = []
+            flines = fexpr.splitlines()
+            for fl in flines:
+                if '=' in fl:
+                    local_vars.append(fl.split('=')[0].strip())
+
+            self.functions_dict[fname] = {
                 'args': fargs,
-                'expr': self.translateExpr(fexpr, level=level + 1)
+                'expr': self.translateExpr(fexpr, level=level + 1),
+                'locals': local_vars
             }
-            self.conserved_funcs.append(fname)
+            self.funcs_to_preserve.append(fname)
 
     def addToConstants(self, s):
         ''' Add fields to the MOD constants block. '''
@@ -170,32 +191,29 @@ class NmodlTranslator(PointNeuronTranslator):
 
     def addToParameters(self, s):
         ''' Add MOD parameters for each class attribute and constants used in Python expression. '''
-        class_attr_matches  = self.getClassAttributeCalls(s)
-        attrs = {}
-        for m in class_attr_matches:
-            attr_name = m.group(2)
-            attrs[attr_name] = getattr(self.pclass, attr_name)
-        for attr_name, attr_val in attrs.items():
-            if not inspect.isroutine(attr_val):
-                if re.match(self.conductance_pattern, attr_name):
+        for attr_name in self.getClassAttributes(s):
+            try:
+                attr_val = getattr(self.pclass, attr_name)
+                if self.conductance_pattern.match(attr_name):
                     self.params[attr_name] = {'val': attr_val * 1e-4, 'unit': 'S/cm2'}
-                elif re.match(self.reversal_potential_pattern, attr_name):
+                elif self.permeability_pattern.match(attr_name):
+                    self.params[attr_name] = {'val': attr_val * 1e2, 'unit': 'cm/s'}
+                elif self.reversal_potential_pattern.match(attr_name):
                     self.params[attr_name] = {'val': attr_val, 'unit': 'mV'}
-                elif re.match(self.time_constant_pattern, attr_name):
+                elif self.time_constant_pattern.match(attr_name):
                     self.params[attr_name] = {'val': attr_val * 1e3, 'unit': 'ms'}
-                elif re.match(self.rate_constant_pattern, attr_name):
+                elif self.rate_constant_pattern.match(attr_name):
                     self.params[attr_name] = {'val': attr_val * 1e-3, 'unit': '/ms'}
-                elif re.match(self.ion_concentration_pattern, attr_name):
+                elif self.ion_concentration_pattern.match(attr_name):
                     self.params[attr_name] = {'val': attr_val, 'unit': 'M'}
                 else:
                     self.params[attr_name] = {'val': attr_val, 'unit': ''}
-            else:
-                print('aaa')
-                # raise ValueError(f'{attr_name} is a class method')
+            except AttributeError:
+                raise AttributeError(f'{attr_name} is not a class attribute')
 
     def adjustFuncTableCalls(self):
         ''' Adjust function table calls to match the corresponding FUNCTION_TABLE signature. '''
-        print('------------ adjusting function table calls ------------')
+        logger.info('adjusting function table calls')
         lkp_args_off = '0, v'
         lkp_args_dynamic = 'Adrive * stimon, v'
 
@@ -208,10 +226,8 @@ class NmodlTranslator(PointNeuronTranslator):
                 f_list = [self.parseFuncFields(m, expr, level=0) for m in matches]
                 for (fcall, fname, fargs, fprefix) in f_list:
                     if fname in self.ftables_dict.keys():
-                        # Replace function call by equivalent function table call
                         ftable_call = '{}({})'.format(fname, lkp_args)
-                        print(f'replacing {fcall} by {ftable_call}')
-                        expr = expr.replace(fcall, ftable_call)
+                        expr = self.replace(expr, fcall, ftable_call)
                 d[k] = expr
 
         # Replace calls in dynamically defined functions
@@ -227,167 +243,133 @@ class NmodlTranslator(PointNeuronTranslator):
                 if fname in self.ftables_dict.keys():
                     # Replace function call by equivalent function table call
                     ftable_call = '{}({})'.format(fname, lkp_args)
-                    print(f'replacing {fcall} by {ftable_call}')
-                    expr = expr.replace(fcall, ftable_call)
+                    expr = self.replace(expr, fcall, ftable_call)
             self.functions_dict[k]['expr'] = expr
 
-    def translateExpr(self, expr, is_current_expr=False, level=0):
+    def translateExpr(self, expr, level=0, is_current_expr=False):
         ''' Parse a Python expression and translate it into an equivalent MOD expression.
             Internal function calsl are parsed and translated recursively.
         '''
+        # Get level indent
         indent = self.getIndent(level)
 
         # Replace dictionary accessors (xxx['...']) by MOD translated states
-        expr = re.sub(
-            r"([A-Za-z0-9_]+\[')([A-Za-z0-9_]+)('\])",
-            lambda x: self.translateState(x.group(2)),
-            expr)
+        expr = self.translateDictAccessedStates(expr)
 
         ## Add potential MOD parameters / constants if they were used in expression
         self.addToParameters(expr)
         self.addToConstants(expr)
 
         # Remove comments and strip off all references to class or instance
-        expr = expr.replace('self.', '').replace('cls.', '').split('#', 1)[0].strip()
+        expr = self.removeClassReferences(expr)
+        expr = self.removeLineComments(expr)
 
-        done = False
-        while not done:
-            print(f'{indent}expression: {expr}')
+        # Get all function calls in expression, and check if they are listed as "preserved"
+        matches = self.getFuncCalls(expr)
+        to_preserve = [m.group(2) in self.funcs_to_preserve for m in matches]
 
-            # Get all function calls in expression
-            matches = self.getFuncCalls(expr)
+        # As long as expression contains function calls that must be transformed
+        while not (len(matches) == 0 or all(to_preserve)):
+            logger.debug(f'{indent}expression: {expr}')
 
-            # Check if functions are listed as functions that must be preserved in expression
-            is_conserved = [m.group(2) in self.conserved_funcs for m in matches]
+            # Get first match to function call that is not listed as conserved
+            m = matches[next(i for i in range(len(to_preserve)) if not to_preserve[i])]
 
-            if len(matches) == 0:
-                print(f'{indent}no function call found -> done')
-                done = True
-            elif all(is_conserved):
-                print(f'{indent}all functions must be preserved -> done')
-                done = True
-            else:
-                # Get first match to function call that is not listed as conserved
-                m = matches[next(i for i in range(len(is_conserved)) if not is_conserved[i])]
+            # Get function information
+            fcall, fname, fargs, fprefix = self.parseFuncFields(m, expr, level=level + 1)
 
-                # Get function information
-                fcall, fname, fargs, fprefix = self.parseFuncFields(m, expr, level=level + 1)
+            # If function belongs to the class
+            if hasattr(self.pclass, fname):
 
-                # If function belongs to the class
-                if hasattr(self.pclass, fname):
+                # If function sole argument is Vm and it is not a current function
+                if self.isEffectiveVariable(fname, fargs):
 
-                    # If function sole argument is Vm and it is not a current function
-                    if len(fargs) == 1 and fargs[0] == 'Vm' and fname not in self.pclass.currents().keys():
+                    # Add function to the list of function tables if not already there
+                    if fname not in self.ftables_dict.keys():
+                        self.addToFuncTables(fname, level=level)
 
-                        # Add function to the list of function tables if not already there
-                        if fname not in self.ftables_dict.keys():
-                            self.addToFuncTables(fname, level=level)
+                    # Add function to the list of preserved functions if not already there
+                    if fname not in self.funcs_to_preserve:
+                        self.funcs_to_preserve.append(fname)
 
-                        # Add function to the list of preserved functions if not already there
-                        if fname not in self.conserved_funcs:
-                            self.conserved_funcs.append(fname)
-
-                    # If function has multiple arguments or sinle argument that is not Vm
-                    else:
-                        # Get function object
-                        func = getattr(self.pclass, fname)
-
-                        # Get function source code lines
-                        func_lines = inspect.getsource(func).split("'''", 2)[-1].splitlines()
-                        code_lines = []
-                        for line in func_lines:
-                            stripped_line = line.strip()
-                            if len(stripped_line) > 0:
-                                if not any(stripped_line.startswith(x) for x in ['@', 'def']):
-                                    code_lines.append(stripped_line)
-
-                        # If function contains multiple statements, raise error
-                        if len(code_lines) > 1 and not code_lines[0].startswith('return'):
-                            raise ValueError('cannot parse multi-statement function {}'.format(fname))
-
-                        # Join lines into new nested expression and remove comments
-                        fexpr = ''.join(code_lines).split('return ', 1)[1].split('#', 1)[0].strip()
-
-                        # Get arguments from function signature and check match with function call
-                        sig_fargs = list(inspect.signature(func).parameters.keys())
-                        if len(sig_fargs) != len(fargs):
-                            raise ValueError(
-                                f'differing number of arguments: {fargs} {sig_fargs}')
-
-                        # Strip off starting underscore in function name, if any
-                        if fname.startswith('_'):
-                            new_fname = fname.split('_')[1]
-                            print(f'{indent}replacing {fprefix}{fname} by {new_fname}')
-                            expr = expr.replace(f'{fprefix}{fname}', new_fname)
-                            fname = new_fname
-
-                        # If function is a current
-                        if fname in self.pclass.currents().keys():
-                            print(f'{indent}current function')
-
-                            # If current expression
-                            if is_current_expr:
-
-                                # Replace current function by its expression
-                                expr = expr.replace(
-                                    fcall, self.translateExpr(fexpr, level=level + 1))
-
-                                # Add to list of currents, along with description parsed
-                                # from function docstring
-                                self.currents_desc[fname] = self.getDocstring(func)
-
-                            # Otherwise, replace current function by current assigned value
-                            else:
-                                # self.conserved_funcs.append(fname)
-                                print(f'{indent}replacing {fcall} by {fname}')
-                                expr = expr.replace(fcall, fname)
-
-                        else:
-                            # If entry level and entire call is a single function
-                            if level == 0 and fcall == expr:
-                                # Replace funciton call by its expression
-                                expr = expr.replace(
-                                    fcall, self.translateExpr(fexpr, level=level + 1))
-
-                            # Otherwise
-                            else:
-                                # Add the function to FUNCTION dictionaries
-                                self.addToFunctions(fname, sig_fargs, fexpr, level=level)
-
-                                # Translate potential state arguments in function call
-                                new_fargs = [self.translateState(arg) for arg in fargs]
-                                new_fcall = f'{fprefix}{fname}({", ".join(new_fargs)})'
-                                print(f'{indent}replacing {fcall} by {new_fcall}')
-                                expr = expr.replace(fcall, new_fcall)
-
-                # If function does not belong to the class
+                # If function has multiple arguments or sinle argument that is not Vm
                 else:
+                    # Get function object, docstring, signature arguments and expression
+                    func = getattr(self.pclass, fname)
+                    fdoc = self.getDocstring(func)
+                    fexpr = self.getFuncReturnExpr(func)
+                    sig_fargs = self.getFuncSignatureArgs(func)
 
-                    # If function in MOD library, keep it in expression
-                    if fname in self.mod_functions:
-                        if '.' in fcall:  # Remove prefix if any
-                            stripped_fcall = fcall.split('.')[1]
-                            print(f'{indent}replacing {fcall} by {stripped_fcall}')
-                            expr = expr.replace(fcall, stripped_fcall)
-                            fcall = stripped_fcall
-                        print(f'{indent}{fname} in MOD library -> keeping {fcall} in expression')
-                        self.conserved_funcs.append(fname)
+                    # Check that number of signature arguments matches that of function call
+                    if len(sig_fargs) != len(fargs):
+                        raise ValueError(f'differing number of arguments: {fargs} {sig_fargs}')
 
-                    # Otherwise, assume it is a formatting error, and keep it as a value
+                    # Strip off starting underscores in function name, if any
+                    if fname.startswith('_'):
+                        fname = self.removeStartingUnderscores(fname)
+
+                    # If function is a current
+                    if fname in self.pclass.currents().keys():
+                        logger.debug(f'{indent}current function')
+
+                        # If current expression, replace function call by its expression,
+                        # and add function to currents dictionary
+                        if is_current_expr:
+
+                            # If function contains multiple lines, raise error
+                            if fexpr.count('\n') > 0:
+                                raise ValueError('current function cannot contain multiple statements')
+                            expr = self.replaceFuncCallByFuncExpr(expr, fcall, fexpr, level=level)
+                            self.currents_desc[fname] = fdoc
+
+                        # Otherwise, replace function by current assigned variable
+                        else:
+                            expr = self.replace(expr, fcall, fname, level=level)
                     else:
-                        # raise ValueError(f'{fname} not part of MOD library nor neuron class')
-                        print(f'{fname} not in MOD library or neuron class -> keeping as value')
-                        expr = expr.replace(fcall, fname)
+                        # If entry level and entire call is a single line function
+                        if level == 0 and fexpr.count('\n') == 0 and fcall == expr:
+                            # Replace function call by its expression
+                            expr = self.replaceFuncCallByFuncExpr(expr, fcall, fexpr, level=level)
 
-        # Translate remaining states in arithmetic expressions for MOD
-        expr = re.sub(
-            r"([A-Za-z0-9_]+)(\+|-|/| )",
-            lambda x: f'{self.translateState(x.group(1))}{x.group(2)}',
-            expr)
+                        # Otherwise
+                        else:
+                            # Add function to functions dictionary
+                            self.addToFunctions(fname, sig_fargs, fexpr, level=level)
 
-        # Replace integer power exponents by multiplications
-        expr = self.replacePowerExponents(expr)
+                            # Translate potential state arguments in function call by MOD aliases
+                            new_fargs = [self.translateVariableStates(arg) for arg in fargs]
+                            new_fcall = f'{fprefix}{fname}({", ".join(new_fargs)})'
+                            expr = self.replace(expr, fcall, new_fcall, level=level)
 
+            # If function does not belong to the class
+            else:
+
+                # If function in MOD library, keep it in expression
+                if fname in self.mod_functions:
+                    if '.' in fcall:  # Remove prefix if any
+                        stripped_fcall = fcall.split('.')[1]
+                        expr = self.replace(expr, fcall, stripped_fcall, level=level)
+                        fcall = stripped_fcall
+                    logger.debug(f'{indent}{fname} in MOD library -> keeping {fcall} in expression')
+                    self.funcs_to_preserve.append(fname)
+
+                # Otherwise, assume it is a formatting error, and keep it as a variable
+                else:
+                    # raise ValueError(f'{fname} not part of MOD library nor neuron class')
+                    logger.debug(f'{fname} not in MOD library or neuron class -> keeping as variable')
+                    expr = expr.replace(fcall, fname)
+
+            # Get all function calls in new expression, and check if they are listed as "preserved"
+            matches = self.getFuncCalls(expr)
+            to_preserve = [m.group(2) in self.funcs_to_preserve for m in matches]
+
+        # Translate remaining states in expression by MOD aliases if needed
+        expr = self.translateVariableStates(expr)
+
+        # Replace power exponents in expression
+        expr = self.translatePowerExponents(expr)
+
+        logger.debug(f'{indent}expression: {expr} -----> done')
         return expr
 
     def title(self):
@@ -411,7 +393,7 @@ class NmodlTranslator(PointNeuronTranslator):
             'ENDCOMMENT'
         ])
 
-    def constants_block(self):
+    def constantsBlock(self):
         ''' Create the (CONSTANT) block of the MOD file. '''
         if len(self.constants) > 0:
             block = [f'{k} = {v}' for k , v in self.constants.items()]
@@ -468,9 +450,14 @@ class NmodlTranslator(PointNeuronTranslator):
         block = []
         for name, content in self.functions_dict.items():
             def_line = f'FUNCTION {name}({", ".join(content["args"])}) {{'
-            return_line = f'    {name} = {content["expr"]}'
+            flines = content['expr'].splitlines()
+            if len(content.get('locals', [])) > 0:
+                locals_line = 'LOCAL ' + ', '.join(content['locals'])
+                flines = [locals_line] + flines
+            flines[-1] = f'{name} = {flines[-1]}'
+            flines = [f'    {fl}' for fl in flines]
             closure_line = '}'
-            block.append('\n'.join([def_line, return_line, closure_line]))
+            block.append('\n'.join([def_line, *flines, closure_line]))
         return '\n\n'.join(block)
 
     def initialBlock(self):
@@ -498,7 +485,7 @@ class NmodlTranslator(PointNeuronTranslator):
         return '\n\n'.join(filter(None, [
             self.title(),
             self.description(),
-            self.constants_block(),
+            self.constantsBlock(),
             self.tscale(),
             self.neuronBlock(),
             self.parameterBlock(),
@@ -513,7 +500,10 @@ class NmodlTranslator(PointNeuronTranslator):
 
     def print(self):
         ''' Print the created MOD file on the console. '''
+        print('---------------------------------------------------------------------')
         print(self.allBlocks())
+        print('---------------------------------------------------------------------')
+        print('\n')
 
     def dump(self, outfile):
         ''' Dump the created MOD file in an output file. '''

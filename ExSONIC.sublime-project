@@ -23,7 +23,8 @@
 				"__init__.py",
 				"*.c",
 				"*.sh",
-				"*.pkl"
+				"*.pkl",
+				"*.tmp"
 			],
 			"folder_exclude_patterns":
 			[

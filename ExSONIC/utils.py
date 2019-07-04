@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 # @Author: Theo Lemaire
+# @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 14:38:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-01-22 14:23:45
+# @Last Modified time: 2019-07-04 22:18:47
 
 import os
 import numpy as np

@@ -1,13 +1,9 @@
 # -*- coding: utf-8 -*-
 # @Author: Theo Lemaire
 # @Email: theo.lemaire@epfl.ch
-# @Date:   2019-06-04 18:26:42
-# @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-07-01 17:39:03
-# @Author: Theo Lemaire
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-06-07 13:59:37
+# @Last Modified time: 2019-07-04 23:37:29
 
 import pickle
 import abc
@@ -21,7 +17,7 @@ from PySONIC.core import Model, PointNeuron, NeuronalBilayerSonophore
 from PySONIC.utils import si_format, timer, logger, binarySearch, plural, debug
 
 from .pyhoc import *
-from ..utils import getNmodlDir
+# from ..utils import getNmodlDir
 from ..constants import *
 
 
@@ -34,7 +30,7 @@ class Node(metaclass=abc.ABCMeta):
         ''' Keyword used to characterize stimulation modality. '''
         raise NotImplementedError
 
-    def __init__(self, pneuron, id=None):
+    def __init__(self, pneuron, id=None, auto_nmodl=True):
         ''' Initialization.
 
             :param pneuron: point-neuron model
@@ -47,7 +43,8 @@ class Node(metaclass=abc.ABCMeta):
         logger.debug('Creating {} model'.format(self))
 
         # Load mechanisms and set function tables of appropriate membrane mechanism
-        load_mechanisms(getNmodlDir(), self.pneuron.name)
+        self.auto_nmodl = auto_nmodl
+        load_mechanisms(self.getNmodlDir(), self.pneuron.name)
         self.setFuncTables()
 
         # Create section and set membrane mechanism
@@ -74,6 +71,15 @@ class Node(metaclass=abc.ABCMeta):
             lkp[k] = np.array([v])
         return lkp
 
+    def getNmodlDir(self):
+        ''' Return path to directory containing MOD files and compiled mechanisms files. '''
+        selfdir = os.path.dirname(os.path.realpath(__file__))
+        pardir = os.path.abspath(os.path.join(selfdir, os.pardir))
+        if self.auto_nmodl:
+            return os.path.join(pardir, 'auto_nmodl')
+        else:
+            return os.path.join(pardir, 'nmodl')
+
     def setFuncTables(self):
         ''' Set neuron-specific interpolation tables along the charge dimension,
             and link them to FUNCTION_TABLEs in the MOD file of the corresponding
@@ -92,8 +98,17 @@ class Node(metaclass=abc.ABCMeta):
         # !!! hoc lookup dictionary must be a member of the class,
         # otherwise the assignment below does not work properly !!!
         self.lkp = {'V': array_to_matrix(lkp['V'])}  # mV
-        for rate in self.pneuron.rates:
-            self.lkp[rate] = array_to_matrix(lkp[rate] * 1e-3)  # ms-1
+
+        if self.auto_nmodl:
+            for ratex in self.pneuron.alphax_list.union(self.pneuron.betax_list):
+                self.lkp[ratex] = array_to_matrix(lkp[ratex] * 1e-3)  # ms-1
+            for taux in self.pneuron.taux_list:
+                self.lkp[taux] = array_to_matrix(lkp[taux] * 1e3)  # ms
+            for xinf in self.pneuron.xinf_list:
+                self.lkp[xinf] = array_to_matrix(lkp[xinf])  # (-)
+        else:
+            for rate in self.pneuron.rates:
+                self.lkp[rate] = array_to_matrix(lkp[rate] * 1e-3)  # ms-1
 
         # Assign hoc matrices to 2D interpolation tables in membrane mechanism
         for k, v in self.lkp.items():
