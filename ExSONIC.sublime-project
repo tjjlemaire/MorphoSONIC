@@ -8,6 +8,7 @@
 			"shell_cmd": "\"python\" -u \"$file\""
 		}
 	],
+	"conda_environment": "C:\\Users\\lemaire\\Anaconda3",
 	"folders":
 	[
 		{
@@ -22,6 +23,7 @@
 				"__init__.py",
 				"*.c",
 				"*.sh",
+				"*.pkl"
 			],
 			"folder_exclude_patterns":
 			[
