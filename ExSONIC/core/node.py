@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-07-05 14:11:09
+# @Last Modified time: 2019-07-05 14:18:36
 
 import pickle
 import abc
@@ -384,7 +384,7 @@ class SonicNode(Node):
     }
     A_conv_thr = THRESHOLD_CONV_RANGE_ASTIM
 
-    def __init__(self, pneuron, id=None, a=32e-9, Fdrive=500e3, fs=1., auto_nmodl=False):
+    def __init__(self, pneuron, id=None, a=32e-9, Fdrive=500e3, fs=1., auto_nmodl=True):
         ''' Initialization.
 
             :param pneuron: point-neuron model
