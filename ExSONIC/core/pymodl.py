@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-03-18 21:17:03
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-07-05 04:43:45
+# @Last Modified time: 2019-07-05 13:35:38
 
 import logging
 import pprint
@@ -198,7 +198,7 @@ class NmodlTranslator(PointNeuronTranslator):
                 if self.conductance_pattern.match(attr_name):
                     self.params[attr_name] = {'val': attr_val * 1e-4, 'unit': 'S/cm2'}
                 elif self.permeability_pattern.match(attr_name):
-                    self.params[attr_name] = {'val': attr_val * 1e2, 'unit': 'cm/s'}
+                    self.params[attr_name] = {'val': attr_val * 1e-4, 'unit': '10 m/ms'}
                 elif self.reversal_potential_pattern.match(attr_name):
                     self.params[attr_name] = {'val': attr_val, 'unit': 'mV'}
                 elif self.time_constant_pattern.match(attr_name):
@@ -437,7 +437,7 @@ class NmodlTranslator(PointNeuronTranslator):
         block = [
             'stimon       : Stimulation state',
             'Adrive (kPa) : Stimulation amplitude',
-            'cm = {} (uF/cm2)'.format(self.pclass.Cm0 * 1e2)
+            # 'cm = {} (uF/cm2)'.format(self.pclass.Cm0 * 1e2)
         ]
         for k, v in self.params.items():
             block.append('{} = {} ({})'.format(k, v['val'], v['unit']))

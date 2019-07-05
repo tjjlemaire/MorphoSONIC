@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-07-04 23:53:50
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-07-05 04:42:33
+# @Last Modified time: 2019-07-05 12:45:18
 
 import time
 import numpy as np
@@ -23,12 +23,14 @@ class TestNode(TestBase):
     ''' Run Node (ESTIM) and SonicNode (ASTIM) simulations and compare results with those obtained
         with pure-Python implementations (PointNeuron and NeuronalBilayerSonophore classes). '''
 
+    def __init__(self):
+        self.pneuron = getPointNeuron('FH')
+
     def test_ESTIM(self, is_profiled=False):
-        Astim = 20.0  # mA/m2
+        Astim = 1e4  # mA/m2
         tstim = 100e-3   # s
         toffset = 50e-3  # s
-        pneuron = getPointNeuron('STN')
-        fig = self.compare(pneuron, Astim, tstim, toffset)
+        fig = self.compare(self.pneuron, Astim, tstim, toffset)
 
     def test_ASTIM(self, is_profiled=False):
         a = 32e-9        # nm
@@ -37,8 +39,8 @@ class TestNode(TestBase):
         tstim = 100e-3   # s
         toffset = 50e-3  # s
         DC = 0.5         # (-)
-        pneuron = getPointNeuron('STN')
-        fig = self.compare(pneuron, Adrive, tstim, toffset, DC=DC, a=a, Fdrive=Fdrive)
+        fig = self.compare(
+            self.pneuron, Adrive, tstim, toffset, DC=DC, a=a, Fdrive=Fdrive)
 
     @staticmethod
     def compare(pneuron, A, tstim, toffset, PRF=100., DC=1., a=None, Fdrive=None,
@@ -84,8 +86,8 @@ class TestNode(TestBase):
             manual_model = SonicNode(pneuron, a=a, Fdrive=Fdrive, auto_nmodl=False)
             auto_model = SonicNode(pneuron, a=a, Fdrive=Fdrive, auto_nmodl=True)
         else:
-            auto_model = IintraNode(pneuron, auto_nmodl=True)
             manual_model = IintraNode(pneuron, auto_nmodl=False)
+            auto_model = IintraNode(pneuron, auto_nmodl=True)
 
         data['auto'], meta['auto'] = auto_model.simulate(*args, dt, atol)
         data['manual'], meta['manual'] = manual_model.simulate(*args, dt, atol)

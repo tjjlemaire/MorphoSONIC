@@ -37,14 +37,13 @@ NEURON {
 PARAMETER {
    stimon       : Stimulation state
    Adrive (kPa) : Stimulation amplitude
-   cm = 1.0 (uF/cm2)
    gNabar = 0.049 (S/cm2)
    ENa = 60.0 (mV)
    gKdbar = 0.057 (S/cm2)
    EK = -90.0 (mV)
    gAbar = 0.005 (S/cm2)
    gCaTbar = 0.005 (S/cm2)
-   Cao = 0.002 ()
+   Cao = 0.002 (M)
    T = 306.15 ()
    gCaLbar = 0.015000000000000001 (S/cm2)
    gKCabar = 0.001 (S/cm2)

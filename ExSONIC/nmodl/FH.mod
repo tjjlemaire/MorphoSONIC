@@ -34,22 +34,23 @@ NEURON {
 }
 
 CONSTANT {
-	FARADAY = 9.64853e4 (coul) : Faraday constant (C/mol, moles do not appear in units)
-	R = 8.31342  : Universal gas constant (Pa.m^3.mol^-1.K^-1 or J.mol^-1.K^-1)
+    Z_Na = 1
+    FARADAY = 96485.3
+    Rg = 8.31342
+    Z_K = 1
 }
 
 
 PARAMETER {
     stimon       : Stimulation state
     Adrive (kPa) : Stimulation amplitude
-    q10
 
     pNabar = 8e-3     (cm/s)
 	pPbar = .54e-3    (cm/s)
 	pkbar = 1.2e-3    (cm/s)
 	gLeak = 30.3e-3   (S/cm2)
 	ELeak = -69.74    (mV)
-	Tcelsius = 20.00  (degC)
+	T = 293.15  (K)
 	Nai = 13.74e-3    (M)
     Nao = 114.5e-3    (M)
     Ki = 120e-3       (M)
@@ -82,8 +83,19 @@ FUNCTION_TABLE betan(A(kPa), Q(nC/cm2))   (/ms)
 FUNCTION_TABLE alphap(A(kPa), Q(nC/cm2))  (/ms)
 FUNCTION_TABLE betap(A(kPa), Q(nC/cm2))   (/ms)
 
+FUNCTION efun(x) {
+    efun = x / (exp(x) - 1)
+}
+
+FUNCTION ghkDrive(Vm, Z_ion, Cion_in, Cion_out, T) {
+    LOCAL x, eCi, eCo
+    x = FARADAY * Vm / (Rg * T) * 1e-3
+    eCi = Cion_in * efun(-x)
+    eCo = Cion_out * efun(x)
+    ghkDrive = FARADAY * (eCi - eCo)
+}
+
 INITIAL {
-    q10 = 3^((Tcelsius - 20) / 10)
     m = alpham(0, v) / (alpham(0, v) + betam(0, v))
     h = alphah(0, v) / (alphah(0, v) + betah(0, v))
     n = alphan(0, v) / (alphan(0, v) + betan(0, v))
@@ -91,31 +103,12 @@ INITIAL {
 }
 
 BREAKPOINT {
-	LOCAL ghkNa, ghkK
     SOLVE states METHOD cnexp
     Vm = V(Adrive * stimon, v)
-    ghkNa = ghkDrive(Vm, Nai, Nao)
-    ghkK = ghkDrive(Vm, Ki, Ko)
-    iNa = pNabar * m * m * h * ghkNa
-	iKd = pkbar * n * n * ghkK
-    iP = pPbar * p * p * ghkNa
-	iLeak = gLeak * (Vm - ELeak)
-}
-
-FUNCTION ghkDrive(v(mV), Ci(M), Co(M)) {
-	LOCAL x, ECi, ECo
-	x = FARADAY * v / (R*(Tcelsius+273.15)) * 1e-3
-	ECi = Ci*efun(-x)
-	ECo = Co*efun(x)
-	ghkDrive = FARADAY*(ECi - ECo)
-}
-
-FUNCTION efun(x) {
-	efun = x / (exp(x) - 1)
-}
-
-FUNCTION vtrap(x, y) {
-    vtrap = x / (exp(x / y) - 1)
+    iNa = pNabar * m * m * h * ghkDrive(Vm, Z_Na, Nai, Nao, T)
+    iKd = pkbar * n * n * ghkDrive(Vm, Z_K, Ki, Ko, T)
+    iP = pPbar * p * p * ghkDrive(Vm, Z_Na, Nai, Nao, T)
+    iLeak = gLeak * (Vm - ELeak)
 }
 
 DERIVATIVE states {

@@ -35,15 +35,14 @@ NEURON {
 PARAMETER {
    stimon       : Stimulation state
    Adrive (kPa) : Stimulation amplitude
-   cm = 2.0 (uF/cm2)
-   pNabar = 0.008 (cm/s)
+   pNabar = 8e-09 (10 m/ms)
    Nai = 0.01374 (M)
-   Nao = 0.1145 ()
+   Nao = 0.1145 (M)
    T = 293.15 ()
-   pKbar = 0.0012000000000000001 (cm/s)
-   Ki = 0.12 ()
-   Ko = 0.0025 ()
-   pPbar = 0.00054 (cm/s)
+   pKbar = 1.2e-09 (10 m/ms)
+   Ki = 0.12 (M)
+   Ko = 0.0025 (M)
+   pPbar = 5.4e-10 (10 m/ms)
    gLeak = 0.03003 (S/cm2)
    ELeak = -69.974 (mV)
 }
