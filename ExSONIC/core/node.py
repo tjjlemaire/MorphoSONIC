@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-07-05 14:05:41
+# @Last Modified time: 2019-07-05 14:09:20
 
 import pickle
 import abc
@@ -78,10 +78,7 @@ class Node(metaclass=abc.ABCMeta):
         ''' Return path to directory containing MOD files and compiled mechanisms files. '''
         selfdir = os.path.dirname(os.path.realpath(__file__))
         pardir = os.path.abspath(os.path.join(selfdir, os.pardir))
-        if self.auto_nmodl:
-            return os.path.join(pardir, 'auto_nmodl')
-        else:
-            return os.path.join(pardir, 'nmodl')
+        return os.path.join(pardir, 'nmodl')
 
     def setFuncTables(self):
         ''' Set neuron-specific interpolation tables along the charge dimension,
