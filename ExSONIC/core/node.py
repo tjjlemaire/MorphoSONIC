@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-07-05 14:09:20
+# @Last Modified time: 2019-07-05 14:11:09
 
 import pickle
 import abc
@@ -17,7 +17,7 @@ from PySONIC.core import Model, PointNeuron, NeuronalBilayerSonophore
 from PySONIC.utils import si_format, timer, logger, binarySearch, plural, debug
 
 from .pyhoc import *
-# from ..utils import getNmodlDir
+from ..utils import getNmodlDir
 from ..constants import *
 
 
@@ -47,7 +47,7 @@ class Node(metaclass=abc.ABCMeta):
         self.mechname = self.pneuron.name
         if self.auto_nmodl:
             self.mechname += 'auto'
-        load_mechanisms(self.getNmodlDir(), self.mechname)
+        load_mechanisms(getNmodlDir(), self.mechname)
         self.setFuncTables()
 
         # Create section and set membrane mechanism
@@ -73,12 +73,6 @@ class Node(metaclass=abc.ABCMeta):
         for k, v in lkp.items():
             lkp[k] = np.array([v])
         return lkp
-
-    def getNmodlDir(self):
-        ''' Return path to directory containing MOD files and compiled mechanisms files. '''
-        selfdir = os.path.dirname(os.path.realpath(__file__))
-        pardir = os.path.abspath(os.path.join(selfdir, os.pardir))
-        return os.path.join(pardir, 'nmodl')
 
     def setFuncTables(self):
         ''' Set neuron-specific interpolation tables along the charge dimension,
