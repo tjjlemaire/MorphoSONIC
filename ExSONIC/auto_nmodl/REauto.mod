@@ -68,11 +68,11 @@ FUNCTION_TABLE uinf(A(kPa), Q(nC/cm2)) ()
 FUNCTION_TABLE tauu(A(kPa), Q(nC/cm2)) (ms)
 
 INITIAL {
-   m = alpham(0, v) / (alpham(0, v) + betam(0, v))
-   h = alphah(0, v) / (alphah(0, v) + betah(0, v))
-   n = alphan(0, v) / (alphan(0, v) + betan(0, v))
-   s = sinf(0, v)
-   u = uinf(0, v)
+   m = alpham(Adrive * stimon, v) / (alpham(Adrive * stimon, v) + betam(Adrive * stimon, v))
+   h = alphah(Adrive * stimon, v) / (alphah(Adrive * stimon, v) + betah(Adrive * stimon, v))
+   n = alphan(Adrive * stimon, v) / (alphan(Adrive * stimon, v) + betan(Adrive * stimon, v))
+   s = sinf(Adrive * stimon, v)
+   u = uinf(Adrive * stimon, v)
 }
 
 BREAKPOINT {

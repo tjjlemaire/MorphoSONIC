@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-30 11:26:26
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-07-01 17:26:00
+# @Last Modified time: 2019-07-05 14:04:26
 
 import time
 import numpy as np
@@ -101,7 +101,6 @@ class TestNode(TestBase):
 
         # Run NEURON and Python simulations
         data, meta = {}, {}
-        print(args)
         data['NEURON'], meta['NEURON'] = nrn_model.simulate(*args, dt, atol)
         data['Python'], meta['Python'] = py_model.simulate(*py_args)
         tcomp = {k: v['tcomp'] for k, v in meta.items()}

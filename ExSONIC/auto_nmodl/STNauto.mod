@@ -130,15 +130,15 @@ FUNCTION derCai(p, q, c, d1, d2, Cai, Vm) {
 }
 
 INITIAL {
-   m = minf(0, v)
-   h = hinf(0, v)
-   n = ninf(0, v)
-   a = ainf(0, v)
-   b = binf(0, v)
-   p = pinf(0, v)
-   q = qinf(0, v)
-   c = cinf(0, v)
-   d1 = d1inf(0, v)
+   m = minf(Adrive * stimon, v)
+   h = hinf(Adrive * stimon, v)
+   n = ninf(Adrive * stimon, v)
+   a = ainf(Adrive * stimon, v)
+   b = binf(Adrive * stimon, v)
+   p = pinf(Adrive * stimon, v)
+   q = qinf(Adrive * stimon, v)
+   c = cinf(Adrive * stimon, v)
+   d1 = d1inf(Adrive * stimon, v)
    d2 = d2inf(Cai0)
    r = rinf(Cai0)
    Cai = Cai0

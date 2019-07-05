@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-03-18 21:17:03
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-07-05 13:35:38
+# @Last Modified time: 2019-07-05 13:57:48
 
 import logging
 import pprint
@@ -27,6 +27,9 @@ class NmodlTranslator(PointNeuronTranslator):
     # MOD library components
     mod_functions = ['acos', 'asin', 'atan', 'atan2', 'ceil', 'cos', 'cosh', 'exp', 'fabs',
                      'floor', 'fmod', 'log', 'log10', 'pow', 'sin', 'sinh', 'sqrt', 'tan', 'tanh']
+
+    # Lookup FUNCTION TABLE arguments
+    lkp_func_table_args = 'Adrive * stimon, v'
 
     def __init__(self, pclass, verbose=False):
         super().__init__(pclass, verbose=verbose)
@@ -217,35 +220,27 @@ class NmodlTranslator(PointNeuronTranslator):
     def adjustFuncTableCalls(self):
         ''' Adjust function table calls to match the corresponding FUNCTION_TABLE signature. '''
         logger.info('adjusting function table calls')
-        lkp_args_off = '0, v'
-        lkp_args_dynamic = 'Adrive * stimon, v'
 
         # Replace calls in dstates, sstates and currents dictionaries.
-        for d, lkp_args in zip(
-            [self.dstates_dict, self.sstates_dict, self.currents_dict],
-            [lkp_args_dynamic, lkp_args_off, lkp_args_dynamic]):
+        for d in [self.dstates_dict, self.sstates_dict, self.currents_dict]:
             for k, expr in d.items():
                 matches = self.getFuncCalls(expr)
                 f_list = [self.parseFuncFields(m, expr, level=0) for m in matches]
                 for (fcall, fname, fargs, fprefix) in f_list:
                     if fname in self.ftables_dict.keys():
-                        ftable_call = '{}({})'.format(fname, lkp_args)
+                        ftable_call = '{}({})'.format(fname, self.lkp_func_table_args)
                         expr = self.replace(expr, fcall, ftable_call)
                 d[k] = expr
 
         # Replace calls in dynamically defined functions
         for k, fcontent in self.functions_dict.items():
-            if 'inf' in k:
-                lkp_args = '0, v'
-            else:
-                lkp_args = 'Adrive * stimon, v'
             expr = fcontent['expr']
             matches = self.getFuncCalls(expr)
             f_list = [self.parseFuncFields(m, expr, level=0) for m in matches]
             for (fcall, fname, fargs, fprefix) in f_list:
                 if fname in self.ftables_dict.keys():
                     # Replace function call by equivalent function table call
-                    ftable_call = '{}({})'.format(fname, lkp_args)
+                    ftable_call = '{}({})'.format(fname, self.lkp_func_table_args)
                     expr = self.replace(expr, fcall, ftable_call)
             self.functions_dict[k]['expr'] = expr
 
@@ -436,8 +431,7 @@ class NmodlTranslator(PointNeuronTranslator):
         ''' Create the PARAMETER block of the MOD file. '''
         block = [
             'stimon       : Stimulation state',
-            'Adrive (kPa) : Stimulation amplitude',
-            # 'cm = {} (uF/cm2)'.format(self.pclass.Cm0 * 1e2)
+            'Adrive (kPa) : Stimulation amplitude'
         ]
         for k, v in self.params.items():
             block.append('{} = {} ({})'.format(k, v['val'], v['unit']))

@@ -101,19 +101,19 @@ FUNCTION P0inf(Cai) {
 }
 
 FUNCTION Oinf(Cai, Vm) {
-    Oinf = k4 / (k3 * (1 - P0inf(Cai)) + k4 * (1 + betao(0, v) / alphao(0, v)))
+    Oinf = k4 / (k3 * (1 - P0inf(Cai)) + k4 * (1 + betao(Adrive * stimon, v) / alphao(Adrive * stimon, v)))
 }
 
 FUNCTION Cinf(Cai, Vm) {
-    Cinf = betao(0, v) / alphao(0, v) * Oinf(Cai, Vm)
+    Cinf = betao(Adrive * stimon, v) / alphao(Adrive * stimon, v) * Oinf(Cai, Vm)
 }
 
 INITIAL {
-   m = alpham(0, v) / (alpham(0, v) + betam(0, v))
-   h = alphah(0, v) / (alphah(0, v) + betah(0, v))
-   n = alphan(0, v) / (alphan(0, v) + betan(0, v))
-   s = sinf(0, v)
-   u = uinf(0, v)
+   m = alpham(Adrive * stimon, v) / (alpham(Adrive * stimon, v) + betam(Adrive * stimon, v))
+   h = alphah(Adrive * stimon, v) / (alphah(Adrive * stimon, v) + betah(Adrive * stimon, v))
+   n = alphan(Adrive * stimon, v) / (alphan(Adrive * stimon, v) + betan(Adrive * stimon, v))
+   s = sinf(Adrive * stimon, v)
+   u = uinf(Adrive * stimon, v)
    iCaT = gCaTbar * s * s * u * (Vm - ECa)
    Cai = Cai_min - taur_Cai * current_to_molar_rate_Ca * iCaT
    P0 = P0inf(Cai)

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-07-05 04:50:08
+# @Last Modified time: 2019-07-05 14:05:41
 
 import pickle
 import abc
@@ -203,23 +203,13 @@ class Node(metaclass=abc.ABCMeta):
 
         # Initialize
         self.stimon = self.setStimON(0)
-        print(f'A = {getattr(self.section(0.5), self.mechname).Adrive} kPa')
-        print('finitialize')
         h.finitialize(self.pneuron.Qm0() * 1e5)  # nC/cm2
         self.stimon = self.setStimON(1)
         self.cvode.event(self.Ton, self.toggleStim)
 
         # Integrate
-        i = 0
         while h.t < tstop:
-            # if i < 5:
-            #     print(f't = {h.t} ms')
-            #     print(f'Qm = {self.section(0.5).v} nC/cm2')
-            #     print(f'Vmeff = {getattr(self.section(0.5), self.mechname).Vm} mV')
-            #     print(f'iCaT = {getattr(self.section(0.5), self.mechname).iCaT} mA/cm2')
-            #     print('')
             h.fadvance()
-            i += 1
 
         # Set absolute error tolerance back to default value if changed
         if atol is not None:
@@ -344,8 +334,6 @@ class IintraNode(Node):
     Arange = (0., 2 * AMP_UPPER_BOUND_ESTIM)
     A_conv_thr = THRESHOLD_CONV_RANGE_ESTIM
 
-
-
     def setStimAmp(self, Astim):
         ''' Set electrical stimulation amplitude
 
@@ -405,7 +393,7 @@ class SonicNode(Node):
     }
     A_conv_thr = THRESHOLD_CONV_RANGE_ASTIM
 
-    def __init__(self, pneuron, id=None, a=32e-9, Fdrive=500e3, fs=1.):
+    def __init__(self, pneuron, id=None, a=32e-9, Fdrive=500e3, fs=1., auto_nmodl=False):
         ''' Initialization.
 
             :param pneuron: point-neuron model
@@ -419,7 +407,7 @@ class SonicNode(Node):
         self.a = a
         self.fs = fs
         self.Fdrive = Fdrive
-        super().__init__(pneuron, id=id)
+        super().__init__(pneuron, id=id, auto_nmodl=auto_nmodl)
         self.Arange = (0., self.getLookup().refs['A'].max())
 
     def __repr__(self):

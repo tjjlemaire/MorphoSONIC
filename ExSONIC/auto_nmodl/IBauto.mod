@@ -74,12 +74,12 @@ FUNCTION_TABLE alphar(A(kPa), Q(nC/cm2)) (/ms)
 FUNCTION_TABLE betar(A(kPa), Q(nC/cm2)) (/ms)
 
 INITIAL {
-   m = alpham(0, v) / (alpham(0, v) + betam(0, v))
-   h = alphah(0, v) / (alphah(0, v) + betah(0, v))
-   n = alphan(0, v) / (alphan(0, v) + betan(0, v))
-   p = pinf(0, v)
-   q = alphaq(0, v) / (alphaq(0, v) + betaq(0, v))
-   r = alphar(0, v) / (alphar(0, v) + betar(0, v))
+   m = alpham(Adrive * stimon, v) / (alpham(Adrive * stimon, v) + betam(Adrive * stimon, v))
+   h = alphah(Adrive * stimon, v) / (alphah(Adrive * stimon, v) + betah(Adrive * stimon, v))
+   n = alphan(Adrive * stimon, v) / (alphan(Adrive * stimon, v) + betan(Adrive * stimon, v))
+   p = pinf(Adrive * stimon, v)
+   q = alphaq(Adrive * stimon, v) / (alphaq(Adrive * stimon, v) + betaq(Adrive * stimon, v))
+   r = alphar(Adrive * stimon, v) / (alphar(Adrive * stimon, v) + betar(Adrive * stimon, v))
 }
 
 BREAKPOINT {
