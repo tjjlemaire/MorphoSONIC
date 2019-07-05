@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-07-05 01:12:07
+# @Last Modified time: 2019-07-05 04:50:08
 
 import pickle
 import abc
@@ -30,7 +30,7 @@ class Node(metaclass=abc.ABCMeta):
         ''' Keyword used to characterize stimulation modality. '''
         raise NotImplementedError
 
-    def __init__(self, pneuron, id=None, auto_nmodl=False):
+    def __init__(self, pneuron, id=None, auto_nmodl=True):
         ''' Initialization.
 
             :param pneuron: point-neuron model
@@ -405,7 +405,7 @@ class SonicNode(Node):
     }
     A_conv_thr = THRESHOLD_CONV_RANGE_ASTIM
 
-    def __init__(self, pneuron, id=None, a=32e-9, Fdrive=500e3, fs=1., auto_nmodl=False):
+    def __init__(self, pneuron, id=None, a=32e-9, Fdrive=500e3, fs=1.):
         ''' Initialization.
 
             :param pneuron: point-neuron model
@@ -419,7 +419,7 @@ class SonicNode(Node):
         self.a = a
         self.fs = fs
         self.Fdrive = Fdrive
-        super().__init__(pneuron, id=id, auto_nmodl=auto_nmodl)
+        super().__init__(pneuron, id=id)
         self.Arange = (0., self.getLookup().refs['A'].max())
 
     def __repr__(self):

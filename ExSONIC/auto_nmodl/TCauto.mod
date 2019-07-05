@@ -9,7 +9,7 @@ Understanding ultrasound neuromodulation using a computationally efficient
 and interpretable model of intramembrane cavitation. J. Neural Eng.
 
 @Author: Theo Lemaire, EPFL
-@Date: 2019-07-04
+@Date: 2019-07-05
 @Email: theo.lemaire@epfl.ch
 ENDCOMMENT
 
@@ -42,14 +42,14 @@ PARAMETER {
    gKLeak = 1.3800000000000002e-05 (S/cm2)
    gHbar = 1.75e-05 (S/cm2)
    EH = -40.0 (mV)
-   k3 = 0.1 (/ms)
-   k4 = 0.001 (/ms)
+   Cai_min = 5e-08 (M)
+   taur_Cai = 5.0 (ms)
+   current_to_molar_rate_Ca = 0.0005182136553443892 (1e7 mol.m-1.C-1)
    k2 = 0.0004 (/ms)
    k1 = 2.5e+19 (/ms)
    nCa = 4 ()
-   Cai_min = 5e-08 (M)
-   taur_Cai = 5.0 (ms)
-   iCa_to_Cai_rate = 5.182136553443892e-05 ()
+   k3 = 0.1 (/ms)
+   k4 = 0.001 (/ms)
 }
 
 STATE {
@@ -58,10 +58,10 @@ STATE {
    n : iKd gate
    s : iCaT activation gate
    u : iCaT inactivation gate
-   C1 : iH gate closed state
-   O1 : iH gate open state
    Cai : submembrane Ca2+ concentration (M)
    P0 : proportion of unbound iH regulating factor
+   C1 : iH gate closed state
+   O1 : iH gate open state
 }
 
 ASSIGNED {
@@ -90,7 +90,7 @@ FUNCTION_TABLE betao(A(kPa), Q(nC/cm2)) (/ms)
 FUNCTION_TABLE alphao(A(kPa), Q(nC/cm2)) (/ms)
 
 FUNCTION OL(O, C) {
-    OL = 1 - O1 - C
+    OL = 1 - O - C
 }
 
 FUNCTION npow(x, n) {
@@ -115,21 +115,22 @@ INITIAL {
    n = alphan(0, v) / (alphan(0, v) + betan(0, v))
    s = sinf(0, v)
    u = uinf(0, v)
-   Cai = Cai_min - taur_Cai * iCa_to_Cai_rate * iCaT
-   O1 = Oinf(Cai, Vm)
-   C1 = Cinf(Cai, Vm)
+   iCaT = gCaTbar * s * s * u * (Vm - ECa)
+   Cai = Cai_min - taur_Cai * current_to_molar_rate_Ca * iCaT
    P0 = P0inf(Cai)
+   C1 = Cinf(Cai, Vm)
+   O1 = Oinf(Cai, Vm)
 }
 
 BREAKPOINT {
    SOLVE states METHOD cnexp
    Vm = V(Adrive * stimon, v)
-   iH = gHbar * (O1 + 2 * OL(O1, C1)) * (Vm - EH)
    iNa = gNabar * m * m * m * h * (Vm - ENa)
    iKd = gKdbar * n * n * n * n * (Vm - EK)
    iCaT = gCaTbar * s * s * u * (Vm - ECa)
    iLeak = gLeak * (Vm - ELeak)
    iKLeak = gKLeak * (Vm - EK)
+   iH = gHbar * (O1 + 2 * OL(O1, C1)) * (Vm - EH)
 }
 
 DERIVATIVE states {
@@ -138,8 +139,7 @@ DERIVATIVE states {
    n' = alphan(Adrive * stimon, v) * (1 - n) - betan(Adrive * stimon, v) * n
    s' = (sinf(Adrive * stimon, v) - s) / taus(Adrive * stimon, v)
    u' = (uinf(Adrive * stimon, v) - u) / tauu(Adrive * stimon, v)
-
-   Cai' = ((Cai_min - Cai) / taur_Cai - iCa_to_Cai_rate * iCaT)
+   Cai' = ((Cai_min - Cai) / taur_Cai - current_to_molar_rate_Ca * iCaT)
    P0' = k2 * (1 - P0) - k1 * P0 * npow(Cai, nCa)
    C1' = betao(Adrive * stimon, v) * O1 - alphao(Adrive * stimon, v) * C1
    O1' = (alphao(Adrive * stimon, v) * C1 - betao(Adrive * stimon, v) * O1 - k3 * O1 * (1 - P0) + k4 * (1 - O1 - C1))

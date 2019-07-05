@@ -65,7 +65,7 @@ PARAMETER {
     k2 = 0.0004         (1/ms)            : CB protein inactivation rate
     k3 = 0.1            (1/ms)            : CB protein iH channel binding rate
     k4  = 0.001         (1/ms)            : CB protein iH channel unbinding rate
-    nca = 4                               : number of Calcium binding sites on CB protein
+    nCa = 4                               : number of Calcium binding sites on CB protein
 
     depth = 1e-7        (m)   : depth of shell
     taur = 5            (ms)  : rate of calcium removal
@@ -110,9 +110,24 @@ FUNCTION_TABLE tauu(A(kPa), Q(nC/cm2)) (ms)
 FUNCTION_TABLE betao(A(kPa), Q(nC/cm2)) (/ms)
 FUNCTION_TABLE alphao(A(kPa), Q(nC/cm2)) (/ms)
 
+FUNCTION OL(O, C) {
+    OL = 1 - O - C
+}
+
 FUNCTION npow(x, n) {
-    : Raise a quantity to a given power exponent
     npow = x^n
+}
+
+FUNCTION P0inf(Cai) {
+    P0inf = k2 / (k2 + k1 * npow(Cai, nCa))
+}
+
+FUNCTION Oinf(Cai, Vm) {
+    Oinf = k4 / (k3 * (1 - P0inf(Cai)) + k4 * (1 + betao(0, v) / alphao(0, v)))
+}
+
+FUNCTION Cinf(Cai, Vm) {
+    Cinf = betao(0, v) / alphao(0, v) * Oinf(Cai, Vm)
 }
 
 FUNCTION iondrive(i (mA/cm2), val, d(nm)) (M/ms) {
@@ -128,17 +143,13 @@ INITIAL {
     u = uinf(0, v)
     iCaT = gCaTbar * s * s * u * (V(0, v) - ECa)
     Cai = camin + taur * iondrive(iCaT, 2, depth)
-    P0 = k2 / (k2 + k1 * npow(Cai, nca))
-    O1 = k4 / (k3 * (1 - P0) + k4 * (1 + betao(0, v) / alphao(0, v)))
-    C1 = betao(0, v) / alphao(0, v) * O1
+    P0 = P0inf(Cai)
+    O1 = Oinf(Cai, Vm)
+    C1 = Cinf(Cai, Vm)
 }
 
 BREAKPOINT {
     SOLVE states METHOD cnexp
-    if(O1 < 0.) {O1 = 0.}
-    if(O1 > 1.) {O1 = 1.}
-    if(C1 < 0.) {C1 = 0.}
-    if(C1 > 1.) {C1 = 1.}
     Vm = V(Adrive * stimon, v)
     iNa = gNabar * m * m * m * h * (Vm - ENa)
     iKd = gKdbar * n * n * n * n * (Vm - EK)
@@ -156,7 +167,8 @@ DERIVATIVE states {
     u' = (uinf(Adrive * stimon, v) - u) / tauu(Adrive * stimon, v)
 
     Cai' = (camin - Cai) / taur + iondrive(iCaT, 2, depth)
-    P0' = k2 * (1 - P0) - k1 * P0 * npow(Cai, nca)
+
+    P0' = k2 * (1 - P0) - k1 * P0 * npow(Cai, nCa)
     C1' = betao(Adrive * stimon, v) * O1 - alphao(Adrive * stimon, v) * C1
     O1' = alphao(Adrive * stimon, v) * C1 - betao(Adrive * stimon, v) * O1 - k3 * O1 * (1 - P0) + k4 * (1 - O1 - C1)
 }

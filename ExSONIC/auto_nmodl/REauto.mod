@@ -9,7 +9,7 @@ Understanding ultrasound neuromodulation using a computationally efficient
 and interpretable model of intramembrane cavitation. J. Neural Eng.
 
 @Author: Theo Lemaire, EPFL
-@Date: 2019-07-04
+@Date: 2019-07-05
 @Email: theo.lemaire@epfl.ch
 ENDCOMMENT
 
@@ -69,26 +69,26 @@ FUNCTION_TABLE uinf(A(kPa), Q(nC/cm2)) ()
 FUNCTION_TABLE tauu(A(kPa), Q(nC/cm2)) (ms)
 
 INITIAL {
-   h = alphah(0, v) / (alphah(0, v) + betah(0, v))
-   u = uinf(0, v)
    m = alpham(0, v) / (alpham(0, v) + betam(0, v))
+   h = alphah(0, v) / (alphah(0, v) + betah(0, v))
    n = alphan(0, v) / (alphan(0, v) + betan(0, v))
    s = sinf(0, v)
+   u = uinf(0, v)
 }
 
 BREAKPOINT {
    SOLVE states METHOD cnexp
    Vm = V(Adrive * stimon, v)
+   iNa = gNabar * m * m * m * h * (Vm - ENa)
+   iKd = gKdbar * n * n * n * n * (Vm - EK)
    iCaT = gCaTbar * s * s * u * (Vm - ECa)
    iLeak = gLeak * (Vm - ELeak)
-   iKd = gKdbar * n * n * n * n * (Vm - EK)
-   iNa = gNabar * m * m * m * h * (Vm - ENa)
 }
 
 DERIVATIVE states {
-   h' = alphah(Adrive * stimon, v) * (1 - h) - betah(Adrive * stimon, v) * h
-   u' = (uinf(Adrive * stimon, v) - u) / tauu(Adrive * stimon, v)
    m' = alpham(Adrive * stimon, v) * (1 - m) - betam(Adrive * stimon, v) * m
+   h' = alphah(Adrive * stimon, v) * (1 - h) - betah(Adrive * stimon, v) * h
    n' = alphan(Adrive * stimon, v) * (1 - n) - betan(Adrive * stimon, v) * n
    s' = (sinf(Adrive * stimon, v) - s) / taus(Adrive * stimon, v)
+   u' = (uinf(Adrive * stimon, v) - u) / tauu(Adrive * stimon, v)
 }

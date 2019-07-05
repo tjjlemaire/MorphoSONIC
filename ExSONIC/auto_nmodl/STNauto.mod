@@ -9,7 +9,7 @@ Understanding ultrasound neuromodulation using a computationally efficient
 and interpretable model of intramembrane cavitation. J. Neural Eng.
 
 @Author: Theo Lemaire, EPFL
-@Date: 2019-07-04
+@Date: 2019-07-05
 @Email: theo.lemaire@epfl.ch
 ENDCOMMENT
 
@@ -56,7 +56,7 @@ PARAMETER {
    tau_r = 2.0 (ms)
    thetax_r = 1.7e-07 ()
    kx_r = -8e-08 ()
-   iCa_to_Cai_rate = 5.062862990011235e-07 ()
+   current_to_molar_rate_Ca = 5.062862990011234e-06 (1e7 mol.m-1.C-1)
    taur_Cai = 0.5 (ms)
    Cai0 = 5e-09 (M)
 }
@@ -127,47 +127,47 @@ FUNCTION rinf(Cai) {
 FUNCTION derCai(p, q, c, d1, d2, Cai, Vm) {
     LOCAL iCa_tot
     iCa_tot = iCaT + iCaL
-    derCai = - iCa_to_Cai_rate * iCa_tot - Cai / taur_Cai
+    derCai = - current_to_molar_rate_Ca * iCa_tot - Cai / taur_Cai
 }
 
 INITIAL {
-   d2 = d2inf(Cai0)
-   r = rinf(Cai0)
-   a = ainf(0, v)
-   b = binf(0, v)
-   c = cinf(0, v)
-   d1 = d1inf(0, v)
    m = minf(0, v)
    h = hinf(0, v)
    n = ninf(0, v)
+   a = ainf(0, v)
+   b = binf(0, v)
    p = pinf(0, v)
-   Cai = Cai0
    q = qinf(0, v)
+   c = cinf(0, v)
+   d1 = d1inf(0, v)
+   d2 = d2inf(Cai0)
+   r = rinf(Cai0)
+   Cai = Cai0
 }
 
 BREAKPOINT {
    SOLVE states METHOD cnexp
    Vm = V(Adrive * stimon, v)
-   iCaL = gCaLbar * c * c * d1 * d2 * (Vm - nernst(Z_Ca, Cai, Cao, T))
-   iKCa = gKCabar * r * r * (Vm - EK)
-   iLeak = gLeak * (Vm - ELeak)
    iNa = gNabar * m * m * m * h * (Vm - ENa)
    iKd = gKdbar * n * n * n * n * (Vm - EK)
    iA = gAbar * a * a * b * (Vm - EK)
    iCaT = gCaTbar * p * p * q * (Vm - nernst(Z_Ca, Cai, Cao, T))
+   iCaL = gCaLbar * c * c * d1 * d2 * (Vm - nernst(Z_Ca, Cai, Cao, T))
+   iKCa = gKCabar * r * r * (Vm - EK)
+   iLeak = gLeak * (Vm - ELeak)
 }
 
 DERIVATIVE states {
-   r' = (rinf(Cai) - r) / tau_r
-   Cai' = derCai(p, q, c, d1, d2, Cai, Vm)
-   a' = (ainf(Adrive * stimon, v) - a) / taua(Adrive * stimon, v)
-   b' = (binf(Adrive * stimon, v) - b) / taub(Adrive * stimon, v)
-   c' = (cinf(Adrive * stimon, v) - c) / tauc(Adrive * stimon, v)
-   d1' = (d1inf(Adrive * stimon, v) - d1) / taud1(Adrive * stimon, v)
-   d2' = (d2inf(Cai) - d2) / tau_d2
    m' = (minf(Adrive * stimon, v) - m) / taum(Adrive * stimon, v)
    h' = (hinf(Adrive * stimon, v) - h) / tauh(Adrive * stimon, v)
    n' = (ninf(Adrive * stimon, v) - n) / taun(Adrive * stimon, v)
-   q' = (qinf(Adrive * stimon, v) - q) / tauq(Adrive * stimon, v)
+   a' = (ainf(Adrive * stimon, v) - a) / taua(Adrive * stimon, v)
+   b' = (binf(Adrive * stimon, v) - b) / taub(Adrive * stimon, v)
    p' = (pinf(Adrive * stimon, v) - p) / taup(Adrive * stimon, v)
+   q' = (qinf(Adrive * stimon, v) - q) / tauq(Adrive * stimon, v)
+   c' = (cinf(Adrive * stimon, v) - c) / tauc(Adrive * stimon, v)
+   d1' = (d1inf(Adrive * stimon, v) - d1) / taud1(Adrive * stimon, v)
+   d2' = (d2inf(Cai) - d2) / tau_d2
+   r' = (rinf(Cai) - r) / tau_r
+   Cai' = derCai(p, q, c, d1, d2, Cai, Vm)
 }

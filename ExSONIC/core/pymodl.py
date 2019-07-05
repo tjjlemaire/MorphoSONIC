@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-03-18 21:17:03
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-07-05 00:26:12
+# @Last Modified time: 2019-07-05 04:43:45
 
 import logging
 import pprint
@@ -32,12 +32,14 @@ class NmodlTranslator(PointNeuronTranslator):
         super().__init__(pclass, verbose=verbose)
 
         # Initialize class containers
+        self.translated_states = [self.translateState(x) for x in self.pclass.statesNames()]
         self.funcs_to_preserve = []
         self.params = {}
         self.constants = {}
         self.currents_desc = {}
         self.ftables_dict = {'V': self.AQ_func_table_pattern.format('V', 'mV')}
         self.functions_dict = {}
+        self.initial_priors = {k: [] for k in self.translated_states}
 
         # Parse neuron class's key lambda dictionary functions
         self.currents_dict = self.parseLambdaDict('currents')
@@ -59,12 +61,11 @@ class NmodlTranslator(PointNeuronTranslator):
             s, fcall, self.translateExpr(fexpr, level=level + 1), level=level)
 
     def parseLambdaDict(self, pclass_method_name):
-        is_current_expr = pclass_method_name == 'currents'
         pclass_method = getattr(self.pclass, pclass_method_name)
         logger.info(f'parsing {pclass_method_name}')
         parsed_lambda_dict = super().parseLambdaDict(
             pclass_method(),
-            lambda *args: self.translateExpr(*args, is_current_expr=is_current_expr))
+            lambda *args: self.translateExpr(*args, method_name=pclass_method_name))
         for k in parsed_lambda_dict.keys():
             parsed_lambda_dict[self.translateState(k)] = parsed_lambda_dict.pop(k)
         if logger.getEffectiveLevel() <= logging.DEBUG:
@@ -206,6 +207,8 @@ class NmodlTranslator(PointNeuronTranslator):
                     self.params[attr_name] = {'val': attr_val * 1e-3, 'unit': '/ms'}
                 elif self.ion_concentration_pattern.match(attr_name):
                     self.params[attr_name] = {'val': attr_val, 'unit': 'M'}
+                elif self.current_to_molar_rate_pattern.match(attr_name):
+                    self.params[attr_name] = {'val': attr_val * 10., 'unit': '1e7 mol.m-1.C-1'}
                 else:
                     self.params[attr_name] = {'val': attr_val, 'unit': ''}
             except AttributeError:
@@ -246,7 +249,7 @@ class NmodlTranslator(PointNeuronTranslator):
                     expr = self.replace(expr, fcall, ftable_call)
             self.functions_dict[k]['expr'] = expr
 
-    def translateExpr(self, expr, level=0, is_current_expr=False):
+    def translateExpr(self, expr, level=0, method_name='none'):
         ''' Parse a Python expression and translate it into an equivalent MOD expression.
             Internal function calsl are parsed and translated recursively.
         '''
@@ -312,19 +315,32 @@ class NmodlTranslator(PointNeuronTranslator):
                     if fname in self.pclass.currents().keys():
                         logger.debug(f'{indent}current function')
 
-                        # If current expression, replace function call by its expression,
-                        # and add function to currents dictionary
-                        if is_current_expr:
+                        # If function contains multiple lines, raise error
+                        if fexpr.count('\n') > 0:
+                            raise ValueError('current function cannot contain multiple statements')
 
-                            # If function contains multiple lines, raise error
-                            if fexpr.count('\n') > 0:
-                                raise ValueError('current function cannot contain multiple statements')
-                            expr = self.replaceFuncCallByFuncExpr(expr, fcall, fexpr, level=level)
+                        # Translate corresponding expression
+                        fexpr = self.translateExpr(fexpr, level=level + 1)
+
+                        # If currently parsing currents, replace function call by its expression,
+                        # and add function to currents dictionary
+                        if method_name == 'currents':
+                            expr = self.replace(expr, fcall, fexpr, level=level)
                             self.currents_desc[fname] = fdoc
 
-                        # Otherwise, replace function by current assigned variable
+                        # Otherwise
                         else:
+                            # Replace function by current assigned variable
                             expr = self.replace(expr, fcall, fname, level=level)
+
+                            # If currently parsing steady states: add required current computation
+                            # prior to state computation
+                            if method_name == 'steadyStates':
+                                self.initial_priors[self.current_key].append({
+                                    'assigned': fname,
+                                    'expr': fexpr
+                                })
+
                     else:
                         # If entry level and entire call is a single line function
                         if level == 0 and fexpr.count('\n') == 0 and fcall == expr:
@@ -364,7 +380,8 @@ class NmodlTranslator(PointNeuronTranslator):
             to_preserve = [m.group(2) in self.funcs_to_preserve for m in matches]
 
         # Translate remaining states in expression by MOD aliases if needed
-        expr = self.translateVariableStates(expr)
+        if level == 0:
+            expr = self.translateVariableStates(expr)
 
         # Replace power exponents in expression
         expr = self.translatePowerExponents(expr)
@@ -462,7 +479,11 @@ class NmodlTranslator(PointNeuronTranslator):
 
     def initialBlock(self):
         ''' Create the INITIAL block of the MOD file. '''
-        block = ['{} = {}'.format(k, v) for k, v in self.sstates_dict.items()]
+        block = []
+        for k in self.translated_states:
+            for prior in self.initial_priors[k]:
+                block.append('{} = {}'.format(prior['assigned'], prior['expr']))
+            block.append('{} = {}'.format(k, self.sstates_dict[k]))
         return 'INITIAL {{{}{}\n}}'.format(self.tabreturn, self.tabreturn.join(block))
 
     def breakpointBlock(self):
@@ -471,13 +492,13 @@ class NmodlTranslator(PointNeuronTranslator):
             'SOLVE states METHOD cnexp',
             'Vm = V(Adrive * stimon, v)'
         ]
-        for k, v in self.currents_dict.items():
-            block.append('{} = {}'.format(k, v))
+        for k in self.pclass.currents().keys():
+            block.append('{} = {}'.format(k, self.currents_dict[k]))
         return 'BREAKPOINT {{{}{}\n}}'.format(self.tabreturn, self.tabreturn.join(block))
 
     def derivativeBlock(self):
         ''' Create the DERIVATIVE block of the MOD file. '''
-        block = ['{}\' = {}'.format(k, v) for k, v in self.dstates_dict.items()]
+        block = ['{}\' = {}'.format(k, self.dstates_dict[k]) for k in self.translated_states]
         return 'DERIVATIVE states {{{}{}\n}}'.format(self.tabreturn, self.tabreturn.join(block))
 
     def allBlocks(self):
