@@ -49,7 +49,7 @@ PARAMETER {
 	pPbar = .54e-3    (cm/s)
 	pkbar = 1.2e-3    (cm/s)
 	gLeak = 30.3e-3   (S/cm2)
-	ELeak = -69.74    (mV)
+	ELeak = -69.974    (mV)
 	T = 293.15  (K)
 	Nai = 13.74e-3    (M)
     Nao = 114.5e-3    (M)
