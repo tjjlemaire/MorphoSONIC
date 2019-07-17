@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-03-18 21:17:03
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-07-05 13:57:48
+# @Last Modified time: 2019-07-17 15:08:17
 
 import logging
 import pprint
@@ -30,6 +30,9 @@ class NmodlTranslator(PointNeuronTranslator):
 
     # Lookup FUNCTION TABLE arguments
     lkp_func_table_args = 'Adrive * stimon, v'
+
+    # Protected functions that must not be inserted but replaced by their first argument
+    protected_funcs = ['findModifiedEq']
 
     def __init__(self, pclass, verbose=False):
         super().__init__(pclass, verbose=verbose)
@@ -138,21 +141,28 @@ class NmodlTranslator(PointNeuronTranslator):
         # Get function source code
         code_lines = cls.getFuncSource(func)
 
-        # If function does not end with return statement, raise error
-        if not code_lines[-1].startswith('return'):
-            raise ValueError(f'{func.__name__} does not end with return statement')
-
         # Remove comments on all lines
         code_lines = [cls.removeLineComments(cl) for cl in code_lines]
 
-        # Remove return statement on last line
+        # If function contains no / multiple return statements, raise error
+        n_returns = sum(s.count('return') for s in code_lines)
+        if n_returns == 0:
+            raise ValueError(f'{func.__name__} does not contain any return statement')
+        elif n_returns > 1:
+            raise ValueError(f'{func.__name__} contains multiple return statements')
+
+        # Search for line containing the return statement
+        iline_return = next(i for i, s in enumerate(code_lines) if s.startswith('return'))
+
+        # Merge all lines below return statement
+        new_return_line = ''.join(code_lines[iline_return:])
+        code_lines = list(filter(None, code_lines[:iline_return] + [new_return_line]))
+
+        # Remove return statement
         code_lines[-1] = code_lines[-1].split('return ')[-1]
 
+        # Return lines separated by new line character
         return '\n'.join(code_lines)
-
-        # # Join return statement lines and remove comments
-        # fexpr = ''.join(code_lines).split('return ', 1)[1]
-        # return cls.removeLineComments(fexpr)
 
     def addToFuncTables(self, fname, level=0):
         ''' Add a function table corresponding to function name '''
@@ -363,6 +373,12 @@ class NmodlTranslator(PointNeuronTranslator):
                         fcall = stripped_fcall
                     logger.debug(f'{indent}{fname} in MOD library -> keeping {fcall} in expression')
                     self.funcs_to_preserve.append(fname)
+
+                # If function is part of protected function, replace it by its first argument
+                elif fname in self.protected_funcs:
+                    rpl_var = fargs[0]
+                    logger.debug(f'{indent}{fname} function is protected -> replacing it by {rpl_var}')
+                    expr = expr.replace(fcall, rpl_var)
 
                 # Otherwise, assume it is a formatting error, and keep it as a variable
                 else:

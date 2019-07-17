@@ -9,7 +9,7 @@ Understanding ultrasound neuromodulation using a computationally efficient
 and interpretable model of intramembrane cavitation. J. Neural Eng.
 
 @Author: Theo Lemaire, EPFL
-@Date: 2019-07-05
+@Date: 2019-07-17
 @Email: theo.lemaire@epfl.ch
 ENDCOMMENT
 
@@ -59,8 +59,8 @@ STATE {
    u : iCaT inactivation gate
    Cai : submembrane Ca2+ concentration (M)
    P0 : proportion of unbound iH regulating factor
-   C1 : iH gate closed state
    O1 : iH gate open state
+   C1 : iH gate closed state
 }
 
 ASSIGNED {
@@ -85,8 +85,8 @@ FUNCTION_TABLE sinf(A(kPa), Q(nC/cm2)) ()
 FUNCTION_TABLE taus(A(kPa), Q(nC/cm2)) (ms)
 FUNCTION_TABLE uinf(A(kPa), Q(nC/cm2)) ()
 FUNCTION_TABLE tauu(A(kPa), Q(nC/cm2)) (ms)
-FUNCTION_TABLE betao(A(kPa), Q(nC/cm2)) (/ms)
 FUNCTION_TABLE alphao(A(kPa), Q(nC/cm2)) (/ms)
+FUNCTION_TABLE betao(A(kPa), Q(nC/cm2)) (/ms)
 
 FUNCTION OL(O, C) {
     OL = 1 - O - C
@@ -94,18 +94,6 @@ FUNCTION OL(O, C) {
 
 FUNCTION npow(x, n) {
     npow = x^n
-}
-
-FUNCTION P0inf(Cai) {
-    P0inf = k2 / (k2 + k1 * npow(Cai, nCa))
-}
-
-FUNCTION Oinf(Cai, Vm) {
-    Oinf = k4 / (k3 * (1 - P0inf(Cai)) + k4 * (1 + betao(Adrive * stimon, v) / alphao(Adrive * stimon, v)))
-}
-
-FUNCTION Cinf(Cai, Vm) {
-    Cinf = betao(Adrive * stimon, v) / alphao(Adrive * stimon, v) * Oinf(Cai, Vm)
 }
 
 INITIAL {
@@ -116,9 +104,9 @@ INITIAL {
    u = uinf(Adrive * stimon, v)
    iCaT = gCaTbar * s * s * u * (Vm - ECa)
    Cai = Cai_min - taur_Cai * current_to_molar_rate_Ca * iCaT
-   P0 = P0inf(Cai)
-   C1 = Cinf(Cai, Vm)
-   O1 = Oinf(Cai, Vm)
+   P0 = k2 / (k2 + k1 * npow(Cai, nCa))
+   O1 = k4 / (k3 * (1 - P0) + k4 * (1 + betao(Adrive * stimon, v) / alphao(Adrive * stimon, v)))
+   C1 = betao(Adrive * stimon, v) / alphao(Adrive * stimon, v) * O1
 }
 
 BREAKPOINT {
@@ -138,8 +126,8 @@ DERIVATIVE states {
    n' = alphan(Adrive * stimon, v) * (1 - n) - betan(Adrive * stimon, v) * n
    s' = (sinf(Adrive * stimon, v) - s) / taus(Adrive * stimon, v)
    u' = (uinf(Adrive * stimon, v) - u) / tauu(Adrive * stimon, v)
-   Cai' = ((Cai_min - Cai) / taur_Cai - current_to_molar_rate_Ca * iCaT)
+   Cai' = (Cai_min - Cai) / taur_Cai - current_to_molar_rate_Ca * iCaT
    P0' = k2 * (1 - P0) - k1 * P0 * npow(Cai, nCa)
+   O1' = alphao(Adrive * stimon, v) * C1 - betao(Adrive * stimon, v) * O1 - k3 * O1 * (1 - P0) + k4 * (1 - O1 - C1)
    C1' = betao(Adrive * stimon, v) * O1 - alphao(Adrive * stimon, v) * C1
-   O1' = (alphao(Adrive * stimon, v) * C1 - betao(Adrive * stimon, v) * O1 - k3 * O1 * (1 - P0) + k4 * (1 - O1 - C1))
 }

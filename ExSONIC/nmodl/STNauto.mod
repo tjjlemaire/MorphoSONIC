@@ -9,7 +9,7 @@ Understanding ultrasound neuromodulation using a computationally efficient
 and interpretable model of intramembrane cavitation. J. Neural Eng.
 
 @Author: Theo Lemaire, EPFL
-@Date: 2019-07-05
+@Date: 2019-07-17
 @Email: theo.lemaire@epfl.ch
 ENDCOMMENT
 
@@ -129,6 +129,10 @@ FUNCTION derCai(p, q, c, d1, d2, Cai, Vm) {
     derCai = - current_to_molar_rate_Ca * iCa_tot - Cai / taur_Cai
 }
 
+FUNCTION Caiinf(p, q, c, d1, Vm) {
+    Caiinf = Cai0
+}
+
 INITIAL {
    m = minf(Adrive * stimon, v)
    h = hinf(Adrive * stimon, v)
@@ -139,9 +143,9 @@ INITIAL {
    q = qinf(Adrive * stimon, v)
    c = cinf(Adrive * stimon, v)
    d1 = d1inf(Adrive * stimon, v)
-   d2 = d2inf(Cai0)
-   r = rinf(Cai0)
-   Cai = Cai0
+   d2 = d2inf(Cai)
+   r = rinf(Cai)
+   Cai = Caiinf(p, q, c, d1, Vm)
 }
 
 BREAKPOINT {
