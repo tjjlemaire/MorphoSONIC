@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-07-10 18:02:29
+# @Last Modified time: 2019-08-14 18:13:04
 
 import pickle
 import abc
@@ -262,10 +262,30 @@ class Node(metaclass=abc.ABCMeta):
             data[k] = vec_to_array(v)
 
         # Resample data to regular sampling rate
-        return self.resample(data, DT_EFFECTIVE)
+        data = self.resample(data, DT_EFFECTIVE)
+
+        # Prepend initial conditions (prior to stimulation)
+        data = self.prepend(data)
+
+        return data
 
     def meta(self, A, tstim, toffset, PRF, DC):
         return self.pneuron.meta(A, tstim, toffset, PRF, DC)
+
+    @staticmethod
+    def prepend(data):
+        ''' Resample dataframe at regular time step. '''
+        tnew = np.insert(data['t'].values, 0, 0)
+        new_data = {'t': tnew}
+        for key in data:
+            if key == 't':
+                x0 = 0.
+            elif key == 'stimstate':
+                x0 = 0
+            else:
+                x0 = data[key].values[0]
+            new_data[key] = np.insert(data[key].values, 0, x0)
+        return pd.DataFrame(new_data)
 
     @staticmethod
     def resample(data, dt):
