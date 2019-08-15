@@ -3,15 +3,116 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-06-28 17:15:57
+# @Last Modified time: 2019-08-15 21:43:16
 
 
 import numpy as np
+import pandas as pd
 import matplotlib
 import matplotlib.pyplot as plt
 
 from PySONIC.plt import GroupedTimeSeries
 
+
+def loadData(fpath):
+    ''' Load dataframe and metadata dictionary from pickle file. '''
+    logger.info('Loading data from "%s"', os.path.basename(fpath))
+    with open(fpath, 'rb') as fh:
+        frame = pickle.load(fh)
+        data = frame['data']
+        meta = frame['meta']
+        return data, meta
+
+
+def getData(entry, trange=None):
+    if entry is None:
+        raise ValueError('non-existing data')
+    if isinstance(entry, str):
+        data, meta = loadData(entry)
+    else:
+        data, meta = entry
+    if trange is not None:
+        tmin, tmax = trange
+        data = {k: df.loc[(df['t'] >= tmin) & (df['t'] <= tmax)] for k, df in data.items()}
+    return data, meta
+
+
+def comparativePlot(signals, labels, pltvars):
+
+    naxes = len(pltvars)
+
+    # Create figure
+    fig = plt.figure(figsize=(12, 2 * naxes))
+    wratios = [4, 4, 0.2, 1] if cmode == 'seq' else [4, 4, 1]
+    gs = gridspec.GridSpec(1, len(wratios), width_ratios=wratios, wspace=0.3)
+    axes = list(map(plt.subplot, gs))
+    fig.subplots_adjust(top=0.8, left=0.05, right=0.95)
+    fig.suptitle('{} - {}'.format(
+        model.pprint(),
+        'adaptive time step' if dt is None else 'dt = ${}$ ms'.format(pow10_format(dt * 1e3))
+    ), fontsize=13)
+
+    # for ax in axes[:2]:
+    #     ax.set_ylim(-150, 50)
+    tonset = -0.05 * (t[-1] - t[0])
+    Vm0 = model.neuron.Vm0
+
+    # Plot charge density profiles
+    ax = axes[0]
+    ax.set_title('membrane charge density', fontsize=fs)
+    ax.set_xlabel('time (ms)', fontsize=fs)
+    ax.set_ylabel('$\\rm Qm\ (nC/cm^2)$', fontsize=fs)
+    plotSignals(t, Qprobes, states=stimon, ax=ax, onset=(tonset, Vm0 * neuron.Cm0 * 1e2),
+                fs=fs, cmode=cmode, cmap=cmap)
+    ax.set_xlim(tonset, (tstim + toffset) * 1e3)
+
+    # Plot effective potential profiles
+    if cmode == 'seq':
+        lbls = None
+    ax = axes[1]
+    ax.set_title('effective membrane potential', fontsize=fs)
+    ax.set_xlabel('time (ms)', fontsize=fs)
+    ax.set_ylabel('$\\rm V_{m,eff}\ (mV)$', fontsize=fs)
+    plotSignals(t, Vmeffprobes, states=stimon, ax=ax, onset=(tonset, Vm0),
+                fs=fs, cmode=cmode, cmap=cmap, lbls=lbls)
+    ax.set_xlim(tonset, (tstim + toffset) * 1e3)
+
+    # Plot node index reference
+    if cmode == 'seq':
+        cbar_ax = axes[2]
+        bounds = np.arange(nnodes + 1) + 1
+        norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
+        mpl.colorbar.ColorbarBase(
+            cbar_ax,
+            cmap=cmap,
+            norm=norm,
+            spacing='proportional',
+            ticks=bounds[:-1] + 0.5,
+            ticklocation='left',
+            boundaries=bounds,
+            format='%1i'
+        )
+        cbar_ax.tick_params(axis='both', which='both', length=0)
+        cbar_ax.set_title('node index', size=fs)
+        iax = 3
+    else:
+        iax = 2
+
+    # Plot computation time
+    ax = axes[iax]
+    ax.set_title('comp. time (s)', fontsize=fs)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    for item in ax.get_xticklabels() + ax.get_xticklabels():
+        item.set_fontsize(fs)
+    ax.set_xticks([])
+    ax.bar(1, tcomp, align='center', color='dimgrey')
+    ax.text(1, 1.5 * tcomp, '{}s'.format(si_format(tcomp, 2, space=' ')),
+            horizontalalignment='center')
+    ax.set_yscale('log')
+    ax.set_ylim(1e-2, 1e2)
+
+    return fig
 
 def plotSignals(t, signals, states=None, ax=None, onset=None, lbls=None, fs=10, cmode='qual',
                 linestyle='-', cmap='winter'):

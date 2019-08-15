@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-14 18:13:04
+# @Last Modified time: 2019-08-15 19:51:31
 
 import pickle
 import abc
@@ -66,6 +66,9 @@ class Node(metaclass=abc.ABCMeta):
             :param id: name of the section.
         '''
         return h.Section(name=id, cell=self)
+
+    def clear(self):
+        del self.section
 
     def getLookup(self):
         lkp = self.pneuron.getLookup()
@@ -208,15 +211,17 @@ class Node(metaclass=abc.ABCMeta):
 
         return 0
 
-    def setProbes(self):
-        ''' Set recording vectors. '''
-        t = setTimeProbe()
-        stim = setStimProbe(self.section, self.mechname)
-        Qm = setRangeProbe(self.section, 'v')
-        Vm = setRangeProbe(self.section, 'Vm_{}'.format(self.mechname))
-        states = {k: setRangeProbe(self.section, '{}_{}'.format(alias(k), self.mechname))
-                  for k in self.pneuron.statesNames()}
-        return t, stim, Qm, Vm, states
+    def setProbesDict(self, sec):
+        return {
+            **{
+                'Qm': setRangeProbe(sec, 'v'),
+                'Vm': setRangeProbe(sec, 'Vm_{}'.format(self.mechname))
+            },
+            **{
+                k: setRangeProbe(sec, '{}_{}'.format(alias(k), self.mechname))
+                for k in self.pneuron.statesNames()
+            }
+        }
 
     @staticmethod
     def getNSpikes(data):
@@ -245,7 +250,9 @@ class Node(metaclass=abc.ABCMeta):
                 si_format(PRF, 2, space=' '), DC * 1e2) if DC < 1.0 else ''))
 
         # Set recording vectors
-        t, stim, Qm, Vm, states = self.setProbes()
+        t = setTimeProbe()
+        stim = setStimProbe(self.section, self.mechname)
+        probes = self.setProbesDict(self.section)
 
         # Set stimulus amplitude and integrate model
         self.setStimAmp(A)
@@ -254,12 +261,11 @@ class Node(metaclass=abc.ABCMeta):
         # Store output in dataframe
         data = pd.DataFrame({
             't': vec_to_array(t) * 1e-3,  # s
-            'stimstate': vec_to_array(stim),
-            'Qm': vec_to_array(Qm) * 1e-5,  # C/cm2
-            'Vm': vec_to_array(Vm)         # mV
+            'stimstate': vec_to_array(stim)
         })
-        for k, v in states.items():
+        for k, v in probes.items():
             data[k] = vec_to_array(v)
+        data.loc[:,'Qm'] *= 1e-5  # C/m2
 
         # Resample data to regular sampling rate
         data = self.resample(data, DT_EFFECTIVE)

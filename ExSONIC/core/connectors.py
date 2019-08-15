@@ -1,11 +1,18 @@
 # -*- coding: utf-8 -*-
 # @Author: Theo Lemaire
+# @Email: theo.lemaire@epfl.ch
+# @Date:   2019-06-04 18:26:42
+# @Last Modified by:   Theo Lemaire
+# @Last Modified time: 2019-08-15 20:18:10
+# @Author: Theo Lemaire
 # @Date:   2018-08-25 02:00:26
 # @Last Modified by:   Theo Lemaire
 # @Last Modified time: 2019-03-15 02:59:26
 
 import numpy as np
 from neuron import h
+
+from PySONIC.utils import logger
 
 
 class SeriesConnector:
@@ -72,7 +79,7 @@ class SeriesConnector:
             else:
                 s += ' -> not bounded'
             if self.verbose in ['if_bound', 'all']:
-                print(s)
+                logger.debug(s)
         if self.verbose == 'all':
             print(s)
 

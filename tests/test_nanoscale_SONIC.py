@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-06-26 16:56:11
+# @Last Modified time: 2019-08-15 17:43:01
 # @Author: Theo Lemaire
 # @Date:   2018-08-30 10:51:12
 # @Last Modified by:   Theo Lemaire
@@ -15,7 +15,7 @@ from argparse import ArgumentParser
 
 from PySONIC.parsers import TestParser
 from PySONIC.neurons import getPointNeuron
-from ExSONIC.utils import radialGeometry
+# from ExSONIC.utils import radialGeometry
 from ExSONIC._1D import SeriesConnector, runPlotAStim
 
 
