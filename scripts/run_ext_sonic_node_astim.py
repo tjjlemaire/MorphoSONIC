@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-15 20:33:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-15 21:27:40
+# @Last Modified time: 2019-08-16 20:05:33
 
 ''' Run A-STIM simulations of an extended SONIC node with a specific point-neuron mechanism. '''
 
@@ -14,17 +14,18 @@ from PySONIC.utils import logger
 from PySONIC.parsers import EStimParser, PWSimParser, AStimParser
 
 from ExSONIC.core import ExtendedSonicNode
-from ExSONIC.plt import getData, plotSignals
+from ExSONIC.plt import SectionGroupedTimeSeries
 
 
 class ExtSonicNodeAStimParser(AStimParser):
 
     def __init__(self):
         super().__init__()
-        self.defaults.update({'deff': 100., 'rs': 1e2, 'fs': 50.})
+        self.defaults.update({'deff': 100., 'rs': 1e2, 'fs': 50., 'section': 'sonophore'})
         self.factors.update({'deff': 1e-9, 'rs': 1e0})
         self.addDeff()
         self.addResistivity()
+        self.addSection()
 
     def addDeff(self):
         self.add_argument(
@@ -33,6 +34,10 @@ class ExtSonicNodeAStimParser(AStimParser):
     def addResistivity(self):
         self.add_argument(
             '--rs', nargs='+', type=float, help='Intracellular resistivity (Ohm.cm)')
+
+    def addSection(self):
+        self.add_argument(
+            '--section', nargs='+', type=str, help='Section of interest for plot')
 
     def parse(self):
         args = super().parse()
@@ -48,15 +53,25 @@ class ExtSonicNodeAStimParser(AStimParser):
     @staticmethod
     def parsePlot(args, output):
         render_args = {}
-        for item in output:
-            data, meta = getData(item)
-            lbls = list(data.keys())
-            t = data[lbls[0]]['t']
+        if 'spikes' in args:
+            render_args['spikes'] = args['spikes']
+        if args['compare']:
+            if args['plot'] == ['all']:
+                logger.error('Specific variables must be specified for comparative plots')
+                return
+            for key in ['cmap', 'cscale']:
+                if key in args:
+                    render_args[key] = args[key]
             for pltvar in args['plot']:
-                signals = [df[pltvar].values for df in data.values()]
-                plotSignals(t, signals, lbls=lbls)
+                comp_plot = CompTimeSeries(output, pltvar)
+                comp_plot.render(**render_args)
+        else:
+            if args['section'] == ['all']:
+                args['section'] = list(output[0][0].keys())
+            for key in args['section']:
+                scheme_plot = SectionGroupedTimeSeries(key, output, pltscheme=args['pltscheme'])
+                scheme_plot.render(**render_args)
         plt.show()
-
 
 
 def main():

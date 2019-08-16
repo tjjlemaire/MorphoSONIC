@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-15 21:43:16
+# @Last Modified time: 2019-08-16 19:51:42
 
 
 import numpy as np
@@ -11,17 +11,83 @@ import pandas as pd
 import matplotlib
 import matplotlib.pyplot as plt
 
-from PySONIC.plt import GroupedTimeSeries
+from PySONIC.plt import GroupedTimeSeries, CompTimeSeries
+from PySONIC.neurons import getPointNeuron
+
+from .core import ExtendedSonicNode
+
+def getModel(meta):
+    ''' Return appropriate model object based on a dictionary of meta-information. '''
+    simkey = meta['simkey']
+    if simkey == 'ASTIM':
+        model = ExtendedSonicNode(
+            getPointNeuron(meta['neuron']),
+            meta['rs'],
+            a=meta['a'],
+            Fdrive=meta['Fdrive'],
+            fs=meta['fs'],
+            deff=meta['deff']
+        )
+    else:
+        raise ValueError(f'Unknown model type:{simkey}')
+    return model
 
 
-def loadData(fpath):
-    ''' Load dataframe and metadata dictionary from pickle file. '''
-    logger.info('Loading data from "%s"', os.path.basename(fpath))
-    with open(fpath, 'rb') as fh:
-        frame = pickle.load(fh)
-        data = frame['data']
-        meta = frame['meta']
+def figtitle(meta):
+    ''' Return appropriate title based on simulation metadata. '''
+    if meta['DC'] < 1:
+        wavetype = 'PW'
+        suffix = ', {:.2f}Hz PRF, {:.0f}% DC'.format(meta['PRF'], meta['DC'] * 1e2)
+    else:
+        wavetype = 'CW'
+        suffix = ''
+    if 'deff' in meta:
+        return 'extended SONIC node ({} neuron, {:.1f}nm, {:.0f}% coverage, deff = {:.0f} nm, rs = {:.0f} Ohm.cm): {} A-STIM {:.0f}kHz {:.2f}kPa, {:.0f}ms{}'.format(
+                    meta['neuron'], meta['a'] * 1e9, meta['fs'] * 1e2, meta['deff'] * 1e9, meta['rs'], wavetype, meta['Fdrive'] * 1e-3,
+                    meta['Adrive'] * 1e-3, meta['tstim'] * 1e3, suffix, meta['method'])
+    return 'dummy title'
+
+
+# 2 possibilities:
+# - SpatiallyDistributedTimeSeries: plot the evolution of one variable of a specific section, across different conditions -> multiple files
+# - plot the evolution of one variable across all sections, for one specific condition -> one file only
+# - possibility to plot several variables on same figure
+
+
+class SectionGroupedTimeSeries(GroupedTimeSeries):
+    ''' Plot the time evolution of grouped variables at a specific section. '''
+
+    def __init__(self, section_id, filepaths, pltscheme=None):
+        ''' Constructor. '''
+        self.section_id = section_id
+        super().__init__(filepaths, pltscheme=pltscheme)
+
+    @staticmethod
+    def getModel(*args, **kwargs):
+        return getModel(*args, **kwargs)
+
+    def figtitle(self, *args, **kwargs):
+        return figtitle(*args, **kwargs) + f' - {self.section_id} section'
+
+    def getData(self, entry, frequency=1, trange=None):
+        if entry is None:
+            raise ValueError('non-existing data')
+        if isinstance(entry, str):
+            data, meta = loadData(entry, frequency)
+        else:
+            data, meta = entry
+        data = data[self.section_id]
+        data = data.iloc[::frequency]
+        if trange is not None:
+            tmin, tmax = trange
+            data = data.loc[(data['t'] >= tmin) & (data['t'] <= tmax)]
         return data, meta
+
+    def render(self, *args, **kwargs):
+        figs = super().render(*args, **kwargs)
+        for fig in figs:
+            title = fig.canvas.get_window_title()
+            fig.canvas.set_window_title(title + f'_{self.section_id}')
 
 
 def getData(entry, trange=None):
@@ -36,83 +102,6 @@ def getData(entry, trange=None):
         data = {k: df.loc[(df['t'] >= tmin) & (df['t'] <= tmax)] for k, df in data.items()}
     return data, meta
 
-
-def comparativePlot(signals, labels, pltvars):
-
-    naxes = len(pltvars)
-
-    # Create figure
-    fig = plt.figure(figsize=(12, 2 * naxes))
-    wratios = [4, 4, 0.2, 1] if cmode == 'seq' else [4, 4, 1]
-    gs = gridspec.GridSpec(1, len(wratios), width_ratios=wratios, wspace=0.3)
-    axes = list(map(plt.subplot, gs))
-    fig.subplots_adjust(top=0.8, left=0.05, right=0.95)
-    fig.suptitle('{} - {}'.format(
-        model.pprint(),
-        'adaptive time step' if dt is None else 'dt = ${}$ ms'.format(pow10_format(dt * 1e3))
-    ), fontsize=13)
-
-    # for ax in axes[:2]:
-    #     ax.set_ylim(-150, 50)
-    tonset = -0.05 * (t[-1] - t[0])
-    Vm0 = model.neuron.Vm0
-
-    # Plot charge density profiles
-    ax = axes[0]
-    ax.set_title('membrane charge density', fontsize=fs)
-    ax.set_xlabel('time (ms)', fontsize=fs)
-    ax.set_ylabel('$\\rm Qm\ (nC/cm^2)$', fontsize=fs)
-    plotSignals(t, Qprobes, states=stimon, ax=ax, onset=(tonset, Vm0 * neuron.Cm0 * 1e2),
-                fs=fs, cmode=cmode, cmap=cmap)
-    ax.set_xlim(tonset, (tstim + toffset) * 1e3)
-
-    # Plot effective potential profiles
-    if cmode == 'seq':
-        lbls = None
-    ax = axes[1]
-    ax.set_title('effective membrane potential', fontsize=fs)
-    ax.set_xlabel('time (ms)', fontsize=fs)
-    ax.set_ylabel('$\\rm V_{m,eff}\ (mV)$', fontsize=fs)
-    plotSignals(t, Vmeffprobes, states=stimon, ax=ax, onset=(tonset, Vm0),
-                fs=fs, cmode=cmode, cmap=cmap, lbls=lbls)
-    ax.set_xlim(tonset, (tstim + toffset) * 1e3)
-
-    # Plot node index reference
-    if cmode == 'seq':
-        cbar_ax = axes[2]
-        bounds = np.arange(nnodes + 1) + 1
-        norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
-        mpl.colorbar.ColorbarBase(
-            cbar_ax,
-            cmap=cmap,
-            norm=norm,
-            spacing='proportional',
-            ticks=bounds[:-1] + 0.5,
-            ticklocation='left',
-            boundaries=bounds,
-            format='%1i'
-        )
-        cbar_ax.tick_params(axis='both', which='both', length=0)
-        cbar_ax.set_title('node index', size=fs)
-        iax = 3
-    else:
-        iax = 2
-
-    # Plot computation time
-    ax = axes[iax]
-    ax.set_title('comp. time (s)', fontsize=fs)
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    for item in ax.get_xticklabels() + ax.get_xticklabels():
-        item.set_fontsize(fs)
-    ax.set_xticks([])
-    ax.bar(1, tcomp, align='center', color='dimgrey')
-    ax.text(1, 1.5 * tcomp, '{}s'.format(si_format(tcomp, 2, space=' ')),
-            horizontalalignment='center')
-    ax.set_yscale('log')
-    ax.set_ylim(1e-2, 1e2)
-
-    return fig
 
 def plotSignals(t, signals, states=None, ax=None, onset=None, lbls=None, fs=10, cmode='qual',
                 linestyle='-', cmap='winter'):

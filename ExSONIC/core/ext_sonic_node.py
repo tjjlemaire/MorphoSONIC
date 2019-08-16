@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-15 21:26:18
+# @Last Modified time: 2019-08-16 19:37:04
 
 import numpy as np
 import pandas as pd
@@ -41,7 +41,8 @@ class ExtendedSonicNode(SonicNode):
 
     def __repr__(self):
         ''' Explicit naming of the model instance. '''
-        return '{}({}, fs={})'.format(self.__class__.__name__, self.pneuron, self.fs)
+        return '{}({}, fs={}, deff={:.0f} nm)'.format(
+            self.__class__.__name__, self.pneuron, self.fs, self.deff * 1e9)
 
     def getLookup(self):
         ''' Get lookups computing with fs = 1. '''
@@ -168,12 +169,21 @@ class ExtendedSonicNode(SonicNode):
 
         return data
 
-    def filecode(self, *args):
-        return self.nbls.filecode(self.Fdrive, *args, self.fs, 'ext_NEURON')
+    def filecodes(self, Fdrive, Adrive, tstim, toffset, PRF, DC, fs, rs, deff):
+        # Get parent codes and supress irrelevant entries
+        codes = self.nbls.filecodes(Fdrive, Adrive, tstim, toffset, PRF, DC, fs, 'NEURON')
+        del codes['method']
+        codes.update({
+            'rs': f'rs{rs:.1e}Ohm.cm',
+            'deff': f'deff{(deff * 1e9):.0f}nm'
+        })
+        return codes
 
     def meta(self, A, tstim, toffset, PRF, DC):
-        return self.nbls.meta(
-            self.Fdrive, A, tstim, toffset, PRF, DC, self.fs, 'spatially extended NEURON')
+        meta = super().meta(A, tstim, toffset, PRF, DC)
+        meta['rs'] = self.rs
+        meta['deff'] = self.deff
+        return meta
 
     @staticmethod
     def isExcited(data):

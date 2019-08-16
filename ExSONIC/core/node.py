@@ -3,10 +3,11 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-15 19:51:31
+# @Last Modified time: 2019-08-16 20:13:14
 
 import pickle
 import abc
+from inspect import signature
 import numpy as np
 from scipy.interpolate import interp1d
 import pandas as pd
@@ -23,6 +24,8 @@ from ..constants import *
 
 class Node(metaclass=abc.ABCMeta):
     ''' Generic node interface. '''
+
+    tscale = 'ms'  # relevant temporal scale of the model
 
     @property
     @abc.abstractmethod
@@ -325,10 +328,18 @@ class Node(metaclass=abc.ABCMeta):
             lambda x: xfunc(self.simulate(*x)[0]),
             [tstim, toffset, PRF, DC], 0, self.Arange, self.A_conv_thr)
 
-    @property
-    @abc.abstractmethod
     def filecode(self, *args):
-        raise NotImplementedError
+        ''' Generate file code given a specific combination of model input parameters. '''
+        # If meta dictionary was passed, generate inputs list from it
+        if len(args) == 1 and isinstance(args[0], dict):
+            meta = args[0]
+            meta.pop('tcomp', None)
+            sig = signature(self.filecodes).parameters
+            args = [meta[k] for k in sig]
+
+        # Create file code by joining string-encoded inputs with underscores
+        codes = self.filecodes(*args).values()
+        return '_'.join([x for x in codes if x is not None])
 
     def simAndSave(self, outdir, *args):
         ''' Simulate the model and save the results in a specific output directory. '''
@@ -367,37 +378,10 @@ class IintraNode(Node):
         self.iclamp.amp = value * self.Iinj
         return value
 
-    def filecode(self, *args):
-        return self.pneuron.filecode(*args) + '_NEURON'
-
-
-class VextNode(Node):
-    ''' Node used for simulations with extracellular potential. '''
-
-    modality = {
-        'name': 'V_ext',
-        'unit': 'V',
-        'factor': 1e-3
-    }
-    Arange = None
-    A_conv_thr = None
-
-    def setStimAmp(self, Vext):
-        ''' Insert extracellular mechanism into section and set extracellular potential value.
-
-            :param Vext: extracellular potential (mV).
-        '''
-        self.printStimAmp(Vext)
-        insertVext(self.section)
-        self.Vext = Vext
-
-    def setStimON(self, value):
-        value = super().setStimON(value)
-        self.section.e_extracellular = value * self.Vext
-        return value
-
-    def filecode(self, *args):
-        return 'Vext_' + self.pneuron.filecode(*args) + '_NEURON'
+    def filecodes(self, *args):
+        codes = self.pneuron.filecode(*args)
+        codes['method'] = 'NEURON'
+        return codes
 
 
 class SonicNode(Node):
@@ -448,8 +432,15 @@ class SonicNode(Node):
         self.printStimAmp(Adrive)
         setattr(self.section, 'Adrive_{}'.format(self.mechname), Adrive * 1e-3)
 
-    def filecode(self, *args):
-        return self.nbls.filecode(self.Fdrive, *args, self.fs, 'NEURON')
+    def filecodes(self, *args):
+        return self.nbls.filecodes(self.Fdrive, *args, self.fs, 'NEURON')
 
     def meta(self, A, tstim, toffset, PRF, DC):
         return self.nbls.meta(self.Fdrive, A, tstim, toffset, PRF, DC, self.fs, 'NEURON')
+
+    def getPltVars(self, *args, **kwargs):
+        return self.nbls.getPltVars(*args, **kwargs)
+
+    def getPltScheme(self, *args, **kwargs):
+        return self.nbls.getPltScheme(*args, **kwargs)
+
