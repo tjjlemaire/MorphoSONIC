@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-16 19:37:04
+# @Last Modified time: 2019-08-18 21:04:51
 
 import numpy as np
 import pandas as pd
@@ -122,7 +122,7 @@ class ExtendedSonicNode(SonicNode):
         return value
 
     @Model.addMeta
-    def simulate(self, A, tstim, toffset, PRF, DC, dt=None, atol=None):
+    def simulate(self, Adrive, tstim, toffset, PRF, DC, dt=None, atol=None):
         ''' Set appropriate recording vectors, integrate and return output variables.
 
             :param A: acoustic pressure amplitude (Pa)
@@ -136,7 +136,7 @@ class ExtendedSonicNode(SonicNode):
         logger.info(
             '%s: simulation @ %s = %s%s, t = %ss (%ss offset)%s',
             self, self.modality['name'],
-            si_format(A * self.modality['factor'], space=' ', precision=2), self.modality['unit'],
+            si_format(Adrive * self.modality['factor'], space=' ', precision=2), self.modality['unit'],
             *si_format([tstim, toffset], 1, space=' '),
             (', PRF = {}Hz, DC = {:.2f}%'.format(
                 si_format(PRF, 2, space=' '), DC * 1e2) if DC < 1.0 else ''))
@@ -147,7 +147,7 @@ class ExtendedSonicNode(SonicNode):
         probes = {id: self.setProbesDict(self.sections[id]) for id in self.sections.keys()}
 
         # Set stimulus amplitude and integrate model
-        self.setStimAmp(A)
+        self.setStimAmp(Adrive)
         self.integrate(tstim + toffset, tstim, PRF, DC, dt, atol)
 
         # Store output in dataframes
@@ -169,18 +169,19 @@ class ExtendedSonicNode(SonicNode):
 
         return data
 
-    def filecodes(self, Fdrive, Adrive, tstim, toffset, PRF, DC, fs, rs, deff):
+    def filecodes(self, Adrive, tstim, toffset, PRF, DC):
         # Get parent codes and supress irrelevant entries
-        codes = self.nbls.filecodes(Fdrive, Adrive, tstim, toffset, PRF, DC, fs, 'NEURON')
+        codes = self.nbls.filecodes(self.Fdrive, Adrive, tstim, toffset, PRF, DC, self.fs, 'NEURON')
         del codes['method']
         codes.update({
-            'rs': f'rs{rs:.1e}Ohm.cm',
-            'deff': f'deff{(deff * 1e9):.0f}nm'
+            'rs': f'rs{self.rs:.1e}Ohm.cm',
+            'deff': f'deff{(self.deff * 1e9):.0f}nm'
         })
         return codes
 
-    def meta(self, A, tstim, toffset, PRF, DC):
-        meta = super().meta(A, tstim, toffset, PRF, DC)
+    def meta(self, Adrive, tstim, toffset, PRF, DC):
+        meta = super().meta(Adrive, tstim, toffset, PRF, DC)
+        meta['fs'] = self.fs
         meta['rs'] = self.rs
         meta['deff'] = self.deff
         return meta
@@ -193,4 +194,16 @@ class ExtendedSonicNode(SonicNode):
             :return: boolean stating whether neuron is excited or not
         '''
         return PointNeuron.getNSpikes(data['sonophore']) > 0
+
+    @staticmethod
+    def inputs():
+        return {
+            'section': {
+                'desc': 'section',
+                'label': 'section',
+                'unit': '',
+                'factor': 1e0,
+                'precision': 0
+            }
+        }
 

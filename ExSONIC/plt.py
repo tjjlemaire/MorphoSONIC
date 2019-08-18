@@ -3,8 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-16 19:51:42
-
+# @Last Modified time: 2019-08-18 21:27:03
 
 import numpy as np
 import pandas as pd
@@ -15,6 +14,8 @@ from PySONIC.plt import GroupedTimeSeries, CompTimeSeries
 from PySONIC.neurons import getPointNeuron
 
 from .core import ExtendedSonicNode
+from .utils import loadData
+
 
 def getModel(meta):
     ''' Return appropriate model object based on a dictionary of meta-information. '''
@@ -48,14 +49,8 @@ def figtitle(meta):
     return 'dummy title'
 
 
-# 2 possibilities:
-# - SpatiallyDistributedTimeSeries: plot the evolution of one variable of a specific section, across different conditions -> multiple files
-# - plot the evolution of one variable across all sections, for one specific condition -> one file only
-# - possibility to plot several variables on same figure
-
-
 class SectionGroupedTimeSeries(GroupedTimeSeries):
-    ''' Plot the time evolution of grouped variables at a specific section. '''
+    ''' Plot the time evolution of grouped variables in a specific section. '''
 
     def __init__(self, section_id, filepaths, pltscheme=None):
         ''' Constructor. '''
@@ -90,17 +85,35 @@ class SectionGroupedTimeSeries(GroupedTimeSeries):
             fig.canvas.set_window_title(title + f'_{self.section_id}')
 
 
-def getData(entry, trange=None):
-    if entry is None:
-        raise ValueError('non-existing data')
-    if isinstance(entry, str):
-        data, meta = loadData(entry)
-    else:
-        data, meta = entry
-    if trange is not None:
-        tmin, tmax = trange
-        data = {k: df.loc[(df['t'] >= tmin) & (df['t'] <= tmax)] for k, df in data.items()}
-    return data, meta
+class SectionCompTimeSeries(CompTimeSeries):
+    ''' Plot the time evolution of a specific variable across sections, for one specific condition '''
+
+    def __init__(self, filepath, varname, sections):
+        self.entry = filepath[0]
+        super().__init__(sections, varname)
+
+    @staticmethod
+    def getModel(*args, **kwargs):
+        return getModel(*args, **kwargs)
+
+    def getData(self, section, frequency=1, trange=None):
+        if self.entry is None:
+            raise ValueError('non-existing data')
+        if isinstance(self.entry, str):
+            data, meta = loadData(self.entry, frequency)
+        else:
+            data, meta = self.entry
+        meta = meta.copy()
+        meta['section'] = section
+        data = data[section]
+        data = data.iloc[::frequency]
+        if trange is not None:
+            tmin, tmax = trange
+            data = data.loc[(data['t'] >= tmin) & (data['t'] <= tmax)]
+        return data, meta
+
+    def getCompLabels(self, comp_values):
+        return np.arange(len(comp_values)), comp_values
 
 
 def plotSignals(t, signals, states=None, ax=None, onset=None, lbls=None, fs=10, cmode='qual',

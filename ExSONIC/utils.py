@@ -3,15 +3,27 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 14:38:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-07-05 14:13:56
+# @Last Modified time: 2019-08-18 21:27:07
 
 import os
+import pickle
 import numpy as np
 from neuron import h
 
 from PySONIC.postpro import findPeaks
 from PySONIC.constants import *
-from PySONIC.utils import si_format
+from PySONIC.utils import si_format, logger
+
+
+def loadData(fpath, frequency=1):
+    ''' Load dataframe and metadata dictionary from pickle file. '''
+    logger.info('Loading data from "%s"', os.path.basename(fpath))
+    with open(fpath, 'rb') as fh:
+        frame = pickle.load(fh)
+        data = frame['data']
+        data = {k: df.iloc[::frequency] for k, df in data.items()}
+        meta = frame['meta']
+        return data, meta
 
 
 def getNmodlDir():
@@ -27,42 +39,6 @@ def sennGeometry(fiberD=20.):
     interD = fiberD  # um
     interL = 100 * fiberD  # um
     return [nodeD, nodeL, interD, interL]
-
-
-def radialGeometry(deff, r1, r2=None, fc=None):
-    ''' Return geometrical parameters of cylindrical sections to match ratios of
-        membrane vs axial surface areas in a radial configuration between a central
-        and a peripheral section.
-
-        :param deff: effective submembrane depth (um)
-        :param r1: radius of central section (um)
-        :param r2: radius of peripheral section (um)
-        :param fc: fraction of membrane surface area covered by central section
-        :return: 3-tuple with sections common diameter and their respective lengths (um)
-    '''
-
-    # Check for inputs validity
-    cond = (r2 is None) + (fc is None)
-    if cond == 0 or cond == 2:
-        raise ValueError('one of "r2" or "fc" values must be provided')
-
-    # Compute r2 if fc is given
-    if r2 is None:
-        r2 = r1 / np.sqrt(fc)
-
-    print('radial parameters: deff = {}m, r1 = {}m, r2 = {}m (fc = {:.2f} %)'.format(
-        *si_format(np.array([deff, r1, r2]) * 1e-6, 2), fc * 1e2))
-
-    # Compute parameters of cylindrical sections
-    d = np.power(4 * deff * r2**2 / np.log((r1 + r2) / r1), 1 / 3)
-    L1 = r1**2 / d
-    L2 = r2**2 / d - L1
-
-    print('equivalent linear parameters: d = {}m, L1 = {}m, L2 = {}m'.format(
-        *si_format(np.array([d, L1, L2]) * 1e-6, 2)))
-
-    # Return tuple
-    return (d, [L1, L2])
 
 
 def VextPointSource(I, r, rho=300.0):
