@@ -118,7 +118,7 @@ $ <path/to/python/executable> setup.py install
 - Download the PySONIC package (https://c4science.ch/diffusion/4670/browse/master/PySONIC/)
 - Follow installation instruction written in the README file
 
-### ExSONIC package
+## ExSONIC package
 
 - Open a terminal.
 
@@ -208,7 +208,7 @@ To save simulation results in binary `.pkl` files, you can use the `-s` option. 
 
 When running simulation batches, it is highly advised to specify the `-s` option in order to save results of each simulation. You can then visualize results at a later stage.
 
-**TODO: add visualization script**
+To visualize results, use the `plot_ext_timeseries.py` script. You will be prompted to select the output files containing the simulation(s) results. By default, separate figures will be created for each simulation, showing the time profiles of all resulting variables. Here again, you can choose to show only a subset of variables using the `-p [xxx]` option. Moreover, if you select a subset of variables, you can visualize resulting profiles across simulations in comparative figures wih the `--compare` option.
 
 ## Future developments
 

@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
 # @Author: Theo Lemaire
+# @Email: theo.lemaire@epfl.ch
+# @Date:   2019-06-04 18:26:42
+# @Last Modified by:   Theo Lemaire
+# @Last Modified time: 2019-08-19 09:54:49
+# @Author: Theo Lemaire
 # @Date:   2018-08-30 10:51:12
 # @Last Modified by:   Theo Lemaire
 # @Last Modified time: 2019-03-04 19:49:51
@@ -8,7 +13,7 @@ import sys
 import matplotlib.pyplot as plt
 from argparse import ArgumentParser
 
-from PySONIC.neurons import getNeuronsDict
+from PySONIC.neurons import getPointNeuron
 from ExSONIC.utils import sennGeometry
 from ExSONIC._1D import SeriesConnector, compareEStim, runPlotAStim
 
@@ -26,7 +31,7 @@ def main():
     args = ap.parse_args()
 
     # Model parameters
-    neuron = getNeuronsDict()['FH']()
+    neuron = getPointNeuron('FH')
     nnodes = 15
     rs = 1e2  # Ohm.cm
     fiberD = 20.0  # um

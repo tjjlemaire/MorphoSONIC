@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-07-04 23:53:50
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-07-05 12:45:18
+# @Last Modified time: 2019-08-19 06:56:52
 
 import time
 import numpy as np
@@ -19,9 +19,10 @@ from PySONIC.plt import GroupedTimeSeries
 from ExSONIC.core import IintraNode, SonicNode
 
 
-class TestNode(TestBase):
-    ''' Run Node (ESTIM) and SonicNode (ASTIM) simulations and compare results with those obtained
-        with pure-Python implementations (PointNeuron and NeuronalBilayerSonophore classes). '''
+class TestAutoNmodl(TestBase):
+    ''' Run IintraNode (ESTIM) and SonicNode (ASTIM) simulations with manually and automatically created
+        NMODL membrane mechanisms, and compare results.
+    '''
 
     def __init__(self):
         self.pneuron = getPointNeuron('FH')
@@ -45,9 +46,7 @@ class TestNode(TestBase):
     @staticmethod
     def compare(pneuron, A, tstim, toffset, PRF=100., DC=1., a=None, Fdrive=None,
                 dt=None, atol=None):
-        ''' Compare results of NEURON and Python based A-STIM or E-STIM simulations of the point-neuron
-            SONIC model.
-        '''
+
         comp_keys = ['manual', 'auto']
 
         # Create comparative figure
@@ -132,5 +131,5 @@ class TestNode(TestBase):
         return fig
 
 if __name__ == '__main__':
-    tester = TestNode()
+    tester = TestAutoNmodl()
     tester.main()

@@ -3,10 +3,10 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-18 21:14:43
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-18 21:24:01
+# @Last Modified time: 2019-08-19 07:07:36
 
 import matplotlib.pyplot as plt
-from PySONIC.parsers import PWSimParser, AStimParser
+from PySONIC.parsers import *
 
 from .plt import SectionGroupedTimeSeries, SectionCompTimeSeries
 
@@ -86,3 +86,14 @@ class ExtSonicNodeAStimParser(ExtendedSonicAstimParser):
         if args['section'] == ['all']:
             args['section'] = ['sonophore', 'surroundings']
         super().parsePlot(args, output)
+
+
+class SpatiallyExtendedTimeSeriesParser(TimeSeriesParser):
+
+    def __init__(self):
+        super().__init__()
+        self.addSection()
+
+    def addSection(self):
+        self.add_argument(
+            '--section', nargs='+', type=str, help='Section of interest for plot')

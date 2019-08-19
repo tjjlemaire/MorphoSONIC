@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-30 11:26:26
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-07-05 14:04:26
+# @Last Modified time: 2019-08-19 06:57:53
 
 import time
 import numpy as np
@@ -55,9 +55,7 @@ class TestNode(TestBase):
     @staticmethod
     def compare(pneuron, A, tstim, toffset, PRF=100., DC=1., a=None, Fdrive=None,
                 dt=None, atol=None):
-        ''' Compare results of NEURON and Python based A-STIM or E-STIM simulations of the point-neuron
-            SONIC model.
-        '''
+
         comp_keys = ['Python', 'NEURON']
 
         # Create comparative figure
