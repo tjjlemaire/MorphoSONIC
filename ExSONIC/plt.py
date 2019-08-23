@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-18 21:27:03
+# @Last Modified time: 2019-08-23 20:16:22
 
 import numpy as np
 import pandas as pd
@@ -13,14 +13,14 @@ import matplotlib.pyplot as plt
 from PySONIC.plt import GroupedTimeSeries, CompTimeSeries
 from PySONIC.neurons import getPointNeuron
 
-from .core import ExtendedSonicNode
+from .core import ExtendedSonicNode, VextSennFiber
 from .utils import loadData
 
 
 def getModel(meta):
     ''' Return appropriate model object based on a dictionary of meta-information. '''
     simkey = meta['simkey']
-    if simkey == 'ASTIM':
+    if simkey == 'nano_ext_SONIC':
         model = ExtendedSonicNode(
             getPointNeuron(meta['neuron']),
             meta['rs'],
@@ -29,6 +29,10 @@ def getModel(meta):
             fs=meta['fs'],
             deff=meta['deff']
         )
+    elif simkey == 'senn_ESTIM':
+        model = VextSennFiber(
+            getPointNeuron(meta['neuron']),
+            meta['fiberD'], meta['nnodes'], rs=meta['rs'])
     else:
         raise ValueError(f'Unknown model type:{simkey}')
     return model
@@ -42,7 +46,7 @@ def figtitle(meta):
     else:
         wavetype = 'CW'
         suffix = ''
-    if 'deff' in meta:
+    if meta['simkey'] == 'nano_ext_SONIC':
         return 'extended SONIC node ({} neuron, {:.1f}nm, {:.0f}% coverage, deff = {:.0f} nm, rs = {:.0f} Ohm.cm): {} A-STIM {:.0f}kHz {:.2f}kPa, {:.0f}ms{}'.format(
                     meta['neuron'], meta['a'] * 1e9, meta['fs'] * 1e2, meta['deff'] * 1e9, meta['rs'], wavetype, meta['Fdrive'] * 1e-3,
                     meta['Adrive'] * 1e-3, meta['tstim'] * 1e3, suffix, meta['method'])
@@ -114,6 +118,21 @@ class SectionCompTimeSeries(CompTimeSeries):
 
     def getCompLabels(self, comp_values):
         return np.arange(len(comp_values)), comp_values
+
+    def figtitle(self, *args, **kwargs):
+        return figtitle(*args, **kwargs)
+
+    def checkColors(self, colors):
+        if colors is None:
+            nlevels = len(self.filepaths)
+            if nlevels < 4:
+                colors = [f'C{i}' for i in range(nlevels)]
+            else:
+                norm = matplotlib.colors.Normalize(0, nlevels - 1)
+                sm = plt.cm.ScalarMappable(norm=norm, cmap='Spectral')
+                sm._A = []
+                colors = [sm.to_rgba(i) for i in range(nlevels)]
+        return colors
 
 
 def plotSignals(t, signals, states=None, ax=None, onset=None, lbls=None, fs=10, cmode='qual',

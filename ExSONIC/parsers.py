@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-18 21:14:43
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-19 07:07:36
+# @Last Modified time: 2019-08-23 20:33:39
 
 import matplotlib.pyplot as plt
 from PySONIC.parsers import *
@@ -11,7 +11,7 @@ from PySONIC.parsers import *
 from .plt import SectionGroupedTimeSeries, SectionCompTimeSeries
 
 
-class ExtendedSonicAstimParser(AStimParser):
+class SpatiallyExtendedParser(Parser):
 
     def __init__(self):
         super().__init__()
@@ -28,15 +28,16 @@ class ExtendedSonicAstimParser(AStimParser):
         self.add_argument(
             '--section', nargs='+', type=str, help='Section of interest for plot')
 
-    def parse(self):
-        args = super().parse()
-        del args['method']
-        args['rs'] = self.parse2array(args, 'rs', factor=self.factors['rs'])
+    def parse(self, args=None):
+        if args is None:
+            args = super().parse()
+        for key in ['rs']:
+            args[key] = self.parse2array(args, key, factor=self.factors[key])
         return args
 
     @staticmethod
     def parseSimInputs(args):
-        return [args['freq']] + PWSimParser.parseSimInputs(args) + [args['rs']]
+        return [args[k] for k in ['rs']]
 
     @staticmethod
     def parsePlot(args, output):
@@ -50,8 +51,7 @@ class ExtendedSonicAstimParser(AStimParser):
                 logger.error('Specific variables must be specified for comparative plots')
                 return
             for key in ['cmap', 'cscale']:
-                if key in args:
-                    render_args[key] = args[key]
+                render_args[key] = args[key]
             for pltvar in args['plot']:
                 comp_plot = SectionCompTimeSeries(output, pltvar, args['section'])
                 comp_plot.render(**render_args)
@@ -62,7 +62,108 @@ class ExtendedSonicAstimParser(AStimParser):
         plt.show()
 
 
-class ExtSonicNodeAStimParser(ExtendedSonicAstimParser):
+class SennParser(SpatiallyExtendedParser):
+
+    def __init__(self):
+        SpatiallyExtendedParser.__init__(self)
+        self.defaults.update({'nnodes': 11, 'fiberD': 20., 'xps': 0., 'zps': None, 'neuron': 'FH'})
+        self.factors.update({'fiberD': 1e-6, 'xps': 1e-3, 'zps': 1e-3})
+        self.addNnodes()
+        self.addFiberDiameter()
+        self.addPointSourcePosition()
+
+    def addNnodes(self):
+        self.add_argument(
+            '--nnodes', nargs='+', type=int, help='Number of nodes of Ranvier')
+
+    def addFiberDiameter(self):
+        self.add_argument(
+            '-d', '--fiberD', nargs='+', type=float, help='Fiber diameter (um)')
+
+    def addPointSourcePosition(self):
+        self.add_argument(
+            '--xps', nargs='+', type=float, help='Point source x-position (mm)')
+        self.add_argument(
+            '--zps', nargs='+', type=float, help='Point source z-position (mm)')
+
+    def parse(self, args=None):
+        args = super().parse(args=args)
+        for key in ['fiberD', 'xps', 'zps']:
+            if len(args[key]) > 1 or args[key][0] is not None:
+                args[key] = self.parse2array(args, key, factor=self.factors[key])
+        return args
+
+    @staticmethod
+    def parseSimInputs(args):
+        return SpatiallyExtendedParser.parseSimInputs(args)
+
+    def parsePlot(self, args, output):
+        if args['section'] == ['all']:
+            args['section'] = [f'node{i}' for i in range(args['nnodes'][0])]
+        return SpatiallyExtendedParser.parsePlot(args, output)
+
+
+class EStimSennParser(SennParser, PWSimParser):
+
+    def __init__(self):
+        PWSimParser.__init__(self)
+        SennParser.__init__(self)
+        self.defaults.update({'mode': 'cathode', 'amp': -0.7, 'tstim': 0.1, 'toffset': 3.})
+        self.factors.update({'amp': 1e-3})
+        self.allowed.update({'mode': ['cathode', 'anode']})
+        self.addAstim()
+
+    def addAstim(self):
+        self.add_argument(
+            '-A', '--amp', nargs='+', type=float,
+            help='Point-source current amplitude (mA)')
+        self.add_argument(
+            '--Arange', type=str, nargs='+',
+            help='Point-source current amplitude range {} (mA)'.format(self.dist_str))
+        self.add_argument(
+            '--mode', type=str, help='Electrode polarity mode ("cathode" or "anode")')
+        self.to_parse['amp'] = self.parseAmp
+
+    def parseAmp(self, args):
+        return EStimParser.parseAmp(self, args)
+
+    def parse(self):
+        args = SennParser.parse(self, args=PWSimParser.parse(self))
+        args['mode'] = args['mode'][0]
+        return args
+
+    @staticmethod
+    def parseSimInputs(args):
+        return PWSimParser.parseSimInputs(args) + SpatiallyExtendedParser.parseSimInputs(args)
+
+    def parsePlot(self, *args):
+        return SennParser.parsePlot(self, *args)
+
+
+class SpatiallyExtendedAStimParser(SpatiallyExtendedParser, AStimParser):
+
+    def __init__(self):
+        AStimParser.__init__(self)
+        SpatiallyExtendedParser.__init__(self)
+        self.defaults.pop('method')
+        self.allowed.pop('method')
+        self.to_parse.pop('method')
+
+    def parse(self):
+        args = SpatiallyExtendedParser.parse(self, args=AStimParser.parse(self))
+        del args['method']
+        return args
+
+    @staticmethod
+    def parseSimInputs(args):
+        return [args['freq']] + PWSimParser.parseSimInputs(args) + SpatiallyExtendedParser.parseSimInputs(args)
+
+    @staticmethod
+    def parsePlot(*args):
+        return SpatiallyExtendedParser.parsePlot(*args)
+
+
+class ExtSonicNodeAStimParser(SpatiallyExtendedAStimParser):
 
     def __init__(self):
         super().__init__()
@@ -95,5 +196,5 @@ class SpatiallyExtendedTimeSeriesParser(TimeSeriesParser):
         self.addSection()
 
     def addSection(self):
-        self.add_argument(
-            '--section', nargs='+', type=str, help='Section of interest for plot')
+        SpatiallyExtendedParser.addSection(self)
+

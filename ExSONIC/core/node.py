@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-18 20:36:49
+# @Last Modified time: 2019-08-23 18:42:26
 
 import pickle
 import abc
@@ -33,11 +33,14 @@ class Node(metaclass=abc.ABCMeta):
         ''' Keyword used to characterize stimulation modality. '''
         raise NotImplementedError
 
-    def __init__(self, pneuron, id=None, auto_nmodl=True):
+    def __init__(self, pneuron, id=None, auto_nmodl=True, cell=None):
         ''' Initialization.
 
             :param pneuron: point-neuron model
         '''
+        if cell is None:
+            cell = self
+
         # Initialize arguments
         self.pneuron = pneuron
         if id is None:
@@ -54,7 +57,7 @@ class Node(metaclass=abc.ABCMeta):
         self.setFuncTables()
 
         # Create section and set membrane mechanism
-        self.section = self.createSection(self.id)
+        self.section = h.Section(name=id, cell=cell)
         self.section.insert(self.mechname)
 
     def __repr__(self):
@@ -62,13 +65,6 @@ class Node(metaclass=abc.ABCMeta):
 
     def strBiophysics(self):
         return '{} neuron'.format(self.pneuron.name)
-
-    def createSection(self, id):
-        ''' Create morphological section.
-
-            :param id: name of the section.
-        '''
-        return h.Section(name=id, cell=self)
 
     def clear(self):
         del self.section
@@ -343,7 +339,15 @@ class Node(metaclass=abc.ABCMeta):
 
     def simAndSave(self, outdir, *args):
         ''' Simulate the model and save the results in a specific output directory. '''
-        data, meta = self.simulate(*args)
+        out = self.simulate(*args)
+        if out is None:
+            return None
+        data, meta = out
+        if None in args:
+            args = list(args)
+            iNone = next(i for i, arg in enumerate(args) if arg is None)
+            sig = signature(self.meta).parameters
+            args[iNone] = meta[self.modality['name']]
         fpath = '{}/{}.pkl'.format(outdir, self.filecode(*args))
         with open(fpath, 'wb') as fh:
             pickle.dump({'meta': meta, 'data': data}, fh)
@@ -355,7 +359,7 @@ class IintraNode(Node):
     ''' Node used for simulations with intracellular current. '''
 
     modality = {
-        'name': 'I_intra',
+        'name': 'Astim',
         'unit': 'A/m2',
         'factor': 1e-3
     }
@@ -379,7 +383,7 @@ class IintraNode(Node):
         return value
 
     def filecodes(self, *args):
-        codes = self.pneuron.filecode(*args)
+        codes = self.pneuron.filecodes(*args)
         codes['method'] = 'NEURON'
         return codes
 
@@ -388,13 +392,13 @@ class SonicNode(Node):
     ''' Node used for simulations with US stimulus. '''
 
     modality = {
-        'name': 'A_US',
+        'name': 'Adrive',
         'unit': 'Pa',
         'factor': 1e0
     }
     A_conv_thr = THRESHOLD_CONV_RANGE_ASTIM
 
-    def __init__(self, pneuron, id=None, a=32e-9, Fdrive=500e3, fs=1., auto_nmodl=True):
+    def __init__(self, pneuron, *args, **kwargs):
         ''' Initialization.
 
             :param pneuron: point-neuron model
@@ -402,13 +406,13 @@ class SonicNode(Node):
             :param Fdrive: ultrasound frequency (Hz)
             :param fs: sonophore membrane coverage fraction (-)
         '''
-        if fs > 1. or fs < 0.:
-            raise ValueError('fs ({}) must be within [0-1]'.format(fs))
-        self.nbls = NeuronalBilayerSonophore(a, pneuron, Fdrive)
-        self.a = a
-        self.fs = fs
-        self.Fdrive = Fdrive
-        super().__init__(pneuron, id=id, auto_nmodl=auto_nmodl)
+        self.a = kwargs.pop('a')
+        self.Fdrive = kwargs.pop('Fdrive')
+        self.fs = kwargs.pop('fs')
+        if self.fs > 1. or self.fs < 0.:
+            raise ValueError('fs ({}) must be within [0-1]'.format(self.fs))
+        self.nbls = NeuronalBilayerSonophore(self.a, pneuron, self.Fdrive)
+        super().__init__(pneuron, *args, **kwargs)
         self.Arange = (0., self.getLookup().refs['A'].max())
 
     def __repr__(self):

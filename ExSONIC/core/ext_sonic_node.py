@@ -3,15 +3,16 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-18 21:04:51
+# @Last Modified time: 2019-08-23 18:32:51
 
 import numpy as np
 import pandas as pd
+from neuron import h
 
-from PySONIC.utils import si_format, pow10_format, logger
+from PySONIC.utils import si_format, pow10_format, logger, debug, binarySearch
 from PySONIC.constants import *
-from PySONIC.postpro import findPeaks
 from PySONIC.core import Model, PointNeuron
+from PySONIC.postpro import detectSpikes
 
 from .pyhoc import *
 from .node import SonicNode
@@ -20,6 +21,8 @@ from ..constants import *
 
 
 class ExtendedSonicNode(SonicNode):
+
+    simkey = 'nano_ext_SONIC'
 
     def __init__(self, pneuron, rs, a=32e-9, Fdrive=500e3, fs=0.5, deff=100e-9):
 
@@ -33,7 +36,7 @@ class ExtendedSonicNode(SonicNode):
         del self.section
 
         # Create sections and set their geometry, biophysics and topology
-        self.sections = self.createSections()
+        self.createSections()
         self.setGeometry()  # must be called PRIOR to setTopology()
         self.setBiophysics()
         self.setResistivity()
@@ -50,7 +53,7 @@ class ExtendedSonicNode(SonicNode):
 
     def createSections(self):
         ''' Create morphological sections. '''
-        return {id: self.createSection(id) for id in ['sonophore', 'surroundings']}
+        self.sections = {id: h.Section(name=id, cell=self) for id in ['sonophore', 'surroundings']}
 
     def clear(self):
         del self.sections
@@ -107,7 +110,6 @@ class ExtendedSonicNode(SonicNode):
 
             :param Adrive: acoustic pressure amplitude (Pa)
         '''
-        self.printStimAmp(Adrive)
         setattr(self.sections['sonophore'], 'Adrive_{}'.format(self.mechname), Adrive * 1e-3)
         setattr(self.sections['surroundings'], 'Adrive_{}'.format(self.mechname), 0.)
 
@@ -121,6 +123,8 @@ class ExtendedSonicNode(SonicNode):
             setattr(sec, 'stimon_{}'.format(self.mechname), value)
         return value
 
+    @Model.logNSpikes
+    @Model.checkTitrate('Adrive')
     @Model.addMeta
     def simulate(self, Adrive, tstim, toffset, PRF, DC, dt=None, atol=None):
         ''' Set appropriate recording vectors, integrate and return output variables.
@@ -144,7 +148,7 @@ class ExtendedSonicNode(SonicNode):
         # Set recording vectors
         t = setTimeProbe()
         stim = setStimProbe(self.sections['sonophore'], self.mechname)
-        probes = {id: self.setProbesDict(self.sections[id]) for id in self.sections.keys()}
+        probes = {k: self.setProbesDict(v) for k, v in self.sections.items()}
 
         # Set stimulus amplitude and integrate model
         self.setStimAmp(Adrive)
@@ -169,6 +173,43 @@ class ExtendedSonicNode(SonicNode):
 
         return data
 
+    @staticmethod
+    def getNSpikes(data):
+        ''' Compute number of spikes in charge profile of simulation output.
+
+            :param data: dataframe containing output time series
+            :return: number of detected spikes
+        '''
+        return detectSpikes(data['sonophore'])[0].size
+
+    def isExcited(self, data):
+        ''' Determine if neuron is excited from simulation output.
+
+            :param data: dataframe containing output time series
+            :return: boolean stating whether neuron is excited or not
+        '''
+        nspikes_sonophore = detectSpikes(data['sonophore'])[0].size
+        nspikes_surroundings = detectSpikes(data['surroundings'])[0].size
+        return nspikes_start > 0 and nspikes_end > 0
+
+    def titrate(self, tstim, toffset, PRF=100., DC=1.):
+        ''' Use a binary search to determine the threshold amplitude needed to obtain
+            neural excitation for a given duration, PRF and duty cycle.
+
+            :param tstim: duration of US stimulation (s)
+            :param toffset: duration of the offset (s)
+            :param PRF: pulse repetition frequency (Hz)
+            :param DC: pulse duty cycle (-)
+            :param method: integration method
+            :param xfunc: function determining whether condition is reached from simulation output
+            :return: determined threshold amplitude (Pa)
+        '''
+        xfunc = self.isExcited
+        return binarySearch(
+            lambda x: xfunc(self.simulate(*x)[0]),
+            [tstim, toffset, PRF, DC], 0, self.Arange, self.A_conv_thr)
+
+
     def filecodes(self, Adrive, tstim, toffset, PRF, DC):
         # Get parent codes and supress irrelevant entries
         codes = self.nbls.filecodes(self.Fdrive, Adrive, tstim, toffset, PRF, DC, self.fs, 'NEURON')
@@ -184,6 +225,7 @@ class ExtendedSonicNode(SonicNode):
         meta['fs'] = self.fs
         meta['rs'] = self.rs
         meta['deff'] = self.deff
+        meta['simkey'] = self.simkey
         return meta
 
     @staticmethod
