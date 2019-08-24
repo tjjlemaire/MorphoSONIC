@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 07:03:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-19 07:15:13
+# @Last Modified time: 2019-08-23 22:45:47
 
 ''' Plot section-specific temporal profiles of specific simulation output variables for spatially-extended models. '''
 
@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 from PySONIC.utils import logger
 from ExSONIC.plt import SectionCompTimeSeries, SectionGroupedTimeSeries
 from ExSONIC.parsers import SpatiallyExtendedTimeSeriesParser
+from ExSONIC.utils import loadData
 
 
 def main():
@@ -20,9 +21,10 @@ def main():
     args = parser.parse()
     logger.setLevel(args['loglevel'])
 
-    # Parse sections
+    # Parse sections (looking into first file for ids if not provided)
     if args['section'] == ['all']:
-        raise ValueError('sections names must be explicitly specified')
+        data, _ = loadData(args['inputfiles'][0])
+        args['section'] = list(data.keys())
 
     # Plot appropriate graph
     if args['compare']:

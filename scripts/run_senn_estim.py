@@ -3,16 +3,16 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-15 20:33:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-23 20:12:22
+# @Last Modified time: 2019-08-23 22:32:50
 
-''' Run A-STIM simulations of an extended SONIC node with a specific point-neuron mechanism. '''
+''' Run simulations of an SENN fiber model with a specific point-neuron mechanis
+    upon extracellular electrical stimulation. '''
 
 import matplotlib.pyplot as plt
 
 from PySONIC.core import Batch, PointNeuron
 from PySONIC.utils import logger
 from PySONIC.parsers import EStimParser
-
 from ExSONIC.core import VextSennFiber, CurrentPointSource
 from ExSONIC.parsers import EStimSennParser
 

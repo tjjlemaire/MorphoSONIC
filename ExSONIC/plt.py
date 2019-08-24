@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-23 20:16:22
+# @Last Modified time: 2019-08-24 21:50:57
 
 import numpy as np
 import pandas as pd
@@ -50,6 +50,17 @@ def figtitle(meta):
         return 'extended SONIC node ({} neuron, {:.1f}nm, {:.0f}% coverage, deff = {:.0f} nm, rs = {:.0f} Ohm.cm): {} A-STIM {:.0f}kHz {:.2f}kPa, {:.0f}ms{}'.format(
                     meta['neuron'], meta['a'] * 1e9, meta['fs'] * 1e2, meta['deff'] * 1e9, meta['rs'], wavetype, meta['Fdrive'] * 1e-3,
                     meta['Adrive'] * 1e-3, meta['tstim'] * 1e3, suffix, meta['method'])
+    elif meta['simkey'] == 'senn_ESTIM':
+        return 'SENN fiber ({} neuron, d = {:.1f}um, {} nodes), ({:.1f}, {:.1f})mm point-source {} E-STIM {:.2f}mA, {:.2f}ms{}'.format(
+            meta['neuron'],
+            meta['fiberD'] * 1e6,
+            meta['nnodes'],
+            meta['psource'].x * 1e3, meta['psource'].z * 1e3,
+            wavetype,
+            meta['A'] * 1e3,
+            meta['tstim'] * 1e3,
+            suffix
+        )
     return 'dummy title'
 
 

@@ -3,14 +3,13 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 14:38:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-23 20:09:31
+# @Last Modified time: 2019-08-23 22:28:03
 
 import os
 import pickle
 import numpy as np
 from neuron import h
 
-# from PySONIC.postpro import findPeaks
 from PySONIC.constants import *
 from PySONIC.utils import si_format, logger
 
