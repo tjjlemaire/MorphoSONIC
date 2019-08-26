@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-26 10:34:29
+# @Last Modified time: 2019-08-26 13:44:45
 
 import abc
 import pickle
@@ -400,6 +400,68 @@ class SennFiber(metaclass=abc.ABCMeta):
             pickle.dump({'meta': meta, 'data': data}, fh)
         logger.debug('simulation data exported to "%s"', fpath)
         return fpath
+
+    def getSpikesTimings(self, data, zcross=True):
+        ''' Return an array containing occurence times of spikes detected on a collection of nodes.
+
+            :param data: simulation output dataframe
+            :param zcross: boolean stating whether to consider ascending zero-crossings preceding peaks
+                as temporal reference for spike occurence timings
+            :return: dictionary of spike occurence times (s) per node.
+        '''
+
+        tspikes = {}
+        nspikes = None
+        for id in self.ids:
+
+            # Detect spikes on current trace
+            ispikes, *_ = detectSpikes(data[id], key='Vm', mph=SPIKE_MIN_VAMP, mpt=SPIKE_MIN_DT,
+                                       mpp=SPIKE_MIN_VPROM)
+
+            # Assert consistency of spikes propagation
+            if nspikes is None:
+                nspikes = ispikes.size
+                if nspikes == 0:
+                    logger.warning('no spikes detected')
+                    return None
+            else:
+                assert ispikes.size == nspikes, 'Inconsistent number of spikes in different nodes'
+
+            if zcross:
+                # Consider spikes as time of zero-crossing preceding each peak
+                t = data[id]['t'].values  # s
+                Vm = data[id]['Vm'].values  # mV
+                i_zcross = np.where(np.diff(np.sign(Vm)) > 0)[0]  # detect ascending zero-crossings
+                slopes = (Vm[i_zcross + 1] - Vm[i_zcross]) / (t[i_zcross + 1] - t[i_zcross])  # slopes (mV/s)
+                offsets = Vm[i_zcross] - slopes * t[i_zcross]  # offsets (mV)
+                tzcross = -offsets / slopes  # interpolated times (s)
+                errmsg = 'Ascending zero crossing #{} (t = {:.2f} ms) not preceding peak #{} (t = {:.2f} ms)'
+                for ispike, (tzc, tpeak) in enumerate(zip(tzcross, t[ispikes])):
+                    assert tzc < tpeak, errmsg.format(ispike, tzc * 1e3, ispike, tpeak * 1e3)
+                tspikes[id] = tzcross
+            else:
+                tspikes[id] = t[ispikes]
+
+        return pd.DataFrame(tspikes)
+
+    def getConductionVelocity(self, data):
+        ''' Compute average conduction speed from simulation results.
+
+            :param data: simulation output dataframe
+            :return: array of condiction speeds per spike (m/s).
+        '''
+        d = np.diff(self.getNodeCoords())[0]  # node-to-node distance (m)
+        tspikes = self.getSpikesTimings(data)  # spikes timing dataframe
+        delays = np.abs(np.diff(tspikes.values, axis=1))  # node-to-node delays (s)
+        delays = delays[:, 1:-1]  # remove delays from both extremity segments
+        cv = d / delays  # node-to-node conduction velocities (m/s)
+        return np.mean(cv)
+
+    @staticmethod
+    def getSpikeAmp(data, key='Vm'):
+        amps = np.array([np.ptp(df[key].values) for df in data.values()])
+        return np.mean(amps)
+
 
 
 class VextSennFiber(SennFiber):

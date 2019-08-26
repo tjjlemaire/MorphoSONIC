@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-26 12:01:13
+# @Last Modified time: 2019-08-26 13:47:42
 
 import numpy as np
 import logging
@@ -43,14 +43,22 @@ class TestSenn(TestBase):
         # Titrate for a specific duration and simulate fiber at threshold current
         tstim = 100e-6  # s
         Ithr = fiber.titrate(psource, tstim, toffset, PRF, DC)
-        logger.info(f'tstim = {si_format(tstim)}s -> Ithr = {si_format(Ithr)}A')
         data, meta = fiber.simulate(psource, Ithr, tstim, toffset, PRF, DC)
+
+        # Compute conduction velocity and spike amplitude from resulting data
+        cv = fiber.getConductionVelocity(data)
+        dV = fiber.getSpikeAmp(data)
 
         # Compute strength-duration curve
         durations = np.logspace(-5, -1, 30)  # s
         Ithrs = np.array([fiber.titrate(psource, x, toffset, PRF, DC) for x in durations])  # A
         tau = psource.chronaxie(durations, Ithrs)  # s
-        logger.info(f'chronaxie = {si_format(tau)}s')
+
+        # Log output metrics
+        logger.info(f'tstim = {si_format(tstim)}s -> Ithr = {si_format(Ithr)}A')
+        logger.info(f'conduction velocity: v = {cv:.1f} m/s, spike amplitude: dV = {dV:.1f} mV')
+        logger.info(f'strength-duration curve: chronaxie = {si_format(tau, 1)}s')
+
 
         # Plot membrane potential traces for specific duration at threshold current
         fig1 = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
@@ -59,6 +67,9 @@ class TestSenn(TestBase):
         fig2 = strengthDurationCurve(fiber, psource, durations, Ithrs)
 
         plt.show()
+
+    def test_ASTIM(self, is_profiled=False):
+        pass
 
 
 
