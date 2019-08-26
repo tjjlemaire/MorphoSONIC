@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-24 21:50:57
+# @Last Modified time: 2019-08-26 11:03:01
 
 import numpy as np
 import pandas as pd
@@ -144,6 +144,23 @@ class SectionCompTimeSeries(CompTimeSeries):
                 sm._A = []
                 colors = [sm.to_rgba(i) for i in range(nlevels)]
         return colors
+
+
+def strengthDurationCurve(fiber, psource, durations, Ithrs, scale='log', fs=12):
+    fig, ax = plt.subplots()
+    ax.set_title(f'{fiber} - strength-duration curve', fontsize=fs)
+    ax.set_xlabel('duration (ms)', fontsize=fs)
+    stim_mode = {True: 'cathodic', False: 'anodic'}[psource.is_cathodal]
+    ax.set_ylabel(f'threshold {stim_mode} current (mA)', fontsize=fs)
+    if scale == 'log':
+        ax.set_xscale('log')
+        ax.set_yscale('log')
+    if psource.is_cathodal:
+        Ithrs = -Ithrs
+    ax.plot(durations * 1e3, Ithrs * 1e3)
+    for item in ax.get_xticklabels() + ax.get_yticklabels():
+        item.set_fontsize(fs)
+    return fig
 
 
 def plotSignals(t, signals, states=None, ax=None, onset=None, lbls=None, fs=10, cmode='qual',
