@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-23 20:07:34
+# @Last Modified time: 2019-08-26 10:17:42
 
 import abc
 import numpy as np
@@ -43,7 +43,7 @@ class PointSource(metaclass=abc.ABCMeta):
 
     @property
     @abc.abstractmethod
-    def getMaxAmp(self):
+    def reverseComputeAmp(self):
         return NotImplementedError
 
 
@@ -94,13 +94,12 @@ class CurrentPointSource(PointSource):
         distances = self.distance(fiber.getNodeCoords(), 0.)  # m
         return self.Vext(I, distances)  # mV
 
-    def getMaxAmp(self, fiber, Ve_thr):
+    def reverseComputeAmp(self, fiber, Ve):
         # Compute distance of closest node to point-source
         rmin = min(self.distance(fiber.getNodeCoords(), 0.))  # m
 
-        # Evaluate the current needed to generate the threshold
-        # extracellular potential value at this node
-        return self.Iext(Ve_thr, rmin)  # A
+        # Compute the current needed to generate the extracellular potential value at this node
+        return self.Iext(Ve, rmin)  # A
 
     def isCathodal(self, amp):
         return amp <= 0

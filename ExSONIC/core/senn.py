@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-23 20:21:19
+# @Last Modified time: 2019-08-26 10:34:29
 
 import abc
 import pickle
@@ -13,7 +13,7 @@ from inspect import signature
 
 from PySONIC.core import Model
 from PySONIC.neurons import *
-from PySONIC.utils import si_format, pow10_format, logger, plural, binarySearch
+from PySONIC.utils import si_format, pow10_format, logger, plural, binarySearch, pow2Search
 from PySONIC.constants import *
 from PySONIC.postpro import detectSpikes
 
@@ -346,7 +346,10 @@ class SennFiber(metaclass=abc.ABCMeta):
             :param method: integration method
             :return: determined threshold amplitude (Pa)
         '''
-        Arange, A_conv_thr = self.getArange(psource)
+        Amin, Amax = self.getArange(psource)
+        A_conv_thr = np.abs(Amax - Amin) / 1e3
+        Athr = pow2Search(self.titrationFunc, [psource, tstim, toffset, PRF, DC], 1, Amin, Amax)
+        Arange = (Athr / 2, Athr)
         return binarySearch(
             self.titrationFunc, [psource, tstim, toffset, PRF, DC], 1, Arange, A_conv_thr)
 
@@ -402,7 +405,7 @@ class SennFiber(metaclass=abc.ABCMeta):
 class VextSennFiber(SennFiber):
 
     simkey = 'senn_ESTIM'
-    Ve_thr = 500.  # mV
+    Ve_range = (1e0, 1e3)  # mV
 
     def __init__(self, pneuron, fiberD, nnodes, **kwargs):
         mechname = pneuron.name + 'auto'
@@ -448,9 +451,7 @@ class VextSennFiber(SennFiber):
         return value
 
     def getArange(self, psource):
-        Arange = (0, psource.getMaxAmp(self, self.Ve_thr))
-        A_conv_thr = np.abs(Arange[1] - Arange[0]) / 1e3
-        return Arange, A_conv_thr
+        return [psource.reverseComputeAmp(self, x) for x in self.Ve_range]
 
     def titrationFunc(self, args):
         psource, A, *args = args
