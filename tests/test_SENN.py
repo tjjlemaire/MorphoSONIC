@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-26 11:03:23
+# @Last Modified time: 2019-08-26 12:01:13
 
 import numpy as np
 import logging
@@ -47,8 +47,10 @@ class TestSenn(TestBase):
         data, meta = fiber.simulate(psource, Ithr, tstim, toffset, PRF, DC)
 
         # Compute strength-duration curve
-        durations = np.logspace(-4, -1, 30)  # s
+        durations = np.logspace(-5, -1, 30)  # s
         Ithrs = np.array([fiber.titrate(psource, x, toffset, PRF, DC) for x in durations])  # A
+        tau = psource.chronaxie(durations, Ithrs)  # s
+        logger.info(f'chronaxie = {si_format(tau)}s')
 
         # Plot membrane potential traces for specific duration at threshold current
         fig1 = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()

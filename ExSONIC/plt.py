@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-26 11:03:01
+# @Last Modified time: 2019-08-26 12:00:52
 
 import numpy as np
 import pandas as pd
@@ -155,11 +155,14 @@ def strengthDurationCurve(fiber, psource, durations, Ithrs, scale='log', fs=12):
     if scale == 'log':
         ax.set_xscale('log')
         ax.set_yscale('log')
+    tau = psource.chronaxie(durations, Ithrs)  # s
     if psource.is_cathodal:
         Ithrs = -Ithrs
-    ax.plot(durations * 1e3, Ithrs * 1e3)
+    ax.plot(durations * 1e3, Ithrs * 1e3, color='C0', label='curve')
+    ax.axvline(tau * 1e3, linestyle='--', color='k', label='chronaxie (ms)')
     for item in ax.get_xticklabels() + ax.get_yticklabels():
         item.set_fontsize(fs)
+    ax.legend(fontsize=fs)
     return fig
 
 

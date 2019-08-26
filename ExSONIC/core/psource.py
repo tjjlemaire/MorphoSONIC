@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-26 10:17:42
+# @Last Modified time: 2019-08-26 11:56:56
 
 import abc
 import numpy as np
@@ -103,3 +103,10 @@ class CurrentPointSource(PointSource):
 
     def isCathodal(self, amp):
         return amp <= 0
+
+    def chronaxie(self, durations, Ithrs):
+        ''' Return chronaxie, i.e. stimulus duration for which threshold current is twice the rheobase. '''
+        if self.is_cathodal:
+            Ithrs = -Ithrs
+        Irh = 2 * Ithrs.min()  # rheobase current
+        return np.interp(Irh, Ithrs[::-1], durations[::-1])  # s
