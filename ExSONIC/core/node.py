@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-26 16:26:13
+# @Last Modified time: 2019-08-29 20:09:18
 
 import pickle
 import abc
@@ -409,9 +409,9 @@ class SonicNode(Node):
             :param Fdrive: ultrasound frequency (Hz)
             :param fs: sonophore membrane coverage fraction (-)
         '''
-        self.a = kwargs.pop('a')
-        self.Fdrive = kwargs.pop('Fdrive')
-        self.fs = kwargs.pop('fs')
+        self.a = kwargs.pop('a', 32e-9)  # m
+        self.Fdrive = kwargs.pop('Fdrive', 500e3)  # Hz
+        self.fs = kwargs.pop('fs', 1.)  # -
         if self.fs > 1. or self.fs < 0.:
             raise ValueError('fs ({}) must be within [0-1]'.format(self.fs))
         self.nbls = NeuronalBilayerSonophore(self.a, pneuron, self.Fdrive)
