@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-26 13:44:45
+# @Last Modified time: 2019-08-29 11:36:05
 
 import abc
 import pickle
@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 from inspect import signature
 
-from PySONIC.core import Model
+from PySONIC.core import Model, PointNeuron
 from PySONIC.neurons import *
 from PySONIC.utils import si_format, pow10_format, logger, plural, binarySearch, pow2Search
 from PySONIC.constants import *
@@ -33,10 +33,22 @@ class SennFiber(metaclass=abc.ABCMeta):
         ''' Keyword used to characterize stimulation modality. '''
         raise NotImplementedError
 
-    def __init__(self, pneuron, fiberD, nnodes, rs=1e2):
+    def __init__(self, pneuron, fiberD, nnodes, rs=1e2, nodeL=2.5e-6, d_ratio=0.7):
+        ''' Initialize fiber model.
 
+            :param pneuron: point-neuron model object
+            :param fiberD: fiber outer diameter (m)
+            :param nnodes: number of nodes
+            :param rs: axoplasmic resistivity (Ohm.cm)
+            :param nodeL: nominal node length (m)
+            :param d_ratio: ratio of axon (inner-myelin) and fiber (outer-myelin) diameters
+        '''
+        if not isinstance(pneuron, PointNeuron):
+            raise TypeError(f'{pneuron} is not a valid PointNeuron instance')
         if nnodes % 2 == 0:
             raise ValueError('Number of nodes must be odd')
+        if fiberD <= 0:
+            raise ValueError('Fiber diameter must be positive')
 
         # Assign attributes
         self.pneuron = pneuron
@@ -45,10 +57,10 @@ class SennFiber(metaclass=abc.ABCMeta):
         self.fiberD = fiberD
 
         # Define fiber geometrical parameters
-        self.nodeD = 0.7 * fiberD  # m
+        self.nodeD = d_ratio * self.fiberD  # m
         self.nodeL = 2.5e-6  # m
-        self.interD = fiberD  # m
-        self.interL = 100 * fiberD  # m
+        self.interD = d_ratio * self.fiberD  # m
+        self.interL = 100 * self.fiberD  # m
 
         # Compute nodal and internodal axial resistance ()
         self.R_node = self.resistance(self.nodeD, self.nodeL)  # Ohm
@@ -64,7 +76,7 @@ class SennFiber(metaclass=abc.ABCMeta):
 
     def __repr__(self):
         ''' Explicit naming of the model instance. '''
-        return f'SennFiber({self.strBiophysics()}, {self.strNodes()}, d = {self.interD * 1e6:.1f} um)'
+        return f'SennFiber({self.strBiophysics()}, {self.strNodes()}, d = {self.fiberD * 1e6:.1f} um)'
 
     @staticmethod
     def inputs():
@@ -131,31 +143,32 @@ class SennFiber(metaclass=abc.ABCMeta):
         '''
         if rs is None:
             rs = self.rs
-        return 4 * rs * L / (np.pi * d**2) * 1e-2
+        return 4 * rs * L / (np.pi * d**2) * 1e-2  # Ohm
 
     def setResistivity(self):
         ''' Set sections axial resistivity, corrected to account for internodes and membrane capacitance
             in the Q-based differentiation scheme. '''
 
-        logger.debug(f'setting nodal resistivity to {self.rs:.0f} Ohm.cm')
-        for sec in self.sections.values():
-            sec.Ra = self.rs
+        logger.debug(f'nominal nodal resistivity: rs = {self.rs:.0f} Ohm.cm')
+        rho_nodes = np.ones(self.nnodes) * self.rs  # Ohm.cm
 
-        logger.debug('adjusting resistivities to account for internodal sections')
-        for i, sec in enumerate(self.sections.values()):
-            R_extra = 0
-            for ind in [0, self.nnodes - 1]:
-                if i != ind:
-                    R_extra += self.R_inter / 2
-            sec.Ra *= (1 + R_extra / self.R_node)
+        # Adding extra resistivity to account for half-internodal resistance
+        # for each connected side of each node
+        logger.debug('adding extra-resistivity to account for internodal resistance')
+        R_extra = np.array([self.R_inter / 2] + [self.R_inter] * (self.nnodes - 2) + [self.R_inter / 2])  # Ohm
+        rho_extra = R_extra * self.rs / self.R_node  # Ohm.cm
+        rho_nodes += rho_extra  # Ohm.cm
 
         # In case the axial coupling variable is v (an alias for membrane charge density),
         # multiply resistivity by membrane capacitance to ensure consistency of Q-based
         # differential scheme, where Iax = dV / r = dQ / (r * cm)
         if self.connector is None or self.connector.vref == 'v':
             logger.debug('adjusting resistivities to account for Q-based differential scheme')
-        for sec in self.sections.values():
-            sec.Ra *= self.pneuron.Cm0 * 1e2
+            rho_nodes *= self.pneuron.Cm0 * 1e2  # Ohm.cm
+
+        # Assigning resistivities to sections
+        for sec, rho in zip(self.sections.values(), rho_nodes):
+            sec.Ra = rho
 
     def setTopology(self):
         ''' Connect the sections in series. '''
@@ -460,8 +473,7 @@ class SennFiber(metaclass=abc.ABCMeta):
     @staticmethod
     def getSpikeAmp(data, key='Vm'):
         amps = np.array([np.ptp(df[key].values) for df in data.values()])
-        return np.mean(amps)
-
+        return amps.min(), amps.max()
 
 
 class VextSennFiber(SennFiber):
@@ -471,7 +483,7 @@ class VextSennFiber(SennFiber):
 
     def __init__(self, pneuron, fiberD, nnodes, **kwargs):
         mechname = pneuron.name + 'auto'
-        self.connector = SeriesConnector(vref=f'Vm_{mechname}', rmin=None)
+        # self.connector = SeriesConnector(vref=f'Vm_{mechname}', rmin=None)
         # self.connector = SeriesConnector(vref='v', rmin=None)
         self.connector = None
         super().__init__(pneuron, fiberD, nnodes, **kwargs)

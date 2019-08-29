@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-23 18:42:26
+# @Last Modified time: 2019-08-26 16:26:13
 
 import pickle
 import abc
@@ -38,15 +38,17 @@ class Node(metaclass=abc.ABCMeta):
 
             :param pneuron: point-neuron model
         '''
-        if cell is None:
-            cell = self
+        self.cell = cell
+        if self.cell is None:
+            self.cell = self
 
         # Initialize arguments
         self.pneuron = pneuron
         if id is None:
             id = self.__repr__()
         self.id = id
-        logger.debug('Creating {} model'.format(self))
+        if cell == self:
+            logger.debug('Creating {} model'.format(self))
 
         # Load mechanisms and set function tables of appropriate membrane mechanism
         self.auto_nmodl = auto_nmodl
@@ -57,7 +59,7 @@ class Node(metaclass=abc.ABCMeta):
         self.setFuncTables()
 
         # Create section and set membrane mechanism
-        self.section = h.Section(name=id, cell=cell)
+        self.section = h.Section(name=id, cell=self.cell)
         self.section.insert(self.mechname)
 
     def __repr__(self):
@@ -81,7 +83,8 @@ class Node(metaclass=abc.ABCMeta):
             and link them to FUNCTION_TABLEs in the MOD file of the corresponding
             membrane mechanism.
         '''
-        logger.debug('loading %s membrane dynamics lookup tables', self.mechname)
+        if self.cell == self:
+            logger.debug('loading %s membrane dynamics lookup tables', self.mechname)
 
         # Get Lookup
         lkp = self.getLookup()

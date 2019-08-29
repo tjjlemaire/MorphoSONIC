@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-26 13:51:59
+# @Last Modified time: 2019-08-26 16:39:24
 
 import numpy as np
 import pandas as pd
@@ -73,8 +73,8 @@ class SectionGroupedTimeSeries(GroupedTimeSeries):
         super().__init__(filepaths, pltscheme=pltscheme)
 
     @staticmethod
-    def getModel(*args, **kwargs):
-        return getModel(*args, **kwargs)
+    def getModel(meta):
+        return getModel(meta)
 
     def figtitle(self, *args, **kwargs):
         return figtitle(*args, **kwargs) + f' - {self.section_id} section'
@@ -105,11 +105,21 @@ class SectionCompTimeSeries(CompTimeSeries):
 
     def __init__(self, filepath, varname, sections):
         self.entry = filepath[0]
+        self.model = None
+        self.ref_meta = None
         super().__init__(sections, varname)
 
-    @staticmethod
-    def getModel(*args, **kwargs):
-        return getModel(*args, **kwargs)
+    def getModel(self, meta):
+        if self.model is None:
+            self.ref_meta = meta.copy()
+            del self.ref_meta['section']
+            self.model = getModel(meta)
+        else:
+            comp_meta = meta.copy()
+            del comp_meta['section']
+            if comp_meta != self.ref_meta:
+                return getModel(meta)
+        return self.model
 
     def getData(self, section, frequency=1, trange=None):
         if self.entry is None:
