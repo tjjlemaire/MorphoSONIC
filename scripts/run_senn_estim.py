@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-15 20:33:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-23 22:32:50
+# @Last Modified time: 2019-08-29 17:37:24
 
 ''' Run simulations of an SENN fiber model with a specific point-neuron mechanis
     upon extracellular electrical stimulation. '''
@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 from PySONIC.core import Batch, PointNeuron
 from PySONIC.utils import logger
 from PySONIC.parsers import EStimParser
-from ExSONIC.core import VextSennFiber, CurrentPointSource
+from ExSONIC.core import VextSennFiber, ExtracellularCurrent
 from ExSONIC.parsers import EStimSennParser
 
 
@@ -38,7 +38,7 @@ def main():
                             for zps in args['zps']:
                                 if zps is None:
                                     zps = fiber.interL
-                                psource = CurrentPointSource(xps, zps, args['mode'])
+                                psource = ExtracellularCurrent(xps, zps, args['mode'])
                                 if args['save']:
                                     simqueue = [[item[0], psource, *item[1:]] for item in queue]
                                 else:

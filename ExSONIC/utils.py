@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 14:38:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-26 13:51:52
+# @Last Modified time: 2019-08-29 11:46:26
 
 import os
 import pickle
@@ -31,3 +31,9 @@ def getNmodlDir():
     return os.path.join(selfdir, 'nmodl')
 
 
+def chronaxie(durations, Ithrs):
+    ''' Return chronaxie, i.e. stimulus duration for which threshold current is twice the rheobase. '''
+    if np.all(Ithrs < 0.):
+        Ithrs = -Ithrs
+    Irh = 2 * Ithrs.min()  # rheobase current
+    return np.interp(Irh, Ithrs[::-1], durations[::-1])  # s

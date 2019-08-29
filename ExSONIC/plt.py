@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-26 16:39:24
+# @Last Modified time: 2019-08-29 17:34:54
 
 import numpy as np
 import pandas as pd
@@ -12,9 +12,10 @@ import matplotlib.pyplot as plt
 
 from PySONIC.plt import GroupedTimeSeries, CompTimeSeries
 from PySONIC.neurons import getPointNeuron
+from PySONIC.utils import si_format
 
-from .core import ExtendedSonicNode, VextSennFiber
-from .utils import loadData
+from .core import ExtendedSonicNode, VextSennFiber, IinjSennFiber
+from .utils import loadData, chronaxie
 
 
 def getModel(meta):
@@ -29,8 +30,12 @@ def getModel(meta):
             fs=meta['fs'],
             deff=meta['deff']
         )
-    elif simkey == 'senn_ESTIM':
+    elif simkey == 'senn_Vext':
         model = VextSennFiber(
+            getPointNeuron(meta['neuron']),
+            meta['fiberD'], meta['nnodes'], rs=meta['rs'])
+    elif simkey == 'senn_Iinj':
+        model = IinjSennFiber(
             getPointNeuron(meta['neuron']),
             meta['fiberD'], meta['nnodes'], rs=meta['rs'])
     else:
@@ -50,7 +55,7 @@ def figtitle(meta):
         return 'extended SONIC node ({} neuron, {:.1f}nm, {:.0f}% coverage, deff = {:.0f} nm, rs = {:.0f} Ohm.cm): {} A-STIM {:.0f}kHz {:.2f}kPa, {:.0f}ms{}'.format(
                     meta['neuron'], meta['a'] * 1e9, meta['fs'] * 1e2, meta['deff'] * 1e9, meta['rs'], wavetype, meta['Fdrive'] * 1e-3,
                     meta['Adrive'] * 1e-3, meta['tstim'] * 1e3, suffix, meta['method'])
-    elif meta['simkey'] == 'senn_ESTIM':
+    elif meta['simkey'] == 'senn_Vext':
         return 'SENN fiber ({} neuron, d = {:.1f}um, {} nodes), ({:.1f}, {:.1f})mm point-source {} E-STIM {:.2f}mA, {:.2f}ms{}'.format(
             meta['neuron'],
             meta['fiberD'] * 1e6,
@@ -61,6 +66,18 @@ def figtitle(meta):
             meta['tstim'] * 1e3,
             suffix
         )
+    elif meta['simkey'] == 'senn_Iinj':
+        return 'SENN fiber ({} neuron, d = {:.1f}um, {} nodes), node {} point-source {} E-STIM {:.2f}nA, {:.2f}ms{}'.format(
+            meta['neuron'],
+            meta['fiberD'] * 1e6,
+            meta['nnodes'],
+            meta['psource'].inode,
+            wavetype,
+            meta['A'] * 1e9,
+            meta['tstim'] * 1e3,
+            suffix
+        )
+
     return 'dummy title'
 
 
@@ -156,20 +173,23 @@ class SectionCompTimeSeries(CompTimeSeries):
         return colors
 
 
-def strengthDurationCurve(fiber, psource, durations, Ithrs, scale='log', fs=12):
+def strengthDurationCurve(fiber, durations, Ithrs, Ifactor=1, scale='log', fs=12):
     fig, ax = plt.subplots()
+    prefix = si_format(1 / Ifactor, space='')[1:]
     ax.set_title(f'{fiber} - strength-duration curve', fontsize=fs)
-    ax.set_xlabel('duration (ms)', fontsize=fs)
-    stim_mode = {True: 'cathodic', False: 'anodic'}[psource.is_cathodal]
-    ax.set_ylabel(f'threshold {stim_mode} current (mA)', fontsize=fs)
+    ax.set_xlabel('duration (us)', fontsize=fs)
+    ax.set_ylabel(f'threshold current ({prefix}A)', fontsize=fs)
     if scale == 'log':
         ax.set_xscale('log')
         ax.set_yscale('log')
-    tau = psource.chronaxie(durations, Ithrs)  # s
-    if psource.is_cathodal:
-        Ithrs = -Ithrs
-    ax.plot(durations * 1e3, Ithrs * 1e3, color='C0', label='curve')
-    ax.axvline(tau * 1e3, linestyle='--', color='k', label='chronaxie (ms)')
+    tau = {k: chronaxie(durations, Ithrs[k]) for k in Ithrs.keys()}  # s
+    if np.all(Ithrs[list(Ithrs.keys())[0]] < 0.):
+        Ithrs = {k: -v for k, v in Ithrs.items()}
+    for i, k in enumerate(Ithrs.keys()):
+        ax.plot(durations * 1e6, Ithrs[k] * Ifactor, color=f'C{i}', label=k)
+        ax.axvline(tau[k] * 1e6, linestyle='--', color=f'C{i}')
+    if scale != 'log':
+        ax.set_ylim(0., ax.get_ylim()[1])
     for item in ax.get_xticklabels() + ax.get_yticklabels():
         item.set_fontsize(fs)
     ax.legend(fontsize=fs)
