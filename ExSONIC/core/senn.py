@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-29 17:31:25
+# @Last Modified time: 2019-08-30 10:48:31
 
 import abc
 import pickle
@@ -595,4 +595,13 @@ class IinjSennFiber(EStimSennFiber):
             :return: model-sized vector of intracellular injected currents (nA)
         '''
         return Iinj
+
+
+class AStimSennFiber(SennFiber):
+
+    def __init__(self, pneuron, fiberD, nnodes, **kwargs):
+        mechname = pneuron.name + 'auto'
+        # self.connector = SeriesConnector(vref=f'Vm_{mechname}', rmin=None)
+        self.connector = None
+        super().__init__(pneuron, fiberD, nnodes, **kwargs)
 
