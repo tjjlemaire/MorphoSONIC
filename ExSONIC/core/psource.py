@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-30 10:47:20
+# @Last Modified time: 2019-09-02 15:06:26
 
 import abc
 import numpy as np
@@ -100,6 +100,10 @@ class CurrentPointSource(PointSource):
 class ExtracellularCurrent(ExtracellularPointSource, CurrentPointSource):
 
     def __init__(self, x, z, mode='cathode', rho=300.0):
+        ''' Initialization.
+
+            :param rho: extracellular medium resistivity (Ohm.cm)
+        '''
         self.rho = rho
         ExtracellularPointSource.__init__(self, x, z)
         CurrentPointSource.__init__(self, mode)
@@ -111,7 +115,6 @@ class ExtracellularCurrent(ExtracellularPointSource, CurrentPointSource):
 
             :param I: point-source current amplitude (A)
             :param r: euclidian distance(s) between the source and the point(s) of interest (m)
-            :param rho: extracellular medium resistivity (Ohm.cm)
             :return: extracellular potential(s) (mV)
         '''
         return self.rho * I / (4 * np.pi * r) * 1e1  # mV
@@ -122,7 +125,6 @@ class ExtracellularCurrent(ExtracellularPointSource, CurrentPointSource):
 
             :param V: electric potential (mV)
             :param r: euclidian distance(s) between the source and the point(s) of interest (m)
-            :param rho: extracellular medium resistivity (Ohm.cm)
             :return: point-source current amplitude (A)
         '''
         return 4 * np.pi * r * V / self.rho * 1e-1  # mV
@@ -167,32 +169,37 @@ class IntracellularCurrent(IntracellularPointSource, CurrentPointSource):
 class AcousticPointSource(PointSource):
 
     modality = {'name': 'A', 'unit': 'Pa'}
-
-    def __init__(self):
-        pass
-
-
-class IntracellularUS(IntracellularPointSource, AcousticPointSource):
-
     conv_factor = 1e-3  # Pa to kPa
 
-    def __init__(self, inode):
+    def __init__(self, Fdrive):
+        self.Fdrive = Fdrive  # Hz
+
+    def filecodes(self, A):
+        return {
+            'f': f'{self.Fdrive * 1e-3:.0f}kHz',
+            'A': f'{(A * self.conv_factor):.2f}kPa'
+        }
+
+
+class NodeAcousticSource(IntracellularPointSource, AcousticPointSource):
+
+    def __init__(self, inode, Fdrive):
         IntracellularPointSource.__init__(self, inode)
-        AcousticPointSource.__init__(self)
+        AcousticPointSource.__init__(self, Fdrive)
+
+    def __repr__(self):
+        return f'{IntracellularPointSource.__repr__(self)[:-1]}, {self.Fdrive * 1e-3:.0f} kHz)'
 
     def computeNodesAmps(self, fiber, A):
         return IntracellularPointSource.computeNodesAmps(self, fiber, A) * self.conv_factor
 
     def filecodes(self, A):
-        return {
-            'psource': f'ps(node{self.inode})',
-            'A': f'{(A * self.conv_factor):.2f}kPa'
-        }
+        return {**{'psource': f'ps(node{self.inode})'}, **super().filecodes(A)}
 
 
-class ExtracellularUS(ExtracellularPointSource, AcousticPointSource):
+class ExtracellularAcousticSource(ExtracellularPointSource, AcousticPointSource):
 
-    def __init__(self, x, z, rho=..., c=...):
+    def __init__(self, x, z, Fdrive, rho=..., c=...):
         ''' Initialization.
 
             :param rho: medium density (kg/m3)
@@ -201,7 +208,7 @@ class ExtracellularUS(ExtracellularPointSource, AcousticPointSource):
         self.rho = rho
         self.c = c
         ExtracellularPointSource.__init__(self, x, z)
-        AcousticPointSource.__init__(self)
+        AcousticPointSource.__init__(self, Fdrive)
         self.attrkeys.append('rho', 'c')
 
     def Atarget(self, Asource, r):
@@ -210,7 +217,6 @@ class ExtracellularUS(ExtracellularPointSource, AcousticPointSource):
 
             :param Asource: point-source acoustic amplitude (Pa)
             :param r: euclidian distance(s) between the source and the point(s) of interest (m)
-            :param rho: extracellular medium density (kg/m3)
             :return: target acoustic amplitude(s) (Pa)
         '''
         return ...  # Pa
@@ -221,7 +227,6 @@ class ExtracellularUS(ExtracellularPointSource, AcousticPointSource):
 
             :param Atarget: target acoustic amplitude (Pa)
             :param r: euclidian distance(s) between the source and the point(s) of interest (m)
-            :param rho: extracellular medium density (kg/m3)
             :return: point-source acoustic amplitude (Pa)
         '''
         return ...  # Pa
@@ -240,6 +245,6 @@ class ExtracellularUS(ExtracellularPointSource, AcousticPointSource):
 
     def filecodes(self, A):
         return {
-            'psource': f'ps({(self.x * 1e3):.1f},{(self.z * 1e3):.1f})mm',
-            'A': f'{(A * self.conv_factor):.2f}kPa'
+            **{'psource': f'ps({(self.x * 1e3):.1f},{(self.z * 1e3):.1f})mm'},
+            **super().filecodes(A)
         }

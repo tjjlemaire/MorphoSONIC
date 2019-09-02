@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 # @Author: Theo Lemaire
-# @Date:   2019-01-23 18:06:03
+# @Email: theo.lemaire@epfl.ch
+# @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-01-23 18:06:13
+# @Last Modified time: 2019-09-02 15:55:53
 
+DT_TARGET = 1e-6  # target post-resampling time step (s)
 
 US_AMP_MAX = 600.  # upper limit for acoustic pressure amplitude (kPa)
 DELTA_US_AMP_MIN = .1  # refinement threshold for titration with acoustic pressure amplitude (kPa)

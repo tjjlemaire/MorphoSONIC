@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-30 10:48:31
+# @Last Modified time: 2019-09-02 15:56:58
 
 import abc
 import pickle
@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 from inspect import signature
 
-from PySONIC.core import Model, PointNeuron
+from PySONIC.core import Model, PointNeuron, NeuronalBilayerSonophore
 from PySONIC.neurons import *
 from PySONIC.utils import si_format, pow10_format, logger, plural, binarySearch, pow2Search
 from PySONIC.constants import *
@@ -75,14 +75,14 @@ class SennFiber(metaclass=abc.ABCMeta):
         self.setResistivity()
         self.setTopology()
 
-
-    def reset(self):
-        self.clear()
-        self.__init__(self.pneuron, self.fiberD, self.nnodes, rs=self.rs, nodeL=self.nodeL, d_ratio=self.d_ratio)
-
     def __repr__(self):
         ''' Explicit naming of the model instance. '''
-        return f'SennFiber({self.strBiophysics()}, {self.strNodes()}, d = {self.fiberD * 1e6:.1f} um)'
+        return f'{self.__class__.__name__}({self.strBiophysics()}, {self.strNodes()}, d = {self.fiberD * 1e6:.1f} um)'
+
+    def reset(self):
+        ''' clear all sections and re-initialize model. '''
+        self.clear()
+        self.__init__(self.pneuron, self.fiberD, self.nnodes, rs=self.rs, nodeL=self.nodeL, d_ratio=self.d_ratio)
 
     @staticmethod
     def inputs():
@@ -328,7 +328,7 @@ class SennFiber(metaclass=abc.ABCMeta):
             data[id].loc[:,'Qm'] *= 1e-5  # C/m2
 
         # Resample data to regular sampling rate
-        data = {id: Node.resample(df, DT_EFFECTIVE / 10) for id, df in data.items()}
+        data = {id: Node.resample(df, DT_TARGET) for id, df in data.items()}
 
         # Prepend initial conditions (prior to stimulation)
         data = {id: Node.prepend(df) for id, df in data.items()}
@@ -375,7 +375,7 @@ class SennFiber(metaclass=abc.ABCMeta):
             self.titrationFunc, [psource, tstim, toffset, PRF, DC], 1, Arange, A_conv_thr)
 
     def meta(self, psource, A, tstim, toffset, PRF, DC):
-        meta = {
+        return {
             'simkey': self.simkey,
             'neuron': self.pneuron.name,
             'fiberD': self.fiberD,
@@ -388,7 +388,6 @@ class SennFiber(metaclass=abc.ABCMeta):
             'PRF': PRF,
             'DC': DC
         }
-        return meta
 
     def filecode(self, *args):
         ''' Generate file code given a specific combination of model input parameters. '''
@@ -599,9 +598,74 @@ class IinjSennFiber(EStimSennFiber):
 
 class AStimSennFiber(SennFiber):
 
-    def __init__(self, pneuron, fiberD, nnodes, **kwargs):
+    simkey = 'senn_US'
+    A_range = (1e0, 6e5)  # Pa
+
+    def __init__(self, pneuron, fiberD, nnodes, a=32e-9, Fdrive=500e3, fs=1., **kwargs):
         mechname = pneuron.name + 'auto'
-        # self.connector = SeriesConnector(vref=f'Vm_{mechname}', rmin=None)
-        self.connector = None
+        self.a = a            # m
+        self.Fdrive = Fdrive  # Hz
+        self.fs = fs          # (-)
+        self.connector = SeriesConnector(vref=f'Vm_{mechname}', rmin=None)
+        self.nbls = NeuronalBilayerSonophore(self.a, pneuron, self.Fdrive)
         super().__init__(pneuron, fiberD, nnodes, **kwargs)
 
+    def createSections(self, ids):
+        ''' Create morphological sections. '''
+        self.nodes = {
+            id: SonicNode(
+                self.pneuron, id, cell=self, a=self.a, Fdrive=self.Fdrive, fs=self.fs, nbls=self.nbls)
+            for id in ids
+        }
+        self.sections = {id: node.section for id, node in self.nodes.items()}
+
+    def getPltVars(self, *args, **kwargs):
+        return self.nbls.getPltVars(*args, **kwargs)
+
+    def getPltScheme(self, *args, **kwargs):
+        return self.nbls.getPltScheme(*args, **kwargs)
+
+    def preProcessAmps(self, A):
+        ''' Assign array of US pressures.
+
+            :param A: model-sized vector of US pressures (Pa)
+            :return: model-sized vector of US pressures (Pa)
+        '''
+        return A
+
+    def setStimAmps(self, amps):
+        ''' Set US stimulation amplitudes.
+
+            :param amps: model-sized vector of stimulus pressure amplitudes (Pa)
+        '''
+        self.amps = self.preProcessAmps(amps)
+        logger.debug('Acoustic pressures: A = [{}] kPa'.format(
+            ', '.join([f'{A:.2f}' for A in self.amps])))
+        for i, sec in enumerate(self.sections.values()):
+            setattr(sec, 'Adrive_{}'.format(self.mechname), self.amps[i])
+
+    def getArange(self, psource):
+        return [psource.computeSourceAmp(self, x) for x in self.A_range]
+
+    def titrationFunc(self, args):
+        psource, A, *args = args
+        data, _ = self.simulate(psource, A, *args)
+        return self.isExcited(data)
+
+    def meta(self, psource, A, tstim, toffset, PRF, DC):
+        meta = super().meta(psource, A, tstim, toffset, PRF, DC)
+        meta.update({
+            'a': self.a,
+            'Fdrive': self.Fdrive,
+            'fs': self.fs
+        })
+        return meta
+
+    def filecodes(self, *args):
+        psource, A, tstim, *args = args
+        fiber_codes = super().filecodes(*args)
+        psource_codes = psource.filecodes(A)
+        pneuron_codes = self.pneuron.filecodes(A, tstim, *args)
+        for key in ['simkey', 'neuron', 'Astim', 'tstim']:
+            del pneuron_codes[key]
+        return {**fiber_codes, **psource_codes, **{'tstim': '{:.2f}ms'.format(tstim * 1e3)},**pneuron_codes}

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-29 17:34:54
+# @Last Modified time: 2019-09-02 14:47:48
 
 import numpy as np
 import pandas as pd
@@ -14,7 +14,7 @@ from PySONIC.plt import GroupedTimeSeries, CompTimeSeries
 from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import si_format
 
-from .core import ExtendedSonicNode, VextSennFiber, IinjSennFiber
+from .core import ExtendedSonicNode, VextSennFiber, IinjSennFiber, AStimSennFiber
 from .utils import loadData, chronaxie
 
 
@@ -38,6 +38,10 @@ def getModel(meta):
         model = IinjSennFiber(
             getPointNeuron(meta['neuron']),
             meta['fiberD'], meta['nnodes'], rs=meta['rs'])
+    elif simkey == 'senn_US':
+        model = AStimSennFiber(
+            getPointNeuron(meta['neuron']), meta['fiberD'], meta['nnodes'],
+            a=meta['a'], Fdrive=meta['Fdrive'], fs=meta['fs'], rs=meta['rs'])
     else:
         raise ValueError(f'Unknown model type:{simkey}')
     return model
@@ -51,11 +55,12 @@ def figtitle(meta):
     else:
         wavetype = 'CW'
         suffix = ''
-    if meta['simkey'] == 'nano_ext_SONIC':
+    simkey = meta['simkey']
+    if simkey == 'nano_ext_SONIC':
         return 'extended SONIC node ({} neuron, {:.1f}nm, {:.0f}% coverage, deff = {:.0f} nm, rs = {:.0f} Ohm.cm): {} A-STIM {:.0f}kHz {:.2f}kPa, {:.0f}ms{}'.format(
                     meta['neuron'], meta['a'] * 1e9, meta['fs'] * 1e2, meta['deff'] * 1e9, meta['rs'], wavetype, meta['Fdrive'] * 1e-3,
                     meta['Adrive'] * 1e-3, meta['tstim'] * 1e3, suffix, meta['method'])
-    elif meta['simkey'] == 'senn_Vext':
+    elif simkey == 'senn_Vext':
         return 'SENN fiber ({} neuron, d = {:.1f}um, {} nodes), ({:.1f}, {:.1f})mm point-source {} E-STIM {:.2f}mA, {:.2f}ms{}'.format(
             meta['neuron'],
             meta['fiberD'] * 1e6,
@@ -66,7 +71,7 @@ def figtitle(meta):
             meta['tstim'] * 1e3,
             suffix
         )
-    elif meta['simkey'] == 'senn_Iinj':
+    elif simkey == 'senn_Iinj':
         return 'SENN fiber ({} neuron, d = {:.1f}um, {} nodes), node {} point-source {} E-STIM {:.2f}nA, {:.2f}ms{}'.format(
             meta['neuron'],
             meta['fiberD'] * 1e6,
@@ -74,6 +79,19 @@ def figtitle(meta):
             meta['psource'].inode,
             wavetype,
             meta['A'] * 1e9,
+            meta['tstim'] * 1e3,
+            suffix
+        )
+    elif simkey == 'senn_US':
+        return 'SENN fiber ({} neuron, a = {:.1f}nm, d = {:.1f}um, {} nodes), node {} point-source {} A-STIM {:.0f}kHz, {:.2f}kPa, {:.2f}ms{}'.format(
+            meta['neuron'],
+            meta['a'] * 1e9,
+            meta['fiberD'] * 1e6,
+            meta['nnodes'],
+            meta['psource'].inode,
+            wavetype,
+            meta['Fdrive'] * 1e-3,
+            meta['A'] * 1e-3,
             meta['tstim'] * 1e3,
             suffix
         )

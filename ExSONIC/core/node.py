@@ -3,10 +3,11 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-29 20:09:18
+# @Last Modified time: 2019-09-02 15:56:05
 
 import pickle
 import abc
+import time
 from inspect import signature
 import numpy as np
 from scipy.interpolate import interp1d
@@ -270,7 +271,7 @@ class Node(metaclass=abc.ABCMeta):
         data.loc[:,'Qm'] *= 1e-5  # C/m2
 
         # Resample data to regular sampling rate
-        data = self.resample(data, DT_EFFECTIVE)
+        data = self.resample(data, DT_TARGET)
 
         # Prepend initial conditions (prior to stimulation)
         data = self.prepend(data)
@@ -414,7 +415,10 @@ class SonicNode(Node):
         self.fs = kwargs.pop('fs', 1.)  # -
         if self.fs > 1. or self.fs < 0.:
             raise ValueError('fs ({}) must be within [0-1]'.format(self.fs))
-        self.nbls = NeuronalBilayerSonophore(self.a, pneuron, self.Fdrive)
+        if 'nbls' in kwargs:
+            self.nbls = kwargs.pop('nbls')
+        else:
+            self.nbls = NeuronalBilayerSonophore(self.a, pneuron, self.Fdrive)
         super().__init__(pneuron, *args, **kwargs)
         self.Arange = (0., self.getLookup().refs['A'].max())
 

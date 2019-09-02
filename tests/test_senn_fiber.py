@@ -3,14 +3,14 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-29 17:35:01
+# @Last Modified time: 2019-09-02 15:50:38
 
 import numpy as np
 
 from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import logger, si_format
 from PySONIC.test import TestBase
-from ExSONIC.core import VextSennFiber, IinjSennFiber, ExtracellularCurrent, IntracellularCurrent
+from ExSONIC.core import VextSennFiber, IinjSennFiber, ExtracellularCurrent, IntracellularCurrent, AStimSennFiber, NodeAcousticSource
 from ExSONIC.plt import SectionCompTimeSeries, strengthDurationCurve
 from ExSONIC.utils import chronaxie
 
@@ -18,11 +18,28 @@ from ExSONIC.utils import chronaxie
 class TestSenn(TestBase):
 
     @staticmethod
-    def logOutputMetrics(sim_metrics, ref_metrics):
+    def logOutputMetrics(sim_metrics, ref_metrics=None):
         ''' Log output metrics. '''
-        logger.info(f'threshold current: Ithr = {si_format(sim_metrics["Ithr"], 1)}A (ref: {si_format(ref_metrics["Ithr"], 1)}A)')
-        logger.info(f'conduction velocity: v = {sim_metrics["cv"]:.1f} m/s (ref: {ref_metrics["cv"]:.1f} m/s)')
-        logger.info('spike amplitude: dV = {:.1f}-{:.1f} mV (ref: {:.1f}-{:.1f} mV)'.format(*sim_metrics["dV"], *ref_metrics["dV"]))
+        if 'Ithr' in sim_metrics:
+            thr_log = f'threshold current: Ithr = {si_format(sim_metrics["Ithr"], 1)}A'
+        elif 'Athr' in sim_metrics:
+            thr_log = f'threshold US amplitude: Athr = {si_format(sim_metrics["Athr"], 2)}Pa'
+        logs = {
+            'Ithr': thr_log,
+            'cv': f'conduction velocity: v = {sim_metrics["cv"]:.1f} m/s',
+            'dV': 'spike amplitude: dV = {:.1f}-{:.1f} mV'.format(*sim_metrics["dV"])
+        }
+        if ref_metrics is not None:
+            if 'Ithr' in ref_metrics:
+                logs['Ithr'] += f' (ref: {si_format(ref_metrics["Ithr"], 1)}A)'
+            if 'Athr' in ref_metrics:
+                logs['Athr'] += f' (ref: {si_format(ref_metrics["Ithr"], 2)}Pa)'
+            if 'cv' in ref_metrics:
+                logs['cv'] += f' (ref: {ref_metrics["cv"]:.1f} m/s)'
+            if 'dV' in ref_metrics:
+                logs['dV'] += ' (ref: {:.1f}-{:.1f} mV)'.format(*ref_metrics["dV"])
+        for log in logs.values():
+            logger.info(log)
 
     def test_Reilly1985(self, is_profiled=False):
         ''' Run SENN fiber simulation with identical parameters as in Reilly 1985, Fig2.,
@@ -109,7 +126,7 @@ class TestSenn(TestBase):
 
         # Output metrics (from Sweeney 1987)
         ref_metrics = {
-            'Ithr': 4.5e-9,      # threshold current (A)
+            'Ithr': 4.5e-9,   # threshold current (A)
             'cv': 57.0,       # conduction velocity (m/s)
             'dV': (95, 105),  # spike amplitude (mV)
             'tau': 25.9e-6    # chronaxie from SD curve (s)
@@ -154,6 +171,52 @@ class TestSenn(TestBase):
 
         # Plot strength-duration curve
         fig2 = strengthDurationCurve(fiber, durations, Ithrs, Ifactor=1e9, scale='lin')
+
+    def test_ASTIM(self, is_profiled=False):
+        ''' Run SENN fiber ASTIM simulation. '''
+
+        # Fiber model parameters
+        pneuron = getPointNeuron('FH')  # mammalian fiber membrane equations
+        fiberD = 10e-6                  # fiber diameter (m)
+        nnodes = 5
+        rho_a = 54.7                    # axoplasm resistivity (Ohm.cm)
+        d_ratio = 0.6                   # axon / fiber diameter ratio
+        nodeL = 1.5e-6                  # node length (m)
+        a = 32e-9                       # sonophore diameter (m)
+        Fdrive = 500e3                  # US frequency (Hz)
+        fs = 1                          # sonophore membrane coverage (-)
+        fiber = AStimSennFiber(
+            pneuron, fiberD, nnodes, a=a, Fdrive=Fdrive, rs=rho_a, nodeL=nodeL, d_ratio=d_ratio)
+
+        # US stimulation parameters
+        Astim = 100e3   # Pa
+        tstim = 200e-6   # s
+        toffset = 3e-3  # s
+        PRF = 100.      # Hz
+        DC = 1.         # -
+
+        # Create extracellular current source
+        psource = NodeAcousticSource(nnodes // 2, Fdrive)
+
+        # Titrate for a specific duration and simulate fiber at threshold US amplitude
+        logger.info(f'Running titration for {si_format(tstim)}s pulse')
+        Athr = fiber.titrate(psource, tstim, toffset, PRF, DC)  # Pa
+        data, meta = fiber.simulate(psource, Athr, tstim, toffset, PRF, DC)
+
+        # Compute conduction velocity and spike amplitude from resulting data
+        cv = fiber.getConductionVelocity(data)  # m/s
+        dVmin, dVmax = fiber.getSpikeAmp(data)  # mV
+        sim_metrics = {
+            'Athr': Athr,                             # Pa
+            'cv': fiber.getConductionVelocity(data),  # m/s
+            'dV': fiber.getSpikeAmp(data)             # mV
+        }
+
+        # Log output metrics
+        self.logOutputMetrics(sim_metrics)
+
+        # Plot membrane potential traces for specific duration at threshold current
+        fig = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
 
 
 if __name__ == '__main__':
