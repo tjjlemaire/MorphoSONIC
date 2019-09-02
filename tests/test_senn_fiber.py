@@ -3,14 +3,14 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-02 15:50:38
+# @Last Modified time: 2019-09-02 16:08:40
 
 import numpy as np
 
 from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import logger, si_format
 from PySONIC.test import TestBase
-from ExSONIC.core import VextSennFiber, IinjSennFiber, ExtracellularCurrent, IntracellularCurrent, AStimSennFiber, NodeAcousticSource
+from ExSONIC.core import VextSennFiber, IinjSennFiber, ExtracellularCurrent, IntracellularCurrent, SonicSennFiber, NodeAcousticSource
 from ExSONIC.plt import SectionCompTimeSeries, strengthDurationCurve
 from ExSONIC.utils import chronaxie
 
@@ -185,7 +185,7 @@ class TestSenn(TestBase):
         a = 32e-9                       # sonophore diameter (m)
         Fdrive = 500e3                  # US frequency (Hz)
         fs = 1                          # sonophore membrane coverage (-)
-        fiber = AStimSennFiber(
+        fiber = SonicSennFiber(
             pneuron, fiberD, nnodes, a=a, Fdrive=Fdrive, rs=rho_a, nodeL=nodeL, d_ratio=d_ratio)
 
         # US stimulation parameters

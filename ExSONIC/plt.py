@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-02 14:47:48
+# @Last Modified time: 2019-09-02 16:08:28
 
 import numpy as np
 import pandas as pd
@@ -14,7 +14,7 @@ from PySONIC.plt import GroupedTimeSeries, CompTimeSeries
 from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import si_format
 
-from .core import ExtendedSonicNode, VextSennFiber, IinjSennFiber, AStimSennFiber
+from .core import ExtendedSonicNode, VextSennFiber, IinjSennFiber, SonicSennFiber
 from .utils import loadData, chronaxie
 
 
@@ -38,8 +38,8 @@ def getModel(meta):
         model = IinjSennFiber(
             getPointNeuron(meta['neuron']),
             meta['fiberD'], meta['nnodes'], rs=meta['rs'])
-    elif simkey == 'senn_US':
-        model = AStimSennFiber(
+    elif simkey == 'senn_SONIC':
+        model = SonicSennFiber(
             getPointNeuron(meta['neuron']), meta['fiberD'], meta['nnodes'],
             a=meta['a'], Fdrive=meta['Fdrive'], fs=meta['fs'], rs=meta['rs'])
     else:
@@ -82,8 +82,8 @@ def figtitle(meta):
             meta['tstim'] * 1e3,
             suffix
         )
-    elif simkey == 'senn_US':
-        return 'SENN fiber ({} neuron, a = {:.1f}nm, d = {:.1f}um, {} nodes), node {} point-source {} A-STIM {:.0f}kHz, {:.2f}kPa, {:.2f}ms{}'.format(
+    elif simkey == 'senn_SONIC':
+        return 'SONIC SENN fiber ({} neuron, a = {:.1f}nm, d = {:.1f}um, {} nodes), node {} point-source {} A-STIM {:.0f}kHz, {:.2f}kPa, {:.2f}ms{}'.format(
             meta['neuron'],
             meta['a'] * 1e9,
             meta['fiberD'] * 1e6,

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-02 15:56:58
+# @Last Modified time: 2019-09-02 17:50:23
 
 import abc
 import pickle
@@ -596,9 +596,9 @@ class IinjSennFiber(EStimSennFiber):
         return Iinj
 
 
-class AStimSennFiber(SennFiber):
+class SonicSennFiber(SennFiber):
 
-    simkey = 'senn_US'
+    simkey = 'senn_SONIC'
     A_range = (1e0, 6e5)  # Pa
 
     def __init__(self, pneuron, fiberD, nnodes, a=32e-9, Fdrive=500e3, fs=1., **kwargs):
@@ -610,11 +610,25 @@ class AStimSennFiber(SennFiber):
         self.nbls = NeuronalBilayerSonophore(self.a, pneuron, self.Fdrive)
         super().__init__(pneuron, fiberD, nnodes, **kwargs)
 
+    def __repr__(self):
+        ''' Explicit naming of the model instance. '''
+        return f'{super().__repr__()[:-1]}, a = {self.a * 1e9:.1f} nm)'
+
     def createSections(self, ids):
         ''' Create morphological sections. '''
+        # Create dummy node and retrieve pylkp
+        node = SonicNode(
+            self.pneuron, 'node', cell=self, a=self.a, Fdrive=self.Fdrive, fs=self.fs, nbls=self.nbls)
+        pylkp = node.pylkp
+
+        # delete dummy node
+        del node
+
+        # create nodes and sections
         self.nodes = {
             id: SonicNode(
-                self.pneuron, id, cell=self, a=self.a, Fdrive=self.Fdrive, fs=self.fs, nbls=self.nbls)
+                self.pneuron, id, cell=self, a=self.a, Fdrive=self.Fdrive, fs=self.fs,
+                nbls=self.nbls, pylkp=pylkp)
             for id in ids
         }
         self.sections = {id: node.section for id, node in self.nodes.items()}

@@ -3,11 +3,10 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-02 15:56:05
+# @Last Modified time: 2019-09-02 17:47:39
 
 import pickle
 import abc
-import time
 from inspect import signature
 import numpy as np
 from scipy.interpolate import interp1d
@@ -34,7 +33,7 @@ class Node(metaclass=abc.ABCMeta):
         ''' Keyword used to characterize stimulation modality. '''
         raise NotImplementedError
 
-    def __init__(self, pneuron, id=None, auto_nmodl=True, cell=None):
+    def __init__(self, pneuron, id=None, auto_nmodl=True, cell=None, pylkp=None):
         ''' Initialization.
 
             :param pneuron: point-neuron model
@@ -42,6 +41,7 @@ class Node(metaclass=abc.ABCMeta):
         self.cell = cell
         if self.cell is None:
             self.cell = self
+        self.pylkp = pylkp
 
         # Initialize arguments
         self.pneuron = pneuron
@@ -72,12 +72,32 @@ class Node(metaclass=abc.ABCMeta):
     def clear(self):
         del self.section
 
-    def getLookup(self):
-        lkp = self.pneuron.getLookup()
-        lkp.refs['A'] = np.array([0.])
-        for k, v in lkp.items():
-            lkp[k] = np.array([v])
-        return lkp
+    def getPyLookup(self):
+        pylkp = self.pneuron.getLookup()
+        pylkp.refs['A'] = np.array([0.])
+        for k, v in pylkp.items():
+            pylkp[k] = np.array([v])
+        return pylkp
+
+    def getModLookup(self):
+        # Get Lookup
+        if self.pylkp is None:
+            self.pylkp = self.getPyLookup()
+
+        # Convert lookups independent variables to hoc vectors
+        self.Aref = h.Vector(self.pylkp.refs['A'] * 1e-3)  # kPa
+        self.Qref = h.Vector(self.pylkp.refs['Q'] * 1e5)   # nC/cm2
+
+        # Convert lookup tables to hoc matrices
+        # !!! hoc lookup dictionary must be a member of the class,
+        # otherwise the assignment below does not work properly !!!
+        self.lkp = {'V': array_to_matrix(self.pylkp['V'])}  # mV
+        for ratex in self.pneuron.alphax_list.union(self.pneuron.betax_list):
+            self.lkp[ratex] = array_to_matrix(self.pylkp[ratex] * 1e-3)  # ms-1
+        for taux in self.pneuron.taux_list:
+            self.lkp[taux] = array_to_matrix(self.pylkp[taux] * 1e3)  # ms
+        for xinf in self.pneuron.xinf_list:
+            self.lkp[xinf] = array_to_matrix(self.pylkp[xinf])  # (-)
 
     def setFuncTables(self):
         ''' Set neuron-specific interpolation tables along the charge dimension,
@@ -88,22 +108,7 @@ class Node(metaclass=abc.ABCMeta):
             logger.debug('loading %s membrane dynamics lookup tables', self.mechname)
 
         # Get Lookup
-        lkp = self.getLookup()
-
-        # Convert lookups independent variables to hoc vectors
-        self.Aref = h.Vector(lkp.refs['A'] * 1e-3)  # kPa
-        self.Qref = h.Vector(lkp.refs['Q'] * 1e5)   # nC/cm2
-
-        # Convert lookup tables to hoc matrices
-        # !!! hoc lookup dictionary must be a member of the class,
-        # otherwise the assignment below does not work properly !!!
-        self.lkp = {'V': array_to_matrix(lkp['V'])}  # mV
-        for ratex in self.pneuron.alphax_list.union(self.pneuron.betax_list):
-            self.lkp[ratex] = array_to_matrix(lkp[ratex] * 1e-3)  # ms-1
-        for taux in self.pneuron.taux_list:
-            self.lkp[taux] = array_to_matrix(lkp[taux] * 1e3)  # ms
-        for xinf in self.pneuron.xinf_list:
-            self.lkp[xinf] = array_to_matrix(lkp[xinf])  # (-)
+        self.getModLookup()
 
         # Assign hoc matrices to 2D interpolation tables in membrane mechanism
         for k, v in self.lkp.items():
@@ -420,7 +425,7 @@ class SonicNode(Node):
         else:
             self.nbls = NeuronalBilayerSonophore(self.a, pneuron, self.Fdrive)
         super().__init__(pneuron, *args, **kwargs)
-        self.Arange = (0., self.getLookup().refs['A'].max())
+        self.Arange = (0., self.pylkp.refs['A'].max())
 
     def __repr__(self):
         return '{}({:.1f} nm, {}, {:.0f} kHz)'.format(
@@ -432,7 +437,7 @@ class SonicNode(Node):
             ', fs = {:.0f}%'.format(self.fs * 1e2) if self.fs is not None else '',
             si_format(self.Fdrive, space=' '))
 
-    def getLookup(self):
+    def getPyLookup(self):
         return self.nbls.getLookup2D(self.Fdrive, self.fs)
 
     def setStimAmp(self, Adrive):
