@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-02 16:08:28
+# @Last Modified time: 2019-09-03 10:58:48
 
 import numpy as np
 import pandas as pd
@@ -185,7 +185,7 @@ class SectionCompTimeSeries(CompTimeSeries):
                 colors = [f'C{i}' for i in range(nlevels)]
             else:
                 norm = matplotlib.colors.Normalize(0, nlevels - 1)
-                sm = plt.cm.ScalarMappable(norm=norm, cmap='Spectral')
+                sm = plt.cm.ScalarMappable(norm=norm, cmap='autumn')
                 sm._A = []
                 colors = [sm.to_rgba(i) for i in range(nlevels)]
         return colors

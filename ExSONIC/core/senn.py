@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-02 17:50:23
+# @Last Modified time: 2019-09-03 11:38:53
 
 import abc
 import pickle
@@ -58,10 +58,10 @@ class SennFiber(metaclass=abc.ABCMeta):
         self.d_ratio = d_ratio
 
         # Define fiber geometrical parameters
-        self.nodeD = self.d_ratio * self.fiberD  # m
-        self.nodeL = 2.5e-6  # m
+        self.nodeD = self.d_ratio * self.fiberD   # m
+        self.nodeL = nodeL                        # m
         self.interD = self.d_ratio * self.fiberD  # m
-        self.interL = 100 * self.fiberD  # m
+        self.interL = 100 * self.fiberD           # m
 
         # Compute nodal and internodal axial resistance ()
         self.R_node = self.resistance(self.nodeD, self.nodeL)  # Ohm
@@ -82,7 +82,8 @@ class SennFiber(metaclass=abc.ABCMeta):
     def reset(self):
         ''' clear all sections and re-initialize model. '''
         self.clear()
-        self.__init__(self.pneuron, self.fiberD, self.nnodes, rs=self.rs, nodeL=self.nodeL, d_ratio=self.d_ratio)
+        self.__init__(self.pneuron, self.fiberD, self.nnodes, rs=self.rs,
+                      nodeL=self.nodeL, d_ratio=self.d_ratio)
 
     @staticmethod
     def inputs():

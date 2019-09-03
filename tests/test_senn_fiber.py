@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-02 16:08:40
+# @Last Modified time: 2019-09-03 11:57:26
 
 import numpy as np
 
@@ -110,7 +110,7 @@ class TestSenn(TestBase):
         '''
 
         # Fiber model parameters
-        pneuron = getPointNeuron('FH')  # mammalian fiber membrane equations
+        pneuron = getPointNeuron('sweeney')  # mammalian fiber membrane equations
         fiberD = 10e-6                       # fiber diameter (m)
         nnodes = 19
         rho_a = 54.7                         # axoplasm resistivity (Ohm.cm)
@@ -119,26 +119,25 @@ class TestSenn(TestBase):
         fiber = IinjSennFiber(pneuron, fiberD, nnodes, rs=rho_a, nodeL=nodeL, d_ratio=d_ratio)
 
         # Intracellular stimulation parameters
-        tstim = 20e-6   # s
+        tstim = 10e-6   # s
         toffset = 3e-3  # s
         PRF = 100.      # Hz
         DC = 1.         # -
 
         # Output metrics (from Sweeney 1987)
         ref_metrics = {
-            'Ithr': 4.5e-9,   # threshold current (A)
             'cv': 57.0,       # conduction velocity (m/s)
-            'dV': (95, 105),  # spike amplitude (mV)
+            'dV': (90, 95),  # spike amplitude (mV)
             'tau': 25.9e-6    # chronaxie from SD curve (s)
         }
 
         # Create extracellular current source
-        psource = IntracellularCurrent(nnodes // 2, mode='anode')
+        psource = IntracellularCurrent(0, mode='anode')
 
         # Titrate for a specific duration and simulate fiber at threshold current
         logger.info(f'Running titration for {si_format(tstim)}s pulse')
         Ithr = fiber.titrate(psource, tstim, toffset, PRF, DC)  # A
-        data, meta = fiber.simulate(psource, Ithr, tstim, toffset, PRF, DC)
+        data, meta = fiber.simulate(psource, 1.2 * Ithr, tstim, toffset, PRF, DC)
 
         # Compute conduction velocity and spike amplitude from resulting data
         cv = fiber.getConductionVelocity(data)  # m/s
@@ -158,7 +157,8 @@ class TestSenn(TestBase):
         # Reset fiber model to avoid NEURON integration errors
         fiber.reset()
 
-        # Compute and plot strength-duration curve
+        # Compute and plot strength-duration curve for intracellular injection at central node
+        psource = IntracellularCurrent(nnodes // 2, mode='anode')
         durations = np.array([10, 20, 40, 60, 80, 100, 150, 200, 250, 300, 400, 500], dtype=float) * 1e-6  # s
         Ithrs_ref = np.array([4.4, 2.8, 1.95, 1.6, 1.45, 1.35, 1.25, 1.2, 1.2, 1.2, 1.2, 1.2]) * 1e-9  # A
         Ithrs_sim = np.array([fiber.titrate(psource, x, toffset, PRF, DC) for x in durations])  # A
