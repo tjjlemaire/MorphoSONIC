@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-03 10:58:48
+# @Last Modified time: 2019-09-03 19:13:35
 
 import numpy as np
 import pandas as pd
@@ -207,10 +207,18 @@ def strengthDurationCurve(fiber, durations, Ithrs, Ifactor=1, scale='log', fs=12
         ax.plot(durations * 1e6, Ithrs[k] * Ifactor, color=f'C{i}', label=k)
         ax.axvline(tau[k] * 1e6, linestyle='--', color=f'C{i}')
     if scale != 'log':
+        ax.set_xlim(0., durations.max() * 1e6)
         ax.set_ylim(0., ax.get_ylim()[1])
+    else:
+        ax.set_xlim(durations.min() * 1e6, durations.max() * 1e6)
+        Imin = min([v.min() for v in Ithrs.values()])
+        Imax = max([v.max() for v in Ithrs.values()])
+        ymin = np.power(10, np.floor(np.log10(Imin * Ifactor)))
+        ymax = np.power(10, np.ceil(np.log10(Imax * Ifactor)))
+        ax.set_ylim(ymin, ymax)
     for item in ax.get_xticklabels() + ax.get_yticklabels():
         item.set_fontsize(fs)
-    ax.legend(fontsize=fs)
+    ax.legend(fontsize=fs, frameon=False)
     return fig
 
 
