@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-03 19:39:50
+# @Last Modified time: 2019-09-04 10:00:48
 
 import numpy as np
 
@@ -54,7 +54,7 @@ class TestSenn(TestBase):
             key = f'P{si_format(t * 1e-6, 0, space="")}s'
             desc = f'{si_format(t * 1e-6, 0)}s'
             logfmts[key] = {
-                'name': f'Polarity index @ {desc}',
+                'name': f'polarity selectivity ratio @ {desc}',
                 'fmt': lambda x: f'{x:.2f}'
             }
 
@@ -66,7 +66,7 @@ class TestSenn(TestBase):
                     logs[k] += f" (ref = {v['fmt'](ref_metrics[k])})"
 
         for log in logs.values():
-            logger.info(log)
+            logger.info(f'--- {log}')
 
     def test_Reilly1985(self, is_profiled=False):
         ''' Run SENN fiber simulation with identical parameters as in Reilly 1985, Fig2.,
@@ -112,17 +112,16 @@ class TestSenn(TestBase):
         data, meta = fiber.simulate(psource, Ithr, tstim, toffset, PRF, DC)
 
         # Compare output metrics to reference
-        sim_metrics = {  # Output metrics
+        pulse_sim_metrics = {  # Output metrics
             'Ithr': Ithr,                             # A
             'cv': fiber.getConductionVelocity(data),  # m/s
             'dV': fiber.getSpikeAmp(data)             # mV
         }
-        ref_metrics = {   # Reference metrics (from Reilly 1985, fig 2)
+        pulse_ref_metrics = {   # Reference metrics (from Reilly 1985, fig 2)
             'Ithr': -0.68e-3,  # threshold cathodic excitation current amplitude (A)
             'cv': 43.0,        # conduction velocity (m/s)
             'dV': (105, 115)   # spike amplitude (mV)
         }
-        self.logOutputMetrics(sim_metrics, ref_metrics)
 
         # Plot membrane potential traces for specific duration at threshold current
         fig = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
@@ -138,19 +137,24 @@ class TestSenn(TestBase):
         fig2 = strengthDurationCurve(fiber, durations, Ithrs, Ifactor=1e3, scale='log')
 
         # Compare output metrics to reference
-        sim_metrics = {  # Output metrics
+        SDcurve_sim_metrics = {  # Output metrics
             'Qmin': durations[0] * Ithrs['cathode'][0],
             'Irh': Ithrs['cathode'][-1],
             'P1us': Ithrs['anode'][0] / Ithrs['cathode'][0],
             'P10ms': Ithrs['anode'][-1] / Ithrs['cathode'][-1]
         }
-        ref_metrics = {  # Reference metrics (from Reilly 1985, fig 6 and table 1)
+        SDcurve_ref_metrics = {  # Reference metrics (from Reilly 1985, fig 6 and table 1)
             'Qmin': 34.7e-9,  # minimum cathodic charge Qmin (C)
             'Irh': 0.36e-3,   # rheobase cathodic current (A)
             'P1us': 4.2,      # polarity selectivity ratio P for 1 us pulse
             'P10ms': 5.6      # polarity selectivity ratio P for 10 ms pulse
         }
-        self.logOutputMetrics(sim_metrics, ref_metrics)
+
+        # Log metrics
+        logger.info(f'Comparing metrics for {si_format(tstim)}s extracellular cathodic pulse')
+        self.logOutputMetrics(pulse_sim_metrics, pulse_ref_metrics)
+        logger.info(f'Comparing metrics for strength-duration curves')
+        self.logOutputMetrics(SDcurve_sim_metrics, SDcurve_ref_metrics)
 
     def test_Reilly1987(self, is_profiled=False):
         ''' Run SENN fiber simulation with identical parameters as in Reilly 1987 (base-case),
@@ -196,20 +200,21 @@ class TestSenn(TestBase):
 
         # Compare output metrics to reference
         i10us, i1ms = 2, 6
-        sim_metrics = {  # Output metrics
+        SDcurve_sim_metrics = {  # Output metrics
             'Qmin': durations[0] * Ithrs['cathode'][0],  # C
-            'Imin': Ithrs['cathode'][-1],  # A
+            'Irh': Ithrs['cathode'][-1],  # A
             'P10us': Ithrs['anode'][i10us] / Ithrs['cathode'][i10us],
             'P1ms': Ithrs['anode'][i1ms] / Ithrs['cathode'][i1ms]
         }
-        ref_metrics = {  # Reference outputs (from Reilly 1987, table 2)
+        SDcurve_ref_metrics = {  # Reference outputs (from Reilly 1987, table 2)
             'Qmin': 15.9e-9,   # minimum cathodic charge Qmin (C)
             'Irh': 0.18e-3,    # rheobase cathodic current (A)
             'P10us': 4.66,     # polarity selectivity ratio P for 10 us
             'P1ms': 5.53,      # polarity selectivity ratio P for 10 us
             'tau_e': 92.3e-6,  # S/D time constant tau_e (us)
         }
-        self.logOutputMetrics(sim_metrics, ref_metrics)
+        logger.info(f'Comparing metrics for strength-duration curves')
+        self.logOutputMetrics(SDcurve_sim_metrics, SDcurve_ref_metrics)
 
     def test_Sweeney1987(self, is_profiled=False):
         ''' Run SENN fiber simulation with identical parameters as in Sweeney 1987, Figs 2 & 3.,
@@ -245,16 +250,15 @@ class TestSenn(TestBase):
         data, meta = fiber.simulate(psource, 1.2 * Ithr, tstim, toffset, PRF, DC)
 
         # Compare output metrics to reference
-        sim_metrics = {  # Output metrics
+        pulse_sim_metrics = {  # Output metrics
             'Ithr': Ithr,                             # A
             'cv': fiber.getConductionVelocity(data),  # m/s
             'dV': fiber.getSpikeAmp(data)             # mV
         }
-        ref_metrics = {  # Reference metrics (from Sweeney 1987)
+        pulse_ref_metrics = {  # Reference metrics (from Sweeney 1987)
             'cv': 57.0,       # conduction velocity (m/s)
             'dV': (90, 95),  # spike amplitude (mV)
         }
-        self.logOutputMetrics(sim_metrics, ref_metrics)
 
         # Plot membrane potential traces for specific duration at threshold current
         fig1 = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
@@ -268,17 +272,21 @@ class TestSenn(TestBase):
         Ithrs_ref = np.array([4.4, 2.8, 1.95, 1.6, 1.45, 1.35, 1.25, 1.2, 1.2, 1.2, 1.2, 1.2]) * 1e-9  # A
         Ithrs_sim = np.array([fiber.titrate(psource, x, toffset, PRF, DC) for x in durations])  # A
 
-        # Compare output metrics to reference
-        sim_metrics = {  # Output metrics
-            'chr': chronaxie(durations, Ithrs_sim)  # s
-        }
-        ref_metrics = {  # Reference metrics (from Sweeney 1987)
-            'chr': 25.9e-6    # chronaxie from SD curve (s)
-        }
-        self.logOutputMetrics(sim_metrics, ref_metrics)
-
         # Plot strength-duration curve
         fig2 = strengthDurationCurve(fiber, durations, {'ref': Ithrs_ref, 'sim': Ithrs_sim}, Ifactor=1e9, scale='lin')
+
+        # Compare output metrics to reference
+        SDcurve_sim_metrics = {  # Output metrics
+            'chr': chronaxie(durations, Ithrs_sim)  # s
+        }
+        SDcurve_ref_metrics = {  # Reference metrics (from Sweeney 1987)
+            'chr': 25.9e-6    # chronaxie from SD curve (s)
+        }
+
+        logger.info(f'Comparing metrics for {si_format(tstim)}s intracellular anodic pulse')
+        self.logOutputMetrics(pulse_sim_metrics, pulse_ref_metrics)
+        logger.info(f'Comparing metrics for strength-duration curves')
+        self.logOutputMetrics(SDcurve_sim_metrics, SDcurve_ref_metrics)
 
     def test_ASTIM(self, is_profiled=False):
         ''' Run SENN fiber ASTIM simulation. '''
