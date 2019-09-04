@@ -3,12 +3,12 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-04 10:00:48
+# @Last Modified time: 2019-09-04 13:39:44
 
 import numpy as np
 
 from PySONIC.neurons import getPointNeuron
-from PySONIC.utils import logger, si_format
+from PySONIC.utils import logger, si_format, isIterable
 from PySONIC.test import TestBase
 from ExSONIC.core import VextSennFiber, IinjSennFiber, ExtracellularCurrent, IntracellularCurrent, SonicSennFiber, NodeAcousticSource
 from ExSONIC.plt import SectionCompTimeSeries, strengthDurationCurve
@@ -18,7 +18,13 @@ from ExSONIC.utils import chronaxie
 class TestSenn(TestBase):
 
     @staticmethod
-    def logOutputMetrics(sim_metrics, ref_metrics=None):
+    def relativeChange(x, xref):
+        if isIterable(x):
+            x, xref = np.asarray(x), np.asarray(xref)
+        return np.mean((x - xref) / xref)
+
+    @classmethod
+    def logOutputMetrics(cls, sim_metrics, ref_metrics=None):
         ''' Log output metrics. '''
         logfmts = {
             'Qmin': {
@@ -58,15 +64,19 @@ class TestSenn(TestBase):
                 'fmt': lambda x: f'{x:.2f}'
             }
 
-        logs = {}
         for k, v in logfmts.items():
+            warn = False
             if k in sim_metrics:
-                logs[k] = f"{v['name']}: {k} = {v['fmt'](sim_metrics[k])}"
+                log = f"--- {v['name']}: {k} = {v['fmt'](sim_metrics[k])}"
                 if ref_metrics is not None and k in ref_metrics:
-                    logs[k] += f" (ref = {v['fmt'](ref_metrics[k])})"
-
-        for log in logs.values():
-            logger.info(f'--- {log}')
+                    rel_change = cls.relativeChange(sim_metrics[k], ref_metrics[k])
+                    if np.abs(rel_change) > 0.05:
+                        warn = True
+                    log += f" (ref = {v['fmt'](ref_metrics[k])}, {rel_change * 100:.2f}% change)"
+                if warn:
+                    logger.warning(log)
+                else:
+                    logger.info(log)
 
     def test_Reilly1985(self, is_profiled=False):
         ''' Run SENN fiber simulation with identical parameters as in Reilly 1985, Fig2.,
@@ -83,6 +93,7 @@ class TestSenn(TestBase):
             of transient electrical stimulation--evaluation with a neuroelectric model.
             IEEE Trans Biomed Eng 32, 1001–1011.
         '''
+        logger.info('Test: SENN model validation against Reilly 1985 data')
 
         # Fiber model parameters
         pneuron = getPointNeuron('FH')  # FrankenHaeuser-Huxley membrane equations
@@ -120,7 +131,7 @@ class TestSenn(TestBase):
         pulse_ref_metrics = {   # Reference metrics (from Reilly 1985, fig 2)
             'Ithr': -0.68e-3,  # threshold cathodic excitation current amplitude (A)
             'cv': 43.0,        # conduction velocity (m/s)
-            'dV': (105, 115)   # spike amplitude (mV)
+            'dV': (105, 120)   # spike amplitude (mV)
         }
 
         # Plot membrane potential traces for specific duration at threshold current
@@ -128,10 +139,12 @@ class TestSenn(TestBase):
 
         # Compute and plot strength-duration curve with both polarities
         fiber.reset()
-        durations = np.logspace(0, 4, 10) * 1e-6  # s
+        durations = np.logspace(0, 4, 5) * 1e-6  # s
         psources = {k: ExtracellularCurrent(x0, z0, rho=rho_e, mode=k) for k in ['cathode', 'anode']}
         Ithrs = {k: np.array([np.abs(fiber.titrate(v, x, toffset, PRF, DC)) for x in durations])  # A
                  for k, v in psources.items()}
+        Irh_ref = 0.36e-3  # A
+        Ithrs['cathode ref'] = np.array([96.3, 9.44, 1.89, 1.00, 1.00]) * Irh_ref  # A
 
         # Plot strength-duration curve
         fig2 = strengthDurationCurve(fiber, durations, Ithrs, Ifactor=1e3, scale='log')
@@ -145,7 +158,7 @@ class TestSenn(TestBase):
         }
         SDcurve_ref_metrics = {  # Reference metrics (from Reilly 1985, fig 6 and table 1)
             'Qmin': 34.7e-9,  # minimum cathodic charge Qmin (C)
-            'Irh': 0.36e-3,   # rheobase cathodic current (A)
+            'Irh': Irh_ref,   # rheobase cathodic current (A)
             'P1us': 4.2,      # polarity selectivity ratio P for 1 us pulse
             'P10ms': 5.6      # polarity selectivity ratio P for 10 ms pulse
         }
@@ -168,6 +181,7 @@ class TestSenn(TestBase):
             to electrocutaneous sensory sensitivity: parameter variation study. IEEE Trans Biomed
             Eng 34, 752–754.
         '''
+        logger.info('Test: SENN model validation against Reilly 1987 data')
 
         # Fiber model parameters
         pneuron = getPointNeuron('FH')  # FrankenHaeuser-Huxley membrane equations
@@ -225,6 +239,7 @@ class TestSenn(TestBase):
             mammalian myelinated nerve for functional neuromuscular stimulation. IEEE 9th
             Annual Conference of the Engineering in Medicine and Biology Society 3, 1577–1578.
         '''
+        logger.info('Test: SENN model validation against Sweeney 1987 data')
 
         # Fiber model parameters
         pneuron = getPointNeuron('sweeney')  # mammalian fiber membrane equations
@@ -290,6 +305,7 @@ class TestSenn(TestBase):
 
     def test_ASTIM(self, is_profiled=False):
         ''' Run SENN fiber ASTIM simulation. '''
+        logger.info('Test: SENN model ASTIM simulation')
 
         # Fiber model parameters
         pneuron = getPointNeuron('FH')  # mammalian fiber membrane equations

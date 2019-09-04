@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-18 21:14:43
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-23 20:33:39
+# @Last Modified time: 2019-09-04 11:41:57
 
 import matplotlib.pyplot as plt
 from PySONIC.parsers import *
@@ -15,7 +15,7 @@ class SpatiallyExtendedParser(Parser):
 
     def __init__(self):
         super().__init__()
-        self.defaults.update({'rs': 1e2})
+        self.defaults.update({'rs': 110.0})
         self.factors.update({'rs': 1e0})
         self.addResistivity()
         self.addSection()
