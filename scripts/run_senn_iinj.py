@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-09-06 16:12:33
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-06 16:14:52
+# @Last Modified time: 2019-09-06 16:33:55
 
 ''' Run simulations of an SENN fiber model with a specific point-neuron mechanism
     upon intracellular electrical stimulation. '''
@@ -33,17 +33,21 @@ def main():
         for fiberD in args['fiberD']:
                 for nnodes in args['nnodes']:
                     for rs in args['rs']:
-                        fiber = IinjSennFiber(pneuron, fiberD, nnodes, rs=rs)
-                        for inode in args['inode']:
-                            if inode is None:
-                                inode = nnodes // 2
-                            psource = IntracellularCurrent(inode, args['mode'])
-                            if args['save']:
-                                simqueue = [[item[0], psource, *item[1:]] for item in queue]
-                            else:
-                                simqueue = [[psource, *item] for item in queue]
-                            batch = Batch(fiber.simAndSave if args['save'] else fiber.simulate, simqueue)
-                            output += batch(loglevel=args['loglevel'])
+                        for nodeL in args['nodeL']:
+                            for d_ratio in args['d_ratio']:
+                                fiber = IinjSennFiber(
+                                    pneuron, fiberD, nnodes, rs=rs, nodeL=nodeL, d_ratio=d_ratio)
+                                for inode in args['inode']:
+                                    if inode is None:
+                                        inode = nnodes // 2
+                                    psource = IntracellularCurrent(inode, args['mode'])
+                                    if args['save']:
+                                        simqueue = [[item[0], psource, *item[1:]] for item in queue]
+                                    else:
+                                        simqueue = [[psource, *item] for item in queue]
+                                    batch = Batch(
+                                        fiber.simAndSave if args['save'] else fiber.simulate, simqueue)
+                                    output += batch(loglevel=args['loglevel'])
 
     # Plot resulting profiles
     if args['plot'] is not None:

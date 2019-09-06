@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-18 21:14:43
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-06 16:18:16
+# @Last Modified time: 2019-09-06 16:32:35
 
 import matplotlib.pyplot as plt
 from PySONIC.parsers import *
@@ -67,10 +67,12 @@ class SennParser(SpatiallyExtendedParser):
 
     def __init__(self):
         super().__init__()
-        self.defaults.update({'nnodes': 11, 'fiberD': 20., 'neuron': 'FH'})
-        self.factors.update({'fiberD': 1e-6})
+        self.defaults.update({'nnodes': 11, 'fiberD': 20., 'neuron': 'FH', 'nodeL': 2.5, 'd_ratio': 0.7})
+        self.factors.update({'fiberD': 1e-6, 'nodeL': 1e-6})
         self.addNnodes()
         self.addFiberDiameter()
+        self.addNodeLength()
+        self.addDiameterRatio()
 
     def addNnodes(self):
         self.add_argument(
@@ -80,9 +82,17 @@ class SennParser(SpatiallyExtendedParser):
         self.add_argument(
             '-d', '--fiberD', nargs='+', type=float, help='Fiber diameter (um)')
 
+    def addNodeLength(self):
+        self.add_argument(
+            '-w', '--nodeL', nargs='+', type=float, help='Node length (um)')
+
+    def addDiameterRatio(self):
+        self.add_argument(
+            '--d_ratio', nargs='+', type=float, help='Axon to fiber diameter ratio')
+
     def parse(self, args=None):
         args = super().parse(args=args)
-        for key in ['fiberD']:
+        for key in ['fiberD', 'nodeL']:
             if len(args[key]) > 1 or args[key][0] is not None:
                 args[key] = self.parse2array(args, key, factor=self.factors[key])
         return args
@@ -124,7 +134,10 @@ class EStimSennParser(SennParser, PWSimParser):
         return EStimParser.parseAmp(self, args)
 
     def parse(self):
-        return SennParser.parse(self, args=PWSimParser.parse(self))
+        args = SennParser.parse(self, args=PWSimParser.parse(self))
+        if isIterable(args['mode']):
+            args['mode'] = args['mode'][0]
+        return args
 
     @staticmethod
     def parseSimInputs(args):
