@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-06 12:54:31
+# @Last Modified time: 2019-09-06 14:43:07
 
 import numpy as np
 import pandas as pd
@@ -12,7 +12,7 @@ from neuron import h
 from PySONIC.utils import si_format, pow10_format, logger, debug, binarySearch
 from PySONIC.constants import *
 from PySONIC.core import Model, PointNeuron
-from PySONIC.postpro import detectSpikes
+from PySONIC.postpro import detectSpikes, prependDataFrame
 
 from .pyhoc import *
 from .node import SonicNode
@@ -167,7 +167,7 @@ class ExtendedSonicNode(SonicNode):
             data[id].loc[:,'Qm'] *= 1e-5  # C/m2
 
         # Prepend initial conditions (prior to stimulation)
-        data = {id: self.prepend(df) for id, df in data.items()}
+        data = {id: prependDataFrame(df) for id, df in data.items()}
 
         return data
 

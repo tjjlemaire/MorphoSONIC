@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-06 12:47:17
+# @Last Modified time: 2019-09-06 14:39:57
 
 import abc
 import pickle
@@ -15,10 +15,10 @@ from PySONIC.core import Model, PointNeuron, NeuronalBilayerSonophore
 from PySONIC.neurons import *
 from PySONIC.utils import si_format, pow10_format, logger, plural, binarySearch, pow2Search
 from PySONIC.constants import *
-from PySONIC.postpro import detectSpikes
+from PySONIC.postpro import detectSpikes, prependDataFrame
 
 from .pyhoc import *
-from .node import Node, IintraNode, SonicNode
+from .node import IintraNode, SonicNode
 from .connectors import SeriesConnector
 from ..constants import *
 
@@ -329,7 +329,7 @@ class SennFiber(metaclass=abc.ABCMeta):
             data[id].loc[:,'Qm'] *= 1e-5  # C/m2
 
         # Prepend initial conditions (prior to stimulation)
-        data = {id: Node.prepend(df) for id, df in data.items()}
+        data = {id: prependDataFrame(df) for id, df in data.items()}
 
         return data
 

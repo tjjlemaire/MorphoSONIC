@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-06 12:47:01
+# @Last Modified time: 2019-09-06 14:39:04
 
 import pickle
 import abc
@@ -16,6 +16,7 @@ from neuron import h
 from PySONIC.constants import *
 from PySONIC.core import Model, PointNeuron, NeuronalBilayerSonophore
 from PySONIC.utils import si_format, timer, logger, binarySearch, plural, debug
+from PySONIC.postpro import prependDataFrame
 
 from .pyhoc import *
 from ..utils import getNmodlDir
@@ -276,39 +277,12 @@ class Node(metaclass=abc.ABCMeta):
         data.loc[:,'Qm'] *= 1e-5  # C/m2
 
         # Prepend initial conditions (prior to stimulation)
-        data = self.prepend(data)
+        data = prependDataFrame(data)
 
         return data
 
     def meta(self, A, tstim, toffset, PRF, DC):
         return self.pneuron.meta(A, tstim, toffset, PRF, DC)
-
-    @staticmethod
-    def prepend(data):
-        ''' Resample dataframe at regular time step. '''
-        tnew = np.insert(data['t'].values, 0, 0)
-        new_data = {'t': tnew}
-        for key in data:
-            if key == 't':
-                x0 = 0.
-            elif key == 'stimstate':
-                x0 = 0
-            else:
-                x0 = data[key].values[0]
-            new_data[key] = np.insert(data[key].values, 0, x0)
-        return pd.DataFrame(new_data)
-
-    @staticmethod
-    def resample(data, dt):
-        ''' Resample dataframe at regular time step. '''
-        t = data['t'].values
-        n = int(np.ptp(t) / dt) + 1
-        tnew = np.linspace(t.min(), t.max(), n)
-        new_data = {}
-        for key in data:
-            kind = 'nearest' if key == 'stimstate' else 'linear'
-            new_data[key] = interp1d(t, data[key].values, kind=kind)(tnew)
-        return pd.DataFrame(new_data)
 
     def titrate(self, tstim, toffset, PRF=100., DC=1., xfunc=None):
         ''' Use a binary search to determine the threshold amplitude needed to obtain
