@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-02 17:47:39
+# @Last Modified time: 2019-09-06 12:47:01
 
 import pickle
 import abc
@@ -274,9 +274,6 @@ class Node(metaclass=abc.ABCMeta):
         for k, v in probes.items():
             data[k] = vec_to_array(v)
         data.loc[:,'Qm'] *= 1e-5  # C/m2
-
-        # Resample data to regular sampling rate
-        data = self.resample(data, DT_TARGET)
 
         # Prepend initial conditions (prior to stimulation)
         data = self.prepend(data)

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-04 13:32:53
+# @Last Modified time: 2019-09-06 12:47:17
 
 import abc
 import pickle
@@ -317,7 +317,7 @@ class SennFiber(metaclass=abc.ABCMeta):
         self.setStimAmps(psource.computeNodesAmps(self, A))
         self.integrate(tstim + toffset, tstim, PRF, DC, dt, atol)
 
-        # Store output in dataframes§
+        # Store output in dataframes
         data = {}
         for id in self.sections.keys():
             data[id] = pd.DataFrame({
@@ -327,9 +327,6 @@ class SennFiber(metaclass=abc.ABCMeta):
             for k, v in probes[id].items():
                 data[id][k] = vec_to_array(v)
             data[id].loc[:,'Qm'] *= 1e-5  # C/m2
-
-        # Resample data to regular sampling rate
-        data = {id: Node.resample(df, DT_TARGET) for id, df in data.items()}
 
         # Prepend initial conditions (prior to stimulation)
         data = {id: Node.prepend(df) for id, df in data.items()}
@@ -429,7 +426,6 @@ class SennFiber(metaclass=abc.ABCMeta):
                 as temporal reference for spike occurence timings
             :return: dictionary of spike occurence times (s) per node.
         '''
-
         tspikes = {}
         nspikes = None
         for id in self.ids:

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-23 18:32:51
+# @Last Modified time: 2019-09-06 12:54:31
 
 import numpy as np
 import pandas as pd
@@ -32,7 +32,8 @@ class ExtendedSonicNode(SonicNode):
         assert fs < 1., 'fs must be lower than 1'
 
         # Initialize parent class and delete nominal section
-        super().__init__(pneuron, id=None, a=a, Fdrive=Fdrive, fs=fs)
+        super().__init__(pneuron, id=None, a=a, Fdrive=Fdrive, fs=1.)
+        self.fs = fs
         del self.section
 
         # Create sections and set their geometry, biophysics and topology
@@ -164,9 +165,6 @@ class ExtendedSonicNode(SonicNode):
             for k, v in probes[id].items():
                 data[id][k] = vec_to_array(v)
             data[id].loc[:,'Qm'] *= 1e-5  # C/m2
-
-        # Resample data to regular sampling rate
-        data = {id: self.resample(df, DT_EFFECTIVE) for id, df in data.items()}
 
         # Prepend initial conditions (prior to stimulation)
         data = {id: self.prepend(df) for id, df in data.items()}

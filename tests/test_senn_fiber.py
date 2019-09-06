@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-04 13:39:44
+# @Last Modified time: 2019-09-04 14:28:53
 
 import numpy as np
 
@@ -322,7 +322,7 @@ class TestSenn(TestBase):
 
         # US stimulation parameters
         Astim = 100e3   # Pa
-        tstim = 200e-6   # s
+        tstim = 3e-3   # s
         toffset = 3e-3  # s
         PRF = 100.      # Hz
         DC = 1.         # -
@@ -348,7 +348,8 @@ class TestSenn(TestBase):
         self.logOutputMetrics(sim_metrics)
 
         # Plot membrane potential traces for specific duration at threshold current
-        fig = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
+        fig1 = SectionCompTimeSeries([(data, meta)], 'Qm', fiber.ids).render()
+        fig2 = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
 
 
 if __name__ == '__main__':
