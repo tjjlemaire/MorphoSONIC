@@ -3,10 +3,11 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-18 21:14:43
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-04 11:41:57
+# @Last Modified time: 2019-09-06 16:18:16
 
 import matplotlib.pyplot as plt
 from PySONIC.parsers import *
+from PySONIC.utils import si_format
 
 from .plt import SectionGroupedTimeSeries, SectionCompTimeSeries
 
@@ -65,12 +66,11 @@ class SpatiallyExtendedParser(Parser):
 class SennParser(SpatiallyExtendedParser):
 
     def __init__(self):
-        SpatiallyExtendedParser.__init__(self)
-        self.defaults.update({'nnodes': 11, 'fiberD': 20., 'xps': 0., 'zps': None, 'neuron': 'FH'})
-        self.factors.update({'fiberD': 1e-6, 'xps': 1e-3, 'zps': 1e-3})
+        super().__init__()
+        self.defaults.update({'nnodes': 11, 'fiberD': 20., 'neuron': 'FH'})
+        self.factors.update({'fiberD': 1e-6})
         self.addNnodes()
         self.addFiberDiameter()
-        self.addPointSourcePosition()
 
     def addNnodes(self):
         self.add_argument(
@@ -80,15 +80,9 @@ class SennParser(SpatiallyExtendedParser):
         self.add_argument(
             '-d', '--fiberD', nargs='+', type=float, help='Fiber diameter (um)')
 
-    def addPointSourcePosition(self):
-        self.add_argument(
-            '--xps', nargs='+', type=float, help='Point source x-position (mm)')
-        self.add_argument(
-            '--zps', nargs='+', type=float, help='Point source z-position (mm)')
-
     def parse(self, args=None):
         args = super().parse(args=args)
-        for key in ['fiberD', 'xps', 'zps']:
+        for key in ['fiberD']:
             if len(args[key]) > 1 or args[key][0] is not None:
                 args[key] = self.parse2array(args, key, factor=self.factors[key])
         return args
@@ -108,29 +102,29 @@ class EStimSennParser(SennParser, PWSimParser):
     def __init__(self):
         PWSimParser.__init__(self)
         SennParser.__init__(self)
-        self.defaults.update({'mode': 'cathode', 'amp': -0.7, 'tstim': 0.1, 'toffset': 3.})
-        self.factors.update({'amp': 1e-3})
+        self.defaults.update({'tstim': 0.1, 'toffset': 3.})
         self.allowed.update({'mode': ['cathode', 'anode']})
+        self.addElectrodeMode()
         self.addAstim()
+
+    def addElectrodeMode(self):
+        self.add_argument(
+            '--mode', type=str, help='Electrode polarity mode ("cathode" or "anode")')
 
     def addAstim(self):
         self.add_argument(
             '-A', '--amp', nargs='+', type=float,
-            help='Point-source current amplitude (mA)')
+            help=f'Point-source current amplitude ({self.amp_unit})')
         self.add_argument(
             '--Arange', type=str, nargs='+',
-            help='Point-source current amplitude range {} (mA)'.format(self.dist_str))
-        self.add_argument(
-            '--mode', type=str, help='Electrode polarity mode ("cathode" or "anode")')
+            help='Point-source current amplitude range {} ({})'.format(self.dist_str, self.amp_unit))
         self.to_parse['amp'] = self.parseAmp
 
     def parseAmp(self, args):
         return EStimParser.parseAmp(self, args)
 
     def parse(self):
-        args = SennParser.parse(self, args=PWSimParser.parse(self))
-        args['mode'] = args['mode'][0]
-        return args
+        return SennParser.parse(self, args=PWSimParser.parse(self))
 
     @staticmethod
     def parseSimInputs(args):
@@ -138,6 +132,45 @@ class EStimSennParser(SennParser, PWSimParser):
 
     def parsePlot(self, *args):
         return SennParser.parsePlot(self, *args)
+
+
+class IextSennParser(EStimSennParser):
+
+    amp_unit = 'mA'
+
+    def __init__(self):
+        super().__init__()
+        self.defaults.update({'xps': 0., 'zps': None, 'mode': 'cathode', 'amp': -0.7})
+        self.factors.update({'amp': 1e-3, 'xps': 1e-3, 'zps': 1e-3})
+        self.addPointSourcePosition()
+
+    def addPointSourcePosition(self):
+        self.add_argument(
+            '--xps', nargs='+', type=float, help='Point source x-position (mm)')
+        self.add_argument(
+            '--zps', nargs='+', type=float, help='Point source z-position (mm)')
+
+    def parse(self):
+        args = super().parse()
+        for key in ['xps', 'zps']:
+            if len(args[key]) > 1 or args[key][0] is not None:
+                args[key] = self.parse2array(args, key, factor=self.factors[key])
+        return args
+
+
+class IinjSennParser(EStimSennParser):
+
+    amp_unit = 'nA'
+
+    def __init__(self):
+        super().__init__()
+        self.defaults.update({'inode': None, 'mode': 'anode', 'amp': 2.0})
+        self.factors.update({'amp': 1e-9})
+        self.addNodeIClamp()
+
+    def addNodeIClamp(self):
+        self.add_argument(
+            '--inode', nargs='+', type=int, help='Node index for current clamp')
 
 
 class SpatiallyExtendedAStimParser(SpatiallyExtendedParser, AStimParser):

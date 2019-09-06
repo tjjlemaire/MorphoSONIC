@@ -3,9 +3,9 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-15 20:33:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-29 17:37:24
+# @Last Modified time: 2019-09-06 16:12:42
 
-''' Run simulations of an SENN fiber model with a specific point-neuron mechanis
+''' Run simulations of an SENN fiber model with a specific point-neuron mechanism
     upon extracellular electrical stimulation. '''
 
 import matplotlib.pyplot as plt
@@ -14,19 +14,19 @@ from PySONIC.core import Batch, PointNeuron
 from PySONIC.utils import logger
 from PySONIC.parsers import EStimParser
 from ExSONIC.core import VextSennFiber, ExtracellularCurrent
-from ExSONIC.parsers import EStimSennParser
+from ExSONIC.parsers import IextSennParser
 
 
 def main():
     # Parse command line arguments
-    parser = EStimSennParser()
+    parser = IextSennParser()
     args = parser.parse()
     logger.setLevel(args['loglevel'])
     if args['mpi']:
         logger.warning('NEURON multiprocessing disabled')
 
     # Run batch
-    logger.info('Starting SENN fiber E-STIM simulation batch')
+    logger.info('Starting SENN fiber Iext-STIM simulation batch')
     queue = PointNeuron.simQueue(*EStimParser.parseSimInputs(args), outputdir=args['outputdir'])
     output = []
     for pneuron in args['neuron']:
