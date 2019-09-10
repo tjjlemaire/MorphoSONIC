@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-06 14:39:04
+# @Last Modified time: 2019-09-10 14:02:33
 
 import pickle
 import abc
@@ -136,89 +136,7 @@ class Node(metaclass=abc.ABCMeta):
         return value
 
     def toggleStim(self):
-        ''' Toggle stimulation and set appropriate next toggle event. '''
-        # OFF -> ON at pulse onset
-        if self.stimon == 0:
-            # print('t = {:.2f} ms: switching stim ON and setting next OFF event at {:.2f} ms'
-            #       .format(h.t, min(self.tstim, h.t + self.Ton)))
-            self.stimon = self.setStimON(1)
-            self.cvode.event(min(self.tstim, h.t + self.Ton), self.toggleStim)
-        # ON -> OFF at pulse offset
-        else:
-            self.stimon = self.setStimON(0)
-            if (h.t + self.Toff) < self.tstim - h.dt:
-                # print('t = {:.2f} ms: switching stim OFF and setting next ON event at {:.2f} ms'
-                #       .format(h.t, h.t + self.Toff))
-                self.cvode.event(h.t + self.Toff, self.toggleStim)
-            # else:
-            #     print('t = {:.2f} ms: switching stim OFF'.format(h.t))
-
-        # Re-initialize cvode if active
-        if self.cvode.active():
-            self.cvode.re_init()
-        else:
-            h.fcurrent()
-
-    def integrate(self, tstop, tstim, PRF, DC, dt, atol):
-        ''' Integrate the model differential variables for a given duration, while updating the
-            value of the boolean parameter stimon during ON and OFF periods throughout the numerical
-            integration, according to stimulus parameters.
-
-            Integration uses an adaptive time step method by default.
-
-            :param tstop: duration of numerical integration (s)
-            :param tstim: stimulus duration (s)
-            :param PRF: pulse repetition frequency (Hz)
-            :param DC: stimulus duty cycle
-            :param dt: integration time step (s). If provided, the fixed time step method is used.
-            :param atol: absolute error tolerance (default = 1e-3). If provided, the adaptive
-                time step method is used.
-        '''
-        # Convert input parameters to NEURON units
-        tstim *= 1e3
-        tstop *= 1e3
-        PRF /= 1e3
-        if dt is not None:
-            dt *= 1e3
-
-        # Update PRF for CW stimuli to optimize integration
-        if DC == 1.0:
-            PRF = 1 / tstim
-
-        # Set pulsing parameters used in CVODE events
-        self.Ton = DC / PRF
-        self.Toff = (1 - DC) / PRF
-        self.tstim = tstim
-
-        # Set integration parameters
-        h.secondorder = 2
-        self.cvode = h.CVode()
-        if dt is not None:
-            h.dt = dt
-            self.cvode.active(0)
-            logger.debug('fixed time step integration (dt = {} ms)'.format(h.dt))
-        else:
-            self.cvode.active(1)
-            if atol is not None:
-                def_atol = self.cvode.atol()
-                self.cvode.atol(atol)
-                logger.debug('adaptive time step integration (atol = {})'.format(self.cvode.atol()))
-
-        # Initialize
-        self.stimon = self.setStimON(0)
-        h.finitialize(self.pneuron.Qm0() * 1e5)  # nC/cm2
-        self.stimon = self.setStimON(1)
-        self.cvode.event(self.Ton, self.toggleStim)
-
-        # Integrate
-        while h.t < tstop:
-            h.fadvance()
-
-        # Set absolute error tolerance back to default value if changed
-        if atol is not None:
-            self.cvode.atol(def_atol)
-
-        return 0
+        return toggleStim(self)
 
     def setProbesDict(self, sec):
         return {
@@ -265,7 +183,7 @@ class Node(metaclass=abc.ABCMeta):
 
         # Set stimulus amplitude and integrate model
         self.setStimAmp(A)
-        self.integrate(tstim + toffset, tstim, PRF, DC, dt, atol)
+        integrate(self, tstim + toffset, tstim, PRF, DC, dt, atol)
 
         # Store output in dataframe
         data = pd.DataFrame({

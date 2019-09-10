@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-15 19:36:07
+# @Last Modified time: 2019-09-10 14:00:18
 # @Author: Theo Lemaire
 # @Date:   2018-08-21 19:48:04
 # @Last Modified by:   Theo Lemaire
@@ -126,46 +126,6 @@ def setFuncTable(mechname, fname, matrix, xref, yref):
     return fillTable(matrix._ref_x[0][0], nx, xref._ref_x[0], ny, yref._ref_x[0])
 
 
-def attachIClamp(sec, amp, delay=0, dur=1e9, loc=0.5):
-    ''' Attach a current Clamp to a section.
-
-        :param sec: section to attach the current clamp.
-        :param dur: duration of the stimulus (ms).
-        :param amp: magnitude of the current (nA).
-        :param delay: onset of the injected current (ms)
-        :param loc: location on the section where the stimulus is placed
-        :return: IClamp object (must be returned to caller space to be effective)
-    '''
-    pulse = h.IClamp(sec(loc))
-    pulse.delay = delay  # ms
-    pulse.dur = dur      # ms
-    pulse.amp = amp      # nA
-    return pulse
-
-
-def attachEStim(sec, Astim, tstim, PRF, DC, loc=0.5):
-    ''' Attach a series of current clamps to a section to simulate a pulsed electrical stimulus.
-
-        :param sec: section to attach current clamps.
-        :param Astim: injected current density (mA/m2).
-        :param tstim: duration of the stimulus (ms)
-        :param PRF: pulse repetition frequency (kHz)
-        :param DC: stimulus duty cycle
-        :param loc: location on the section where the stimulus is placed
-        :return: list of iclamp objects
-    '''
-    # Update PRF for CW stimuli to optimize integration
-    if DC == 1.0:
-        PRF = 1 / tstim
-
-    # Compute pulses timing
-    Tpulse = 1 / PRF
-    Ton = DC * Tpulse
-    npulses = int(np.round(tstim / Tpulse))
-
-    return [attachIClamp(sec, Ton, Astim, delay=i * Tpulse, loc=loc) for i in range(npulses)]
-
-
 def setTimeProbe():
     ''' Set recording vector for time.
 
@@ -224,3 +184,85 @@ def insertVext(sec, xr=1e20, xg=1e10, xc=0.):
     sec.xraxial[0] = xr
     sec.xg[0] = xg
     sec.xc[0] = xc
+
+
+def integrate(model, tstop, tstim, PRF, DC, dt, atol):
+    ''' Integrate a model differential variables for a given duration, while updating the
+        value of the boolean parameter stimon during ON and OFF periods throughout the numerical
+        integration, according to stimulus parameters.
+
+        Integration uses an adaptive time step method by default.
+
+        :param model: model instance
+        :param tstop: duration of numerical integration (s)
+        :param tstim: stimulus duration (s)
+        :param PRF: pulse repetition frequency (Hz)
+        :param DC: stimulus duty cycle
+        :param dt: integration time step (s). If provided, the fixed time step method is used.
+        :param atol: absolute error tolerance (default = 1e-3). If provided, the adaptive
+            time step method is used.
+    '''
+    # Convert input parameters to NEURON units
+    tstim *= 1e3
+    tstop *= 1e3
+    PRF /= 1e3
+    if dt is not None:
+        dt *= 1e3
+
+    # Update PRF for CW stimuli to optimize integration
+    if DC == 1.0:
+        PRF = 1 / tstim
+
+    # Set pulsing parameters used in CVODE events
+    model.Ton = DC / PRF
+    model.Toff = (1 - DC) / PRF
+    model.tstim = tstim
+
+    # Set integration parameters
+    h.secondorder = 2
+    model.cvode = h.CVode()
+    if dt is not None:
+        h.dt = dt
+        model.cvode.active(0)
+        logger.debug(f'fixed time step integration (dt = {h.dt} ms)')
+    else:
+        model.cvode.active(1)
+        if atol is not None:
+            def_atol = model.cvode.atol()
+            model.cvode.atol(atol)
+            logger.debug(f'adaptive time step integration (atol = {model.cvode.atol()})')
+
+    # Initialize
+    model.stimon = model.setStimON(0)
+    h.finitialize(model.pneuron.Qm0() * 1e5)  # nC/cm2
+    model.stimon = model.setStimON(1)
+    model.cvode.event(model.Ton, model.toggleStim)
+
+    # Integrate
+    while h.t < tstop:
+        h.fadvance()
+
+    # Set absolute error tolerance back to default value if changed
+    if atol is not None:
+        model.cvode.atol(def_atol)
+
+    return 0
+
+
+def toggleStim(model):
+    ''' Toggle stimulus state (ON -> OFF or OFF -> ON) and set appropriate next toggle event. '''
+    # OFF -> ON at pulse onset
+    if model.stimon == 0:
+        model.stimon = model.setStimON(1)
+        model.cvode.event(min(model.tstim, h.t + model.Ton), model.toggleStim)
+    # ON -> OFF at pulse offset
+    else:
+        model.stimon = model.setStimON(0)
+        if (h.t + model.Toff) < model.tstim - h.dt:
+            model.cvode.event(h.t + model.Toff, model.toggleStim)
+
+    # Re-initialize cvode if active
+    if model.cvode.active():
+        model.cvode.re_init()
+    else:
+        h.fcurrent()
