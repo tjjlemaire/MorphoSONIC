@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-09 21:21:18
+# @Last Modified time: 2019-09-10 15:05:17
 
 import numpy as np
 
@@ -248,12 +248,12 @@ class TestSenn(TestBase):
         logger.info('Test: SENN model validation against Sweeney 1987 data')
 
         # Fiber model parameters
-        pneuron = getPointNeuron('sweeney')  # mammalian fiber membrane equations
-        fiberD = 10e-6                       # fiber diameter (m)
+        pneuron = getPointNeuron('SW')  # mammalian fiber membrane equations
+        fiberD = 10e-6                  # fiber diameter (m)
         nnodes = 19
-        rho_a = 54.7                         # axoplasm resistivity (Ohm.cm)
-        d_ratio = 0.6                        # axon / fiber diameter ratio
-        nodeL = 1.5e-6                       # node length (m)
+        rho_a = 54.7                    # axoplasm resistivity (Ohm.cm)
+        d_ratio = 0.6                   # axon / fiber diameter ratio
+        nodeL = 1.5e-6                  # node length (m)
         fiber = IinjSennFiber(pneuron, fiberD, nnodes, rs=rho_a, nodeL=nodeL, d_ratio=d_ratio)
 
         # Intracellular stimulation parameters

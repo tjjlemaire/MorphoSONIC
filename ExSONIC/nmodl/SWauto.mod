@@ -1,4 +1,4 @@
-TITLE sweeney membrane mechanism
+TITLE SW membrane mechanism
 
 COMMENT
 Equations governing the effective membrane dynamics of a Mammalian myelinated motor fiber fiber node.
@@ -9,14 +9,14 @@ Understanding ultrasound neuromodulation using a computationally efficient
 and interpretable model of intramembrane cavitation. J. Neural Eng.
 
 @Author: Theo Lemaire, EPFL
-@Date: 2019-09-03
+@Date: 2019-09-10
 @Email: theo.lemaire@epfl.ch
 ENDCOMMENT
 
 INDEPENDENT {t FROM 0 TO 1 WITH 1 (ms)}
 
 NEURON {
-   SUFFIX sweeneyauto
+   SUFFIX SWauto
    NONSPECIFIC_CURRENT iNa : Sodium current
    NONSPECIFIC_CURRENT iLeak : non-specific leakage current
    RANGE Adrive, Vm : section specific

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 11:34:09
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-29 20:09:30
+# @Last Modified time: 2019-09-10 15:02:00
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -27,7 +27,7 @@ class TestComp(TestBase):
     def getNeurons():
         pneurons = {}
         for name, neuron_class in getNeuronsDict().items():
-            if name not in ('template', 'LeechP', 'LeechT', 'LeechR', 'sweeney'):
+            if name not in ('template', 'LeechP', 'LeechT', 'LeechR', 'SW'):
                 pneurons[name] = neuron_class()
         return pneurons
 
