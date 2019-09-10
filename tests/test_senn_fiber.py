@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-10 15:05:17
+# @Last Modified time: 2019-09-10 15:15:42
 
 import numpy as np
 
@@ -290,18 +290,21 @@ class TestSenn(TestBase):
         # Compute and plot strength-duration curve for intracellular injection at central node
         psource = IntracellularCurrent(nnodes // 2, mode='anode')
         durations = np.array([10, 20, 40, 60, 80, 100, 150, 200, 250, 300, 400, 500], dtype=float) * 1e-6  # s
-        Ithrs_ref = np.array([4.4, 2.8, 1.95, 1.6, 1.45, 1.35, 1.25, 1.2, 1.2, 1.2, 1.2, 1.2]) * 1e-9  # A
+        Ithrs_ref = np.array([4.4, 2.8, 1.95, 1.6, 1.45, 1.4, 1.30, 1.25, 1.25, 1.25, 1.25, 1.25]) * 1e-9  # A
         Ithrs_sim = np.array([fiber.titrate(psource, x, toffset, PRF, DC) for x in durations])  # A
+        Qthrs_sim = Ithrs_sim * durations  # C
 
         # Plot strength-duration curve
         fig2 = strengthDurationCurve(fiber, durations, {'ref': Ithrs_ref, 'sim': Ithrs_sim}, Ifactor=1e9, scale='lin')
 
         # Compare output metrics to reference
         SDcurve_sim_metrics = {  # Output metrics
-            'chr': chronaxie(durations, Ithrs_sim)  # s
+            'chr': chronaxie(durations, Ithrs_sim),  # s
+            'tau_e': Qthrs_sim.min() / Ithrs_sim.min()  # s
         }
         SDcurve_ref_metrics = {  # Reference metrics (from Sweeney 1987)
-            'chr': 25.9e-6    # chronaxie from SD curve (s)
+            'chr': 25.9e-6,   # chronaxie from S/D curve (s)
+            'tau_e': 37.4e-6  # S/D time constant (s)
         }
 
         logger.info(f'Comparing metrics for {si_format(tstim)}s intracellular anodic pulse')
