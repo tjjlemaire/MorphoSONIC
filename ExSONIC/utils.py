@@ -3,11 +3,12 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 14:38:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-29 11:46:26
+# @Last Modified time: 2019-09-10 13:45:52
 
 import os
 import pickle
 import numpy as np
+from scipy.optimize import curve_fit
 from neuron import h
 
 from PySONIC.constants import *
@@ -37,3 +38,46 @@ def chronaxie(durations, Ithrs):
         Ithrs = -Ithrs
     Irh = 2 * Ithrs.min()  # rheobase current
     return np.interp(Irh, Ithrs[::-1], durations[::-1])  # s
+
+
+def WeissSD(t, tau_e, I0):
+    ''' Weiss' classical formulation of the strength-duration relationship,
+        taken from Reilly, 2011.
+
+        :param t: pulse duration (s)
+        :param tau_e: S/D time constant
+        :param I0: rheobase current (A)
+        :return: threshold current for the input pulse duration (A)
+
+        Reference: Reilly, J.P. (2011). Electrostimulation: theory, applications,
+        and computational model (Boston: Artech House).
+    '''
+    return I0 * (1 + tau_e / t)
+
+
+def LapiqueSD(t, tau_e, I0):
+    ''' Lapique's exponential formulation of the strength-duration relationship,
+        taken from Reilly, 2011.
+
+        :param t: pulse duration (s)
+        :param tau_e: S/D time constant
+        :param I0: rheobase current (A)
+        :return: threshold current for the input pulse duration (A)
+
+        Reference: Reilly, J.P. (2011). Electrostimulation: theory, applications,
+        and computational model (Boston: Artech House).
+    '''
+    return I0 / (1 - np.exp(-t / tau_e))
+
+
+def fitTauSD(durations, currents, method='Weiss'):
+    candidate_fits = {'Weiss': WeissSD, 'Lapique': LapiqueSD}
+    try:
+        method = candidate_fits[method]
+    except KeyError:
+        raise ValueError(f'"method" must one of ({", ".join([list(candidate_fits.keys())])})')
+    I0 = currents.min()
+    tau_e = curve_fit(
+        lambda t, tau: method(t, tau, I0),
+        durations, currents, p0=chronaxie(durations, currents))[0][0]
+    return tau_e, method(durations, tau_e, I0)

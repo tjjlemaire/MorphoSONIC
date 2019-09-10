@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-04 14:28:53
+# @Last Modified time: 2019-09-09 21:21:18
 
 import numpy as np
 
@@ -27,11 +27,11 @@ class TestSenn(TestBase):
     def logOutputMetrics(cls, sim_metrics, ref_metrics=None):
         ''' Log output metrics. '''
         logfmts = {
-            'Qmin': {
-                'name': 'minimal charge',
+            'Q0': {
+                'name': 'rheobase charge',
                 'fmt': lambda x: f'{si_format(np.abs(x), 1)}C'
             },
-            'Irh': {
+            'I0': {
                 'name': 'rheobase current',
                 'fmt': lambda x: f'{si_format(np.abs(x), 1)}A'
             },
@@ -53,6 +53,10 @@ class TestSenn(TestBase):
             },
             'chr': {
                 'name': 'chronaxie',
+                'fmt': lambda x: f'{si_format(x, 1)}s'
+            },
+            'tau_e': {
+                'name': 'S/D time constant',
                 'fmt': lambda x: f'{si_format(x, 1)}s'
             }
         }
@@ -84,7 +88,7 @@ class TestSenn(TestBase):
                 - threshold current for 100 us cathodic pulse
                 - conduction velocity
                 - spike amplitude
-                - minimum cathodic charge
+                - rheobase cathodic charge
                 - rheobase cathodic current
                 - Polarity selectivity ratio P for 1 us and 10 ms cathodic pulses
                 - S/D time constant
@@ -143,24 +147,24 @@ class TestSenn(TestBase):
         psources = {k: ExtracellularCurrent(x0, z0, rho=rho_e, mode=k) for k in ['cathode', 'anode']}
         Ithrs = {k: np.array([np.abs(fiber.titrate(v, x, toffset, PRF, DC)) for x in durations])  # A
                  for k, v in psources.items()}
-        Irh_ref = 0.36e-3  # A
-        Ithrs['cathode ref'] = np.array([96.3, 9.44, 1.89, 1.00, 1.00]) * Irh_ref  # A
+        I0_ref = 0.36e-3  # A
+        Ithrs['cathode ref'] = np.array([96.3, 9.44, 1.89, 1.00, 1.00]) * I0_ref  # A
 
         # Plot strength-duration curve
         fig2 = strengthDurationCurve(fiber, durations, Ithrs, Ifactor=1e3, scale='log')
 
         # Compare output metrics to reference
         SDcurve_sim_metrics = {  # Output metrics
-            'Qmin': durations[0] * Ithrs['cathode'][0],
-            'Irh': Ithrs['cathode'][-1],
+            'Q0': durations[0] * Ithrs['cathode'][0],
+            'I0': Ithrs['cathode'][-1],
             'P1us': Ithrs['anode'][0] / Ithrs['cathode'][0],
             'P10ms': Ithrs['anode'][-1] / Ithrs['cathode'][-1]
         }
         SDcurve_ref_metrics = {  # Reference metrics (from Reilly 1985, fig 6 and table 1)
-            'Qmin': 34.7e-9,  # minimum cathodic charge Qmin (C)
-            'Irh': Irh_ref,   # rheobase cathodic current (A)
-            'P1us': 4.2,      # polarity selectivity ratio P for 1 us pulse
-            'P10ms': 5.6      # polarity selectivity ratio P for 10 ms pulse
+            'Q0': 34.7e-9,  # rheobase cathodic charge Q0 (C)
+            'I0': I0_ref,   # rheobase cathodic current (A)
+            'P1us': 4.2,    # polarity selectivity ratio P for 1 us pulse
+            'P10ms': 5.6    # polarity selectivity ratio P for 10 ms pulse
         }
 
         # Log metrics
@@ -172,7 +176,7 @@ class TestSenn(TestBase):
     def test_Reilly1987(self, is_profiled=False):
         ''' Run SENN fiber simulation with identical parameters as in Reilly 1987 (base-case),
             and compare resulting output indexes:
-                - minimum cathodic charge
+                - rheobase cathodic charge
                 - rheobase cahtodic current
                 - Polarity selectivity ratio P for 10 us and 1 ms cathodic pulses
                 - S/D time constant
@@ -208,6 +212,7 @@ class TestSenn(TestBase):
         durations = np.array([1, 5, 10, 50, 100, 500, 1000, 2000], dtype=float) * 1e-6  # s
         Ithrs = {k: np.array([np.abs(fiber.titrate(v, x, toffset, PRF, DC)) for x in durations])  # A
                  for k, v in psources.items()}
+        Qthrs = {k: v * durations for k, v in Ithrs.items()}  # C
 
         # Plot strength-duration curve
         fig = strengthDurationCurve(fiber, durations, Ithrs, Ifactor=1e3, scale='log')
@@ -215,17 +220,18 @@ class TestSenn(TestBase):
         # Compare output metrics to reference
         i10us, i1ms = 2, 6
         SDcurve_sim_metrics = {  # Output metrics
-            'Qmin': durations[0] * Ithrs['cathode'][0],  # C
-            'Irh': Ithrs['cathode'][-1],  # A
+            'Q0': Qthrs['cathode'].min(),  # C
+            'I0': Ithrs['cathode'].min(),  # A
             'P10us': Ithrs['anode'][i10us] / Ithrs['cathode'][i10us],
             'P1ms': Ithrs['anode'][i1ms] / Ithrs['cathode'][i1ms]
         }
+        SDcurve_sim_metrics['tau_e'] = SDcurve_sim_metrics['Q0'] / SDcurve_sim_metrics['I0']  # s
         SDcurve_ref_metrics = {  # Reference outputs (from Reilly 1987, table 2)
-            'Qmin': 15.9e-9,   # minimum cathodic charge Qmin (C)
-            'Irh': 0.18e-3,    # rheobase cathodic current (A)
+            'Q0': 15.9e-9,     # rheobase cathodic charge Q0 (C)
+            'I0': 0.18e-3,     # rheobase cathodic current (A)
             'P10us': 4.66,     # polarity selectivity ratio P for 10 us
             'P1ms': 5.53,      # polarity selectivity ratio P for 10 us
-            'tau_e': 92.3e-6,  # S/D time constant tau_e (us)
+            'tau_e': 92.3e-6,  # S/D time constant tau_e (s)
         }
         logger.info(f'Comparing metrics for strength-duration curves')
         self.logOutputMetrics(SDcurve_sim_metrics, SDcurve_ref_metrics)
