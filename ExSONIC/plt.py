@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-04 10:14:31
+# @Last Modified time: 2019-09-20 11:30:51
 
 import numpy as np
 import pandas as pd
@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 
 from PySONIC.plt import GroupedTimeSeries, CompTimeSeries
 from PySONIC.neurons import getPointNeuron
-from PySONIC.utils import si_format
+from PySONIC.utils import si_format, getPow10
 
 from .core import ExtendedSonicNode, VextSennFiber, IinjSennFiber, SonicSennFiber
 from .utils import loadData, chronaxie
@@ -191,30 +191,31 @@ class SectionCompTimeSeries(CompTimeSeries):
         return colors
 
 
-def strengthDurationCurve(fiber, durations, Ithrs, Ifactor=1, scale='log', fs=12):
+def strengthDurationCurve(fiber, durations, thrs, yfactor=1, scale='log', unit='A', name='current',
+                          plot_chr=True, fs=12):
     fig, ax = plt.subplots()
-    prefix = si_format(1 / Ifactor, space='')[1:]
+    prefix = si_format(1 / yfactor, space='')[1:]
     ax.set_title(f'{fiber} - strength-duration curve', fontsize=fs)
     ax.set_xlabel('duration (us)', fontsize=fs)
-    ax.set_ylabel(f'threshold current ({prefix}A)', fontsize=fs)
+    ax.set_ylabel(f'threshold {name} ({prefix}{unit})', fontsize=fs)
     if scale == 'log':
         ax.set_xscale('log')
         ax.set_yscale('log')
-    tau = {k: chronaxie(durations, Ithrs[k]) for k in Ithrs.keys()}  # s
-    if np.all(Ithrs[list(Ithrs.keys())[0]] < 0.):
-        Ithrs = {k: -v for k, v in Ithrs.items()}
-    for i, k in enumerate(Ithrs.keys()):
-        ax.plot(durations * 1e6, Ithrs[k] * Ifactor, color=f'C{i}', label=k)
-        ax.axvline(tau[k] * 1e6, linestyle='--', color=f'C{i}')
+    if np.all(thrs[list(thrs.keys())[0]] < 0.):
+        thrs = {k: -v for k, v in thrs.items()}
+    for i, k in enumerate(thrs.keys()):
+        ax.plot(durations * 1e6, thrs[k] * yfactor, color=f'C{i}', label=k)
+        if plot_chr:
+            ax.axvline(chronaxie(durations, thrs[k]) * 1e6, linestyle='--', color=f'C{i}')
     if scale != 'log':
         ax.set_xlim(0., durations.max() * 1e6)
         ax.set_ylim(0., ax.get_ylim()[1])
     else:
         ax.set_xlim(durations.min() * 1e6, durations.max() * 1e6)
-        Imin = min([v.min() for v in Ithrs.values()])
-        Imax = max([v.max() for v in Ithrs.values()])
-        ymin = np.power(10, np.floor(np.log10(Imin * Ifactor)))
-        ymax = np.power(10, np.ceil(np.log10(Imax * Ifactor)))
+        ymin = min([np.nanmin(v) for v in thrs.values()])
+        ymax = max([np.nanmax(v) for v in thrs.values()])
+        ymin = getPow10(ymin * yfactor ,'down')
+        ymax = getPow10(ymax * yfactor ,'up')
         ax.set_ylim(ymin, ymax)
     for item in ax.get_xticklabels() + ax.get_yticklabels():
         item.set_fontsize(fs)

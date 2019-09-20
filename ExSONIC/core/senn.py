@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-10 14:02:39
+# @Last Modified time: 2019-09-20 11:01:34
 
 import abc
 import pickle
@@ -292,6 +292,8 @@ class SennFiber(metaclass=abc.ABCMeta):
         Amin, Amax = self.getArange(psource)
         A_conv_thr = np.abs(Amax - Amin) / 1e4
         Athr = pow2Search(self.titrationFunc, [psource, tstim, toffset, PRF, DC], 1, Amin, Amax)
+        if np.isnan(Athr):
+            return Athr
         Arange = (Athr / 2, Athr)
         return binarySearch(
             self.titrationFunc, [psource, tstim, toffset, PRF, DC], 1, Arange, A_conv_thr)

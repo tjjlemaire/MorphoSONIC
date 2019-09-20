@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-10 15:15:42
+# @Last Modified time: 2019-09-20 11:51:53
 
 import numpy as np
 
@@ -151,7 +151,7 @@ class TestSenn(TestBase):
         Ithrs['cathode ref'] = np.array([96.3, 9.44, 1.89, 1.00, 1.00]) * I0_ref  # A
 
         # Plot strength-duration curve
-        fig2 = strengthDurationCurve(fiber, durations, Ithrs, Ifactor=1e3, scale='log')
+        fig2 = strengthDurationCurve(fiber, durations, Ithrs, yfactor=1e3, scale='log')
 
         # Compare output metrics to reference
         SDcurve_sim_metrics = {  # Output metrics
@@ -215,7 +215,7 @@ class TestSenn(TestBase):
         Qthrs = {k: v * durations for k, v in Ithrs.items()}  # C
 
         # Plot strength-duration curve
-        fig = strengthDurationCurve(fiber, durations, Ithrs, Ifactor=1e3, scale='log')
+        fig = strengthDurationCurve(fiber, durations, Ithrs, yfactor=1e3, scale='log')
 
         # Compare output metrics to reference
         i10us, i1ms = 2, 6
@@ -295,7 +295,7 @@ class TestSenn(TestBase):
         Qthrs_sim = Ithrs_sim * durations  # C
 
         # Plot strength-duration curve
-        fig2 = strengthDurationCurve(fiber, durations, {'ref': Ithrs_ref, 'sim': Ithrs_sim}, Ifactor=1e9, scale='lin')
+        fig2 = strengthDurationCurve(fiber, durations, {'ref': Ithrs_ref, 'sim': Ithrs_sim}, yfactor=1e9, scale='lin')
 
         # Compare output metrics to reference
         SDcurve_sim_metrics = {  # Output metrics
@@ -335,14 +335,15 @@ class TestSenn(TestBase):
         toffset = 3e-3  # s
         PRF = 100.      # Hz
         DC = 1.         # -
+        inode = nnodes // 2  # central node
 
         # Create extracellular current source
-        psource = NodeAcousticSource(nnodes // 2, Fdrive)
+        psource = NodeAcousticSource(inode, Fdrive)
 
         # Titrate for a specific duration and simulate fiber at threshold US amplitude
         logger.info(f'Running titration for {si_format(tstim)}s pulse')
         Athr = fiber.titrate(psource, tstim, toffset, PRF, DC)  # Pa
-        data, meta = fiber.simulate(psource, Athr, tstim, toffset, PRF, DC)
+        data, meta = fiber.simulate(psource, 1.2 * Athr, tstim, toffset, PRF, DC)
 
         # Compute conduction velocity and spike amplitude from resulting data
         cv = fiber.getConductionVelocity(data)  # m/s
@@ -359,6 +360,51 @@ class TestSenn(TestBase):
         # Plot membrane potential traces for specific duration at threshold current
         fig1 = SectionCompTimeSeries([(data, meta)], 'Qm', fiber.ids).render()
         fig2 = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
+
+        # Clear fiber model to avoid NEURON integration errors
+        fiber.clear()
+
+        # Define durations vector for titrations curves
+        durations = np.logspace(-5, -2, 30)  # s
+
+        # Titration curves for different US frequencies
+        Athrs_vs_Fdrive = {}
+        for y in np.array([20, 500, 4e3]) * 1e3:
+            id = f'{si_format(y, 0, space=" ")}Hz'
+            fiber = SonicSennFiber(
+                pneuron, fiberD, nnodes, a=a, Fdrive=y, rs=rho_a, nodeL=nodeL, d_ratio=d_ratio)
+            psource = NodeAcousticSource(inode, y)
+            Athrs_vs_Fdrive[id] = np.array([fiber.titrate(psource, t, toffset, PRF, DC) for t in durations])  # Pa
+            fiber.clear()
+        fig3 = strengthDurationCurve(
+            fiber, durations, Athrs_vs_Fdrive, yfactor=1e-3, scale='log',
+            name='amplitude', unit='Pa', plot_chr=False)
+
+        psource = NodeAcousticSource(inode, Fdrive)
+
+        # Titration curves for different sonophore radii
+        Athrs_vs_a = {}
+        for y in np.array([16., 32., 64.]) * 1e-9:
+            id = f'{si_format(y, 0, space=" ")}m'
+            fiber = SonicSennFiber(
+                pneuron, fiberD, nnodes, a=y, Fdrive=Fdrive, rs=rho_a, nodeL=nodeL, d_ratio=d_ratio)
+            Athrs_vs_a[id] = np.array([fiber.titrate(psource, t, toffset, PRF, DC) for t in durations])  # Pa
+            fiber.clear()
+        fig4 = strengthDurationCurve(
+            fiber, durations, Athrs_vs_a, yfactor=1e-3, scale='log',
+            name='amplitude', unit='Pa', plot_chr=False)
+
+        # Titration curves for different fiber diameters
+        Athrs_vs_fiberD = {}
+        for y in np.array([5., 10., 20.]) * 1e-6:
+            id = f'{si_format(y, 0, space=" ")}m'
+            fiber = SonicSennFiber(
+                pneuron, y, nnodes, a=a, Fdrive=Fdrive, rs=rho_a, nodeL=nodeL, d_ratio=d_ratio)
+            Athrs_vs_fiberD[id] = np.array([fiber.titrate(psource, t, toffset, PRF, DC) for t in durations])  # Pa
+            fiber.clear()
+        fig5 = strengthDurationCurve(
+            fiber, durations, Athrs_vs_fiberD, yfactor=1e-3, scale='log',
+            name='amplitude', unit='Pa', plot_chr=False)
 
 
 if __name__ == '__main__':
