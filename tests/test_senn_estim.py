@@ -3,84 +3,19 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-20 11:51:53
+# @Last Modified time: 2019-09-22 18:47:34
 
 import numpy as np
 
 from PySONIC.neurons import getPointNeuron
-from PySONIC.utils import logger, si_format, isIterable
-from PySONIC.test import TestBase
-from ExSONIC.core import VextSennFiber, IinjSennFiber, ExtracellularCurrent, IntracellularCurrent, SonicSennFiber, NodeAcousticSource
+from PySONIC.utils import logger, si_format
+from ExSONIC.core import VextSennFiber, IinjSennFiber, ExtracellularCurrent, IntracellularCurrent
+from ExSONIC.test import TestFiber
 from ExSONIC.plt import SectionCompTimeSeries, strengthDurationCurve
 from ExSONIC.utils import chronaxie
 
 
-class TestSenn(TestBase):
-
-    @staticmethod
-    def relativeChange(x, xref):
-        if isIterable(x):
-            x, xref = np.asarray(x), np.asarray(xref)
-        return np.mean((x - xref) / xref)
-
-    @classmethod
-    def logOutputMetrics(cls, sim_metrics, ref_metrics=None):
-        ''' Log output metrics. '''
-        logfmts = {
-            'Q0': {
-                'name': 'rheobase charge',
-                'fmt': lambda x: f'{si_format(np.abs(x), 1)}C'
-            },
-            'I0': {
-                'name': 'rheobase current',
-                'fmt': lambda x: f'{si_format(np.abs(x), 1)}A'
-            },
-            'Ithr': {
-                'name': 'threshold current',
-                'fmt': lambda x: f'{si_format(np.abs(x), 1)}A'
-            },
-            'cv': {
-                'name': 'conduction velocity',
-                'fmt': lambda x: f'{x:.1f} m/s'
-            },
-            'dV': {
-                'name': 'spike amplitude',
-                'fmt': lambda x: '{:.1f}-{:.1f} mV'.format(*x)
-            },
-            'Athr': {
-                'name': 'threshold US amplitude',
-                'fmt': lambda x: f'{si_format(x, 2)}Pa'
-            },
-            'chr': {
-                'name': 'chronaxie',
-                'fmt': lambda x: f'{si_format(x, 1)}s'
-            },
-            'tau_e': {
-                'name': 'S/D time constant',
-                'fmt': lambda x: f'{si_format(x, 1)}s'
-            }
-        }
-        for t in [1e0, 1e1, 1e3, 1e4]:
-            key = f'P{si_format(t * 1e-6, 0, space="")}s'
-            desc = f'{si_format(t * 1e-6, 0)}s'
-            logfmts[key] = {
-                'name': f'polarity selectivity ratio @ {desc}',
-                'fmt': lambda x: f'{x:.2f}'
-            }
-
-        for k, v in logfmts.items():
-            warn = False
-            if k in sim_metrics:
-                log = f"--- {v['name']}: {k} = {v['fmt'](sim_metrics[k])}"
-                if ref_metrics is not None and k in ref_metrics:
-                    rel_change = cls.relativeChange(sim_metrics[k], ref_metrics[k])
-                    if np.abs(rel_change) > 0.05:
-                        warn = True
-                    log += f" (ref = {v['fmt'](ref_metrics[k])}, {rel_change * 100:.2f}% change)"
-                if warn:
-                    logger.warning(log)
-                else:
-                    logger.info(log)
+class TestSennEstim(TestFiber):
 
     def test_Reilly1985(self, is_profiled=False):
         ''' Run SENN fiber simulation with identical parameters as in Reilly 1985, Fig2.,
@@ -139,7 +74,7 @@ class TestSenn(TestBase):
         }
 
         # Plot membrane potential traces for specific duration at threshold current
-        fig = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
+        fig1 = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
 
         # Compute and plot strength-duration curve with both polarities
         fiber.reset()
@@ -312,101 +247,7 @@ class TestSenn(TestBase):
         logger.info(f'Comparing metrics for strength-duration curves')
         self.logOutputMetrics(SDcurve_sim_metrics, SDcurve_ref_metrics)
 
-    def test_ASTIM(self, is_profiled=False):
-        ''' Run SENN fiber ASTIM simulation. '''
-        logger.info('Test: SENN model ASTIM simulation')
-
-        # Fiber model parameters
-        pneuron = getPointNeuron('FH')  # mammalian fiber membrane equations
-        fiberD = 10e-6                  # fiber diameter (m)
-        nnodes = 5
-        rho_a = 54.7                    # axoplasm resistivity (Ohm.cm)
-        d_ratio = 0.6                   # axon / fiber diameter ratio
-        nodeL = 1.5e-6                  # node length (m)
-        a = 32e-9                       # sonophore diameter (m)
-        Fdrive = 500e3                  # US frequency (Hz)
-        fs = 1                          # sonophore membrane coverage (-)
-        fiber = SonicSennFiber(
-            pneuron, fiberD, nnodes, a=a, Fdrive=Fdrive, rs=rho_a, nodeL=nodeL, d_ratio=d_ratio)
-
-        # US stimulation parameters
-        Astim = 100e3   # Pa
-        tstim = 3e-3   # s
-        toffset = 3e-3  # s
-        PRF = 100.      # Hz
-        DC = 1.         # -
-        inode = nnodes // 2  # central node
-
-        # Create extracellular current source
-        psource = NodeAcousticSource(inode, Fdrive)
-
-        # Titrate for a specific duration and simulate fiber at threshold US amplitude
-        logger.info(f'Running titration for {si_format(tstim)}s pulse')
-        Athr = fiber.titrate(psource, tstim, toffset, PRF, DC)  # Pa
-        data, meta = fiber.simulate(psource, 1.2 * Athr, tstim, toffset, PRF, DC)
-
-        # Compute conduction velocity and spike amplitude from resulting data
-        cv = fiber.getConductionVelocity(data)  # m/s
-        dVmin, dVmax = fiber.getSpikeAmp(data)  # mV
-        sim_metrics = {
-            'Athr': Athr,                             # Pa
-            'cv': fiber.getConductionVelocity(data),  # m/s
-            'dV': fiber.getSpikeAmp(data)             # mV
-        }
-
-        # Log output metrics
-        self.logOutputMetrics(sim_metrics)
-
-        # Plot membrane potential traces for specific duration at threshold current
-        fig1 = SectionCompTimeSeries([(data, meta)], 'Qm', fiber.ids).render()
-        fig2 = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
-
-        # Clear fiber model to avoid NEURON integration errors
-        fiber.clear()
-
-        # Define durations vector for titrations curves
-        durations = np.logspace(-5, -2, 30)  # s
-
-        # Titration curves for different US frequencies
-        Athrs_vs_Fdrive = {}
-        for y in np.array([20, 500, 4e3]) * 1e3:
-            id = f'{si_format(y, 0, space=" ")}Hz'
-            fiber = SonicSennFiber(
-                pneuron, fiberD, nnodes, a=a, Fdrive=y, rs=rho_a, nodeL=nodeL, d_ratio=d_ratio)
-            psource = NodeAcousticSource(inode, y)
-            Athrs_vs_Fdrive[id] = np.array([fiber.titrate(psource, t, toffset, PRF, DC) for t in durations])  # Pa
-            fiber.clear()
-        fig3 = strengthDurationCurve(
-            fiber, durations, Athrs_vs_Fdrive, yfactor=1e-3, scale='log',
-            name='amplitude', unit='Pa', plot_chr=False)
-
-        psource = NodeAcousticSource(inode, Fdrive)
-
-        # Titration curves for different sonophore radii
-        Athrs_vs_a = {}
-        for y in np.array([16., 32., 64.]) * 1e-9:
-            id = f'{si_format(y, 0, space=" ")}m'
-            fiber = SonicSennFiber(
-                pneuron, fiberD, nnodes, a=y, Fdrive=Fdrive, rs=rho_a, nodeL=nodeL, d_ratio=d_ratio)
-            Athrs_vs_a[id] = np.array([fiber.titrate(psource, t, toffset, PRF, DC) for t in durations])  # Pa
-            fiber.clear()
-        fig4 = strengthDurationCurve(
-            fiber, durations, Athrs_vs_a, yfactor=1e-3, scale='log',
-            name='amplitude', unit='Pa', plot_chr=False)
-
-        # Titration curves for different fiber diameters
-        Athrs_vs_fiberD = {}
-        for y in np.array([5., 10., 20.]) * 1e-6:
-            id = f'{si_format(y, 0, space=" ")}m'
-            fiber = SonicSennFiber(
-                pneuron, y, nnodes, a=a, Fdrive=Fdrive, rs=rho_a, nodeL=nodeL, d_ratio=d_ratio)
-            Athrs_vs_fiberD[id] = np.array([fiber.titrate(psource, t, toffset, PRF, DC) for t in durations])  # Pa
-            fiber.clear()
-        fig5 = strengthDurationCurve(
-            fiber, durations, Athrs_vs_fiberD, yfactor=1e-3, scale='log',
-            name='amplitude', unit='Pa', plot_chr=False)
-
 
 if __name__ == '__main__':
-    tester = TestSenn()
+    tester = TestSennEstim()
     tester.main()

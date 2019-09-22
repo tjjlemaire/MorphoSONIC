@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 11:34:09
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-10 15:02:00
+# @Last Modified time: 2019-09-22 18:06:19
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -13,7 +13,7 @@ from PySONIC.core import NeuronalBilayerSonophore
 from PySONIC.test import TestBase
 from PySONIC.neurons import getNeuronsDict
 from PySONIC.plt import GroupedTimeSeries
-from PySONIC.utils import si_format, pow10_format
+from PySONIC.utils import logger, si_format, pow10_format, isIterable
 
 from .core import IintraNode, SonicNode
 
@@ -197,3 +197,75 @@ class TestNmodlAutoVsManual(TestComp):
             'adaptive time step' if dt is None else 'dt = ${}$ ms'.format(pow10_format(dt * 1e3)))
 
         return data, meta, tcomp, comp_title
+
+
+class TestFiber(TestBase):
+
+    @staticmethod
+    def relativeChange(x, xref):
+        if isIterable(x):
+            x, xref = np.asarray(x), np.asarray(xref)
+        return np.mean((x - xref) / xref)
+
+    @classmethod
+    def logOutputMetrics(cls, sim_metrics, ref_metrics=None):
+        ''' Log output metrics. '''
+        logfmts = {
+            'Q0': {
+                'name': 'rheobase charge',
+                'fmt': lambda x: f'{si_format(np.abs(x), 1)}C'
+            },
+            'I0': {
+                'name': 'rheobase current',
+                'fmt': lambda x: f'{si_format(np.abs(x), 1)}A'
+            },
+            'Ithr': {
+                'name': 'threshold current',
+                'fmt': lambda x: f'{si_format(np.abs(x), 1)}A'
+            },
+            'cv': {
+                'name': 'conduction velocity',
+                'fmt': lambda x: f'{x:.1f} m/s'
+            },
+            'dV': {
+                'name': 'spike amplitude',
+                'fmt': lambda x: '{:.1f}-{:.1f} mV'.format(*x)
+            },
+            'Athr': {
+                'name': 'threshold US amplitude',
+                'fmt': lambda x: f'{si_format(x, 2)}Pa'
+            },
+            'uthr': {
+                'name': 'threshold transducer particle velocity',
+                'fmt': lambda x: f'{si_format(x, 2)}m/s'
+            },
+            'chr': {
+                'name': 'chronaxie',
+                'fmt': lambda x: f'{si_format(x, 1)}s'
+            },
+            'tau_e': {
+                'name': 'S/D time constant',
+                'fmt': lambda x: f'{si_format(x, 1)}s'
+            }
+        }
+        for t in [1e0, 1e1, 1e3, 1e4]:
+            key = f'P{si_format(t * 1e-6, 0, space="")}s'
+            desc = f'{si_format(t * 1e-6, 0)}s'
+            logfmts[key] = {
+                'name': f'polarity selectivity ratio @ {desc}',
+                'fmt': lambda x: f'{x:.2f}'
+            }
+
+        for k, v in logfmts.items():
+            warn = False
+            if k in sim_metrics:
+                log = f"--- {v['name']}: {k} = {v['fmt'](sim_metrics[k])}"
+                if ref_metrics is not None and k in ref_metrics:
+                    rel_change = cls.relativeChange(sim_metrics[k], ref_metrics[k])
+                    if np.abs(rel_change) > 0.05:
+                        warn = True
+                    log += f" (ref = {v['fmt'](ref_metrics[k])}, {rel_change * 100:.2f}% change)"
+                if warn:
+                    logger.warning(log)
+                else:
+                    logger.info(log)

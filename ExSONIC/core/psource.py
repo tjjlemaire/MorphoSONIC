@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-22 16:57:45
+# @Last Modified time: 2019-09-22 18:11:42
 
 import abc
 import numpy as np
@@ -191,51 +191,60 @@ class NodeAcousticSource(IntracellularPointSource, AcousticPointSource):
         return f'{IntracellularPointSource.__repr__(self)[:-1]}, {self.Fdrive * 1e-3:.0f} kHz)'
 
     def computeNodesAmps(self, fiber, A):
-        return IntracellularPointSource.computeNodesAmps(self, fiber, A) * self.conv_factor
+        return IntracellularPointSource.computeNodesAmps(self, fiber, A)
 
     def filecodes(self, A):
         return {**{'psource': f'ps(node{self.inode})'}, **super().filecodes(A)}
 
 
-class PlanarDiskTransducerAcousticSource(ExtracellularPointSource, AcousticPointSource):
+class PlanarDiskTransducerSource(ExtracellularPointSource):
     ''' Acoustic source coming from a distant disk planar transducer.
         For now, acoustic propagation is only computed along the transducer normal axis.
         The rest of the field is computed assuming radial symmetry.
     '''
 
-    def __init__(self, x, z, Fdrive, rho=1204.1, c=1515.0, theta=0, zf=0, r=2e-3):
+    modality = {'name': 'u', 'unit': 'm/s'}
+    conv_factor = 1e0
+
+    def __init__(self, x, z, Fdrive, rho=1204.1, c=1515.0, theta=0, r=2e-3):
         ''' Initialization.
 
             :param rho: medium density (kg/m3)
             :param c: medium speed of sound (m/s)
             :param theta: transducer angle of incidence (radians)
-            :param zf: fiber initial location (m)
             :param r: transducer radius (m)
         '''
-        ExtracellularPointSource.__init__(self, x, z)
-        AcousticPointSource.__init__(self, Fdrive)
+        super().__init__(x, z)
+        self.Fdrive = Fdrive  # Hz
         self.rho = rho
         self.c = c
-        self.zf = zf
         self.theta = theta
         self.r = r
-        for k in ['rho', 'c', 'theta', 'r']:
+        for k in ['rho', 'c', 'theta']:
             self.attrkeys.append(k)
 
         # Angular wave number
         self.kf = 2 * np.pi * self.Fdrive / self.c
 
-    def normalAxisAmp(self, z, u):
-        ''' Compute the acoustic amplitude at a given distance along the transducer normal axis.
+    def relNormalAxisAmp(self, z):
+        ''' Compute the relative acoustic amplitude at a given distance along the transducer normal axis.
 
             :param z: distance from transducer (m)
-            :param u: particle velocity normal to the transducer surface.
-            :return: acoustic amplitude (Pa)
+            :return: acoustic amplitude per particle velocity (Pa.s/m)
         '''
         j = complex(0, 1)  # imaginary number
         ez = np.exp(j * self.kf * z)
         ezr = np.exp(j * self.kf * np.sqrt(z**2 + self.r**2))
-        return self.rho * self.c * u * (ez - ezr)
+        return self.rho * self.c * (ez - ezr)
+
+    def normalAxisAmp(self, z, u):
+        ''' Compute the acoustic amplitude at a given distance along the transducer normal axis.
+
+            :param z: distance from transducer (m)
+            :param u: particle velocity normal to the transducer surface (m/s)
+            :return: acoustic amplitude (Pa)
+        '''
+        return u * self.relNormalAxisAmp(z)
 
     def computeNodesAmps(self, fiber, u):
         ''' Compute acoustic amplitude value at all fiber nodes, given
@@ -244,8 +253,7 @@ class PlanarDiskTransducerAcousticSource(ExtracellularPointSource, AcousticPoint
             :param fiber: fiber model object
             :param u: particle velocity normal to the transducer surface.
             :return: vector of acoustic amplitude at the nodes (Pa)
-         '''
-
+        '''
         # Get fiber nodes coordinates
         node_coords = np.array([fiber.getNodeCoords(), np.zeros(fiber.nnodes)])
 
@@ -255,11 +263,22 @@ class PlanarDiskTransducerAcousticSource(ExtracellularPointSource, AcousticPoint
         # Compute amplitudes assuming radial symmetry (i.e. as if every point was along the normal axis)
         amps = self.normalAxisAmp(self.distance(*node_coords), u)
 
-        # Return magnitude of complex vector, converted to appropriate scale
-        return np.abs(amps) * self.conv_factor  # kPa
+        # Return magnitude of complex vector
+        return np.abs(amps)  # Pa
 
     def computeSourceAmp(self, fiber, A):
-        return NotImplementedError
+        ''' Compute transducer particle velocity amplitude from target acoustic amplitude
+            felt by the closest fiber node along the normal axis.
+
+            :param fiber: fiber model object
+            :param A: target acoustic amplitude (Pa)
+            :return: particle velocity normal to the transducer surface.
+        '''
+        # Compute distance of closest node to point-source
+        rmin = min(self.distance(fiber.getNodeCoords(), 0.))  # m
+
+        # Compute the particle velocity needed to generate the acoustic amplitude value at this node
+        return A / np.abs(self.relNormalAxisAmp(rmin))  # m/s
 
     def filecodes(self, u):
         return {

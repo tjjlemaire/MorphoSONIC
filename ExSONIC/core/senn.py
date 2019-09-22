@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-20 11:01:34
+# @Last Modified time: 2019-09-22 18:23:22
 
 import abc
 import pickle
@@ -488,7 +488,7 @@ class EStimSennFiber(SennFiber):
 class VextSennFiber(EStimSennFiber):
 
     simkey = 'senn_Vext'
-    A_range = (1e0, 1e3)  # mV
+    A_range = (1e0, 1e4)  # mV
 
     def preProcessAmps(self, Ve):
         ''' Convert array of extracellular potentials into equivalent intracellular injected currents.
@@ -577,9 +577,9 @@ class SonicSennFiber(SennFiber):
         '''
         self.amps = self.preProcessAmps(amps)
         logger.debug('Acoustic pressures: A = [{}] kPa'.format(
-            ', '.join([f'{A:.2f}' for A in self.amps])))
+            ', '.join([f'{A * 1e-3:.2f}' for A in self.amps])))
         for i, sec in enumerate(self.sections.values()):
-            setattr(sec, 'Adrive_{}'.format(self.mechname), self.amps[i])
+            setattr(sec, 'Adrive_{}'.format(self.mechname), self.amps[i] * 1e-3)
 
     def getArange(self, psource):
         return [psource.computeSourceAmp(self, x) for x in self.A_range]
