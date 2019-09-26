@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-22 19:20:33
+# @Last Modified time: 2019-09-26 12:24:13
 
 import numpy as np
 
@@ -35,7 +35,6 @@ class TestSennAstim(TestFiber):
             pneuron, fiberD, nnodes, a=a, Fdrive=Fdrive, rs=rho_a, nodeL=nodeL, d_ratio=d_ratio)
 
         # US stimulation parameters
-        Astim = 100e3   # Pa
         tstim = 3e-3   # s
         toffset = 3e-3  # s
         PRF = 100.      # Hz
