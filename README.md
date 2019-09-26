@@ -20,14 +20,18 @@ The package also contains several classes defining multi-compartmental  model ex
 At the nanometer scale, an `ExtendedSonicNode` class that simulate the behavior of a **nanoscale spatially-extended SONIC model** with two coupled compartments (i.e. nodes with geometrical extents): an "ultrasound-responsive" sonophore and an "ultrasound-resistant" surrounding membrane. As this model is radially symmetric, some adaptation was needed in order to represent it within the *NEURON* environment (check [this link](NEURON_radial_geometry.md) for more details).
 
 At the morphological scale, several **fiber** classes define spatially-extended fiber models:
-- `SennFiber` defines ...
-- `VextSennFiber` defines ...
-- `IinjSennFiber` defines ...
-- `SonicSennFiber` defines ...
+- `SennFiber` defines a generic interface with the implementation of a spatially-extended nonlinear node model.
+- `VextSennFiber` implements the required methods to simulate the model with extracellular potentials resulting from a stimulation current injected at a distant source.
+- `IinjSennFiber` implements the required methods to simulate the model with intracellular currents injected at a given node.
+- `SonicSennFiber` implements a SENN fiber in which each node represents a local instance of the SONIC model. It thus allows to simulate the fiber model for various acoustic pressure distributions, resulting either from local abstract sources or from distant, more realistic physical sources (e.g. transducers).
 
 Moreover, several **source** classes are implemented to compute spatially-distributed inputs from various source types, used to drive the models:
-- `PointSource`
-- ...
+- `PointSource`, `IntracellularPointSource` and `ExtracellularPointSource` define interfaces to work with generic, intracellular (i.e. at a given node) and extracellular (i.e. at some 2D location) point source objects.
+- `CurrentPointSource` and `AcousticPointSource` enrich `PointSource` with methods and attributes specific to electrical currents and acoustic pressures, respectively.
+- `ExtracellularCurrent` defines an extracellular point-source electrode in a homogenous medium, injecting a current at a given location w.r.t. the fiber
+- `IntracellularCurrent` defines an intracellular point-source electrode, injecting a current at the center of a given node
+- `NodeAcousticSource` defines an abstract acoustic perturbation applied over the membrane of a given node
+- `PlanarDiskTransducerSource` defines an extracellular acoustic point-source coming from a planar disk ultrasonic transducer in a homogenous medium, with a given surface normal particle displacement velocity on its surface.
 
 ### Membrane mechanisms (NMODL)
 
@@ -280,7 +284,7 @@ The SONIC model predicts a time-varying capacitance introducing a nonlinear disc
 
 Here is a list of future developments:
 
-- [ ] Spatial expansion into morphological realistic fiber models
+- [ ] Spatial expansion into morphologically realistic fiber models
 - [ ] Model validation against experimental data (leech neurons)
 
 # Authors
