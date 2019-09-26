@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-22 18:23:22
+# @Last Modified time: 2019-09-25 14:24:44
 
 import abc
 import pickle
@@ -509,6 +509,12 @@ class IinjSennFiber(EStimSennFiber):
 
     simkey = 'senn_Iinj'
     A_range = (1e-11, 1e-7)  # nA
+
+    def __init__(self, *args, **kwargs):
+        # Allowing for custom connection scheme
+        if 'connector' in kwargs:
+            self.connector = kwargs.pop('connector')
+        super().__init__(*args, **kwargs)
 
     def preProcessAmps(self, Iinj):
         ''' Assign array of injeccted injected currents.

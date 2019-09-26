@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-10 14:00:18
+# @Last Modified time: 2019-09-26 09:12:32
 # @Author: Theo Lemaire
 # @Date:   2018-08-21 19:48:04
 # @Last Modified by:   Theo Lemaire
@@ -17,6 +17,8 @@ import platform
 import numpy as np
 from neuron import h
 from neuron import load_mechanisms as load_mechanisms_native
+
+from PySONIC.utils import logger
 
 # Aliases for NMODL-protected variable names
 NEURON_aliases = {'O': 'O1', 'C': 'C1'}

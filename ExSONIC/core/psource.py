@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-22 18:11:42
+# @Last Modified time: 2019-09-26 09:48:01
 
 import abc
 import numpy as np
@@ -235,7 +235,7 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
         j = complex(0, 1)  # imaginary number
         ez = np.exp(j * self.kf * z)
         ezr = np.exp(j * self.kf * np.sqrt(z**2 + self.r**2))
-        return self.rho * self.c * (ez - ezr)
+        return np.abs(self.rho * self.c * (ez - ezr))
 
     def normalAxisAmp(self, z, u):
         ''' Compute the acoustic amplitude at a given distance along the transducer normal axis.
@@ -261,10 +261,7 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
         node_coords = rotAroundPoint2D(node_coords, self.theta, (self.x, self.z))
 
         # Compute amplitudes assuming radial symmetry (i.e. as if every point was along the normal axis)
-        amps = self.normalAxisAmp(self.distance(*node_coords), u)
-
-        # Return magnitude of complex vector
-        return np.abs(amps)  # Pa
+        return self.normalAxisAmp(self.distance(*node_coords), u)  # Pa
 
     def computeSourceAmp(self, fiber, A):
         ''' Compute transducer particle velocity amplitude from target acoustic amplitude
@@ -278,7 +275,7 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
         rmin = min(self.distance(fiber.getNodeCoords(), 0.))  # m
 
         # Compute the particle velocity needed to generate the acoustic amplitude value at this node
-        return A / np.abs(self.relNormalAxisAmp(rmin))  # m/s
+        return A / self.relNormalAxisAmp(rmin)  # m/s
 
     def filecodes(self, u):
         return {

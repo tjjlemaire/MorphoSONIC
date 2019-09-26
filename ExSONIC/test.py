@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 11:34:09
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-22 18:06:19
+# @Last Modified time: 2019-09-26 08:53:18
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -11,11 +11,11 @@ import matplotlib.gridspec as gridspec
 
 from PySONIC.core import NeuronalBilayerSonophore
 from PySONIC.test import TestBase
-from PySONIC.neurons import getNeuronsDict
+from PySONIC.neurons import getNeuronsDict, getPointNeuron
 from PySONIC.plt import GroupedTimeSeries
 from PySONIC.utils import logger, si_format, pow10_format, isIterable
 
-from .core import IintraNode, SonicNode
+from .core import IintraNode, SonicNode, IinjSennFiber, IntracellularCurrent, SeriesConnector
 
 
 class TestComp(TestBase):
@@ -24,12 +24,108 @@ class TestComp(TestBase):
         computation times. '''
 
     @staticmethod
+    def runSims(pneuron, A, tstim, toffset, PRF, DC, a, Fdrive, dt, atol):
+        return NotImplementedError
+
+    @staticmethod
+    def createFigureBackbone():
+        fig = plt.figure(figsize=(16, 3))
+        gs = gridspec.GridSpec(1, 3, width_ratios=[3, 3, 1])
+        axes = list(map(plt.subplot, gs))
+        for ax in axes:
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            for item in ax.get_xticklabels() + ax.get_xticklabels():
+                item.set_fontsize(10)
+        fig.subplots_adjust(top=0.8, left=0.05, right=0.95)
+        for ax in axes[:2]:
+            ax.set_xlabel('time (ms)', fontsize=10)
+        return fig, axes
+
+    @staticmethod
+    def plotStimPatches(axes, tbounds, tpatch_on, tpatch_off):
+        for ax in axes:
+            ax.legend(fontsize=10, frameon=False)
+            ax.set_xlim(tbounds[0] * 1e3, tbounds[1] * 1e3)
+            for ton, toff in zip(tpatch_on, tpatch_off):
+                ax.axvspan(ton * 1e3, toff * 1e3, edgecolor='none', facecolor='#8A8A8A', alpha=0.2)
+
+    @classmethod
+    def plotTcompHistogram(cls, ax, tcomp):
+
+        # Plot comparative time histogram
+        ax.set_ylabel('comp. time (s)', fontsize=10)
+        ax.set_xticks([1, 2])
+        ax.set_xticklabels(cls.comp_keys)
+        ax.set_yscale('log')
+        ax.set_ylim(1e-3, 1e2)
+        for i, k in enumerate(cls.comp_keys):
+            tc = tcomp[k]
+            idx = i + 1
+            ax.bar(idx, tc, align='center')
+            ax.text(idx, 1.5 * tc, '{}s'.format(si_format(tc, 2, space=' ')),
+                    horizontalalignment='center')
+
+    @classmethod
+    def compare(cls, pneuron, A, tstim, toffset, PRF=100., DC=1., a=None, Fdrive=None,
+                dt=None, atol=None):
+        return NotImplementedError
+
+
+class TestCompNode(TestComp):
+
+    @staticmethod
     def getNeurons():
         pneurons = {}
         for name, neuron_class in getNeuronsDict().items():
             if name not in ('template', 'LeechP', 'LeechT', 'LeechR', 'SW'):
                 pneurons[name] = neuron_class()
         return pneurons
+
+    @classmethod
+    def compare(cls, pneuron, A, tstim, toffset, PRF=100., DC=1., a=None, Fdrive=None,
+                dt=None, atol=None):
+
+        # Run simulations
+        data, meta, tcomp, comp_title = cls.runSims(
+            pneuron, A, tstim, toffset, PRF, DC, a, Fdrive, dt, atol)
+
+        # Extract ref time and stim state
+        ref_t = data[cls.def_key]['t'].values
+        ref_state = data[cls.def_key]['stimstate'].values
+
+        # Determine time onset and stim patches
+        tonset = 0.05 * (np.ptp(ref_t))
+        tpatch_on, tpatch_off = GroupedTimeSeries.getStimPulses(ref_t, ref_state)
+
+        # Create comparative figure backbone
+        fig, axes = cls.createFigureBackbone()
+
+        # Plot charge density and membrane potential profiles
+        ax = axes[0]
+        ax.set_ylim(pneuron.Qbounds() * 1e5)
+        ax.set_ylabel('Qm (nC/cm2)', fontsize=10)
+        ax.set_title('membrane charge density', fontsize=12)
+        ax = axes[1]
+        ax.set_ylim(-150, 70)
+        ax.set_ylabel('$V_{m, eff}$ (mV)', fontsize=10)
+        ax.set_title('effective membrane potential', fontsize=12)
+        for k in cls.comp_keys:
+            tplt = np.insert(data[k]['t'].values, 0, -tonset) * 1e3
+            axes[0].plot(tplt, np.insert(data[k]['Qm'].values, 0, data[k]['Qm'].values[0]) * 1e5, label=k)
+            axes[1].plot(tplt, np.insert(data[k]['Vm'].values, 0, data[k]['Vm'].values[0]), label=k)
+
+        # Plot stim patches on both graphs
+        tbounds = (-tonset, tstim + toffset)
+        cls.plotStimPatches(axes[:-1], tbounds, tpatch_on, tpatch_off)
+
+        # Plot comparative histogram of computation times
+        cls.plotTcompHistogram(axes[2], tcomp)
+
+        # Add figure title
+        fig.suptitle(comp_title, fontsize=18)
+
+        return fig
 
     def test_ESTIM(self, is_profiled=False):
         for name, pneuron in self.getNeurons().items():
@@ -48,87 +144,15 @@ class TestComp(TestBase):
         Fdrive = 500e3   # kHz
         tstim = 100e-3   # s
         toffset = 50e-3  # s
-        DC = 0.5         # (-)
         for name, pneuron in self.getNeurons().items():
             if pneuron.name == 'FH':
                 Adrive = 300e3  # kPa
             else:
                 Adrive = 100e3  # kPa
-            fig = self.compare(pneuron, Adrive, tstim, toffset, DC=DC, a=a, Fdrive=Fdrive)
-
-    @staticmethod
-    def runSims(pneuron, A, tstim, toffset, PRF, DC, a, Fdrive, dt, atol):
-        return NotImplementedError
-
-    @classmethod
-    def compare(cls, pneuron, A, tstim, toffset, PRF=100., DC=1., a=None, Fdrive=None,
-                dt=None, atol=None):
-
-        data, meta, tcomp, comp_title = cls.runSims(
-            pneuron, A, tstim, toffset, PRF, DC, a, Fdrive, dt, atol)
-
-        # Create comparative figure
-        fs = 10
-        fig = plt.figure(figsize=(16, 3))
-        gs = gridspec.GridSpec(1, 3, width_ratios=[3, 3, 1])
-        axes = list(map(plt.subplot, gs))
-        for ax in axes:
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
-            for item in ax.get_xticklabels() + ax.get_xticklabels():
-                item.set_fontsize(fs)
-        fig.subplots_adjust(top=0.8, left=0.05, right=0.95)
-        for ax in axes[:2]:
-            ax.set_xlabel('time (ms)', fontsize=fs)
-        ax = axes[0]
-        ax.set_ylim(pneuron.Qbounds() * 1e5)
-        ax.set_ylabel('Qm (nC/cm2)', fontsize=fs)
-        ax.set_title('membrane charge density', fontsize=fs + 2)
-        ax = axes[1]
-        ax.set_ylim(-150, 70)
-        ax.set_ylabel('$V_{m, eff}$ (mV)', fontsize=fs)
-        ax.set_title('effective membrane potential', fontsize=fs + 2)
-        ax = axes[2]
-        ax.set_ylabel('comp. time (s)', fontsize=fs)
-        ax.set_xticks([1, 2])
-        ax.set_xticklabels(cls.comp_keys)
-        ax.set_yscale('log')
-        ax.set_ylim(1e-3, 1e2)
-
-        # Get pulses timing
-        tpatch_on, tpatch_off = GroupedTimeSeries.getStimPulses(
-            data[cls.def_key]['t'].values, data[cls.def_key]['stimstate'].values)
-
-        # Plot charge density and membrane potential profiles
-        tonset = 0.05 * (np.ptp(data[cls.def_key]['t'].values))
-        for k in cls.comp_keys:
-            tplt = np.insert(data[k]['t'].values, 0, -tonset) * 1e3
-            axes[0].plot(tplt, np.insert(data[k]['Qm'].values, 0, data[k]['Qm'].values[0]) * 1e5, label=k)
-            axes[1].plot(tplt, np.insert(data[k]['Vm'].values, 0, data[k]['Vm'].values[0]), label=k)
-
-        # Plot stim patches on both graphs
-        for ax in axes[:2]:
-            ax.legend(fontsize=fs, frameon=False)
-            ax.set_xlim(-tonset * 1e3, (tstim + toffset) * 1e3)
-            for ton, toff in zip(tpatch_on, tpatch_off):
-                ax.axvspan(ton * 1e3, toff * 1e3, edgecolor='none', facecolor='#8A8A8A', alpha=0.2)
-
-        # Plot comparative time histogram
-        ax = axes[2]
-        for i, k in enumerate(cls.comp_keys):
-            tc = tcomp[k]
-            idx = i + 1
-            ax.bar(idx, tc, align='center')
-            ax.text(idx, 1.5 * tc, '{}s'.format(si_format(tc, 2, space=' ')),
-                    horizontalalignment='center')
-
-        # Add figure title
-        fig.suptitle(comp_title, fontsize=18)
-
-        return fig
+            fig = self.compare(pneuron, Adrive, tstim, toffset, a=a, Fdrive=Fdrive)
 
 
-class TestNodePythonVsNeuron(TestComp):
+class TestNodePythonVsNeuron(TestCompNode):
     ''' Run Node (ESTIM) and SonicNode (ASTIM) simulations and compare results with those obtained
         with pure-Python implementations (PointNeuron and NeuronalBilayerSonophore classes). '''
 
@@ -165,7 +189,7 @@ class TestNodePythonVsNeuron(TestComp):
         return data, meta, tcomp, comp_title
 
 
-class TestNmodlAutoVsManual(TestComp):
+class TestNmodlAutoVsManual(TestCompNode):
     ''' Run IintraNode (ESTIM) and SonicNode (ASTIM) simulations with manually and automatically created
         NMODL membrane mechanisms, and compare results.
     '''
@@ -195,6 +219,104 @@ class TestNmodlAutoVsManual(TestComp):
             si_format(A * manual_model.modality['factor'], space=' '), manual_model.modality['unit'],
             si_format(tstim, space=' '),
             'adaptive time step' if dt is None else 'dt = ${}$ ms'.format(pow10_format(dt * 1e3)))
+
+        return data, meta, tcomp, comp_title
+
+
+class TestCompExtended(TestComp):
+
+    @classmethod
+    def compare(cls, pneuron, diam, rho, nnodes, Istim, tstim, toffset, PRF=100., DC=1.):
+
+        # Run simulations
+        data, meta, tcomp, comp_title = cls.runSims(
+            pneuron, diam, rho, nnodes, Istim, tstim, toffset, PRF, DC)
+
+        # Extract ref time and stim state
+        ref_key = list(data[cls.def_key].keys())[0]
+        ref_t = data[cls.def_key][ref_key]['t'].values
+        ref_state = data[cls.def_key][ref_key]['stimstate'].values
+
+        # Determine time onset and stim patches
+        tonset = 0.05 * (np.ptp(ref_t))
+        tpatch_on, tpatch_off = GroupedTimeSeries.getStimPulses(ref_t, ref_state)
+
+        # Create comparative figure backbone
+        fig, axes = cls.createFigureBackbone()
+
+        # Plot membrane potential profiles for both conditions
+        for i, key in enumerate(cls.comp_keys):
+            ax = axes[i]
+            df = data[key]
+            ax.set_ylim(-150, 70)
+            ax.set_ylabel('$V_m^*$ (mV)', fontsize=10)
+            ax.set_title(key, fontsize=12)
+            for k in df:
+                tplt = np.insert(df[k]['t'].values, 0, -tonset) * 1e3
+                ax.plot(tplt, np.insert(df[k]['Vm'].values, 0, df[k]['Vm'].values[0]), label=k)
+
+        # Plot stim patches on both graphs
+        tbounds = (-tonset, tstim + toffset)
+        cls.plotStimPatches(axes[:-1], tbounds, tpatch_on, tpatch_off)
+
+        # Plot comparative histogram of computation times
+        cls.plotTcompHistogram(axes[2], tcomp)
+
+        # Add figure title
+        fig.suptitle(comp_title, fontsize=18)
+
+        return fig
+
+
+class TestConnectClassicVsCustom(TestCompExtended):
+    ''' Run IinjSennFiber simulations with a fiber object in which sections are connected using either
+        NEURON's classic built-in scheme or a custom-made scheme, and compare results.
+    '''
+
+    comp_keys = ['classic', 'custom']
+    def_key = 'classic'
+
+    def test_senn(self, is_profiled=False):
+
+        # Fiber model parameters
+        pneuron = getPointNeuron('FH')  # frog myelinated node membrane equations
+        fiberD = 10e-6                  # fiber diameter (m)
+        rho_a = 100.                    # axoplasm resistivity (Ohm.cm)
+        nnodes = 3
+
+        # Intracellular stimulation parameters
+        Istim = None
+        tstim = 1e-3   # s
+        toffset = 3e-3  # s
+        fig = self.compare(pneuron, fiberD, rho_a, nnodes, Istim, tstim, toffset)
+
+    @classmethod
+    def runSims(cls, pneuron, diam, rho, nnodes, Istim, tstim, toffset, PRF, DC):
+
+        # Create fiber objects with both classic and custom connection schemes
+        connector = SeriesConnector(vref='v', rmin=None)
+        fiber = {
+            'classic': IinjSennFiber(pneuron, diam, nnodes, rs=rho),
+            'custom': IinjSennFiber(pneuron, diam, nnodes, rs=rho, connector=connector)
+        }
+
+        # Create extracellular current source
+        psource = IntracellularCurrent(0, mode='anode')
+
+        # Titrate classic model for a specific duration
+        if Istim is None:
+            logger.info(f'Running titration for {si_format(tstim)}s pulse')
+            Istim = fiber[cls.def_key].titrate(psource, tstim, toffset, PRF, DC)  # A
+
+        # Simulate both fiber models above threshold current
+        data, meta = {}, {}
+        for k, f in fiber.items():
+            data[k], meta[k] = f.simulate(psource, Istim, tstim, toffset, PRF, DC)
+        tcomp = {k: v['tcomp'] for k, v in meta.items()}
+
+        comp_title = '{}, I = {}A, {}s'.format(
+            fiber[cls.def_key].strBiophysics(),
+            *si_format([Istim, tstim], space=' '))
 
         return data, meta, tcomp, comp_title
 

@@ -6,14 +6,28 @@ This package expands features from the `PySONIC` package (https://c4science.ch/d
 
 ## Content of repository
 
-### Models
+### Single-compartment (node) models
 
 The package contains several **node** classes that define the punctual membrane sections:
 - `Node` defines the generic interface of a generic punctual membrane section.
 - `IintraNode` defines a punctual node that can be simulated with intracellular current injection.
 - `SonicNode` defines a punctual node that can be simulated with ultrasound stimulation.
 
-It also contain an `ExtendedSonicNode` class that simulate the behavior of a nanoscale spatially-extended SONIC model with two coupled compartments (i.e. nodes with geometrical extents): an "ultrasound-reponsive" sonophore and an "ultrasound-resistant" surrounding membrane.
+### Multi-compartment (spatially-extended) models
+
+The package also contains several classes defining multi-compartmental  model expansions, at various spatial scales.
+
+At the nanometer scale, an `ExtendedSonicNode` class that simulate the behavior of a **nanoscale spatially-extended SONIC model** with two coupled compartments (i.e. nodes with geometrical extents): an "ultrasound-responsive" sonophore and an "ultrasound-resistant" surrounding membrane. As this model is radially symmetric, some adaptation was needed in order to represent it within the *NEURON* environment (check [this link](NEURON_radial_geometry.md) for more details).
+
+At the morphological scale, several **fiber** classes define spatially-extended fiber models:
+- `SennFiber` defines ...
+- `VextSennFiber` defines ...
+- `IinjSennFiber` defines ...
+- `SonicSennFiber` defines ...
+
+Moreover, several **source** classes are implemented to compute spatially-distributed inputs from various source types, used to drive the models:
+- `PointSource`
+- ...
 
 ### Membrane mechanisms (NMODL)
 
@@ -60,7 +74,7 @@ After completion you should see a new folder named `NEURON 7.x x86_64` on your D
 - Open the `NEURON 7.x x86_64` folder and run the "NEURON Demo" executable. You should see the NEURON GUI appearing.
 - Click on "Release" on the "NEURON Demonstrations" window. A number of windows should appear.
 - Click on "Init & Run" button from the "RunControl" window. You should see the trace of a single action potential on the first Graph window.
-- Exit *NEURON* by cliking on "File->Quit" in the "NEURON Main Menu" window
+- Exit *NEURON* by clicking on "File->Quit" in the "NEURON Main Menu" window
 - Log out and back in to make sure your environment variables are updated.
 
 ### Ubuntu
@@ -134,7 +148,7 @@ $ <path/to/python/executable> setup.py install
 
 ```$ cd <path_to_directory>```
 
-- Insall the package and all its dependencies:
+- Install the package and all its dependencies:
 
 ```$ pip install -e .```
 
@@ -228,7 +242,7 @@ plt.show()
 
 ### Running simulations
 
-You can easily run simulations of puncutal and spatially-extended models using the dedicated command line scripts. To do so, open a terminal in the `scripts` directory.
+You can easily run simulations of punctual and spatially-extended models using the dedicated command line scripts. To do so, open a terminal in the `scripts` directory.
 
 - Use `run_node_estim.py` for simulations of **point-neuron models** upon **intracellular electrical stimulation**. For instance, a regular-spiking (RS) neuron injected with 10 mA/m2 intracellular current for 30 ms:
 
@@ -257,6 +271,10 @@ To save simulation results in binary `.pkl` files, you can use the `-s` option. 
 When running simulation batches, it is highly advised to specify the `-s` option in order to save results of each simulation. You can then visualize results at a later stage.
 
 To visualize results, use the `plot_ext_timeseries.py` script. You will be prompted to select the output files containing the simulation(s) results. By default, separate figures will be created for each simulation, showing the time profiles of all resulting variables in the default morphological section of the model. Here again, you can choose to show only a subset of variables using the `-p [xxx]` option, and specify morphological sections of interest with the `--section [xxx]` option. Moreover, if you select a subset of variables, you can visualize resulting profiles across sections in comparative figures wih the `--compare` option.
+
+## On the integration of SONIC model representations within *NEURON*
+
+The SONIC model predicts a time-varying capacitance introducing a nonlinear discrepancy between membrane potential and charge density, something that *NEURON* is not natively equipped to deal with. Therefore, several workaround strategies were designed in order to adapt *NEURON* for the numerical simulation of this model, as well as its spatial extension. You can check [this link](NEURON_integration_strategies.md) for fore details.
 
 ## Future developments
 

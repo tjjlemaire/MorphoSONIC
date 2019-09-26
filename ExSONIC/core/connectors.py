@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-15 20:18:10
+# @Last Modified time: 2019-09-25 14:53:42
 # @Author: Theo Lemaire
 # @Date:   2018-08-25 02:00:26
 # @Last Modified by:   Theo Lemaire
@@ -24,14 +24,13 @@ class SeriesConnector:
         :param mechname: name of the mechanism that compute axial current contribution
         :param vref: name of the reference voltage varibale to compute axial currents
         :param rmin: lower bound for axial resistance density (resistance * membrane area, in Ohm.cm2)
-        :param verbose: string indicating whether to output details of the connection process
     '''
 
-    def __init__(self, mechname='Iax', vref='v', rmin=2e2, verbose='if_bound'):
+    def __init__(self, mechname='Iax', vref='v', rmin=None):
         self.mechname = mechname
         self.vref = vref
         self.rmin = rmin  # resistance density (Ohm.cm2)
-        self.verbose = verbose
+        logger.debug(f'Creating series connector based on "{vref}"')
 
     def __repr__(self):
         return 'connect("{}"{})'.format(
@@ -74,14 +73,12 @@ class SeriesConnector:
         s = '{}: R*Am = {:.1e} Ohm.cm2'.format(sec, R * Am)
         if self.rmin is not None:
             if R < self.rmin / Am:
-                s += ' -> bounded to {:.1e} Ohm.cm2'.format(self.rmin)
+                s += f' -> bounded to {self.rmin:.1e} Ohm.cm2'
                 R = self.rmin / Am
+                logger.warning(s)
             else:
                 s += ' -> not bounded'
-            if self.verbose in ['if_bound', 'all']:
                 logger.debug(s)
-        if self.verbose == 'all':
-            print(s)
 
         # Set section propeties to Iax mechanism
         setattr(sec, 'R_{}'.format(self.mechname), R)

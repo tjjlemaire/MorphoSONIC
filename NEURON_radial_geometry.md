@@ -2,7 +2,7 @@
 
 ## Rationale
 
-*NEURON* provides a great environment to design and simulate spatially-extended neuron models with multiple compartments. However, morphological sections are approximated by cylindrical compartments and connected in a cable-like topologocal organization, which is not suited for the representation of radially-symmetric models.
+*NEURON* provides a great environment to design and simulate spatially-extended neuron models with multiple compartments. However, morphological sections are approximated by cylindrical compartments and connected in a cable-like topological organization, which is not suited for the representation of radially-symmetric models.
 
 Due to this fixed morphological representation mode, a precise geometrical conversion scheme must be defined in order to enable the simulation of radially-symmetric models with *NEURON*. Particularly, such a conversion scheme must ensure that the axial and membrane currents are correct.
 
@@ -106,13 +106,13 @@ that is:
 
 given $V_1 = V_P$, and hence $i_{m, 1} = i_{m, C}$ and $i_{m, 2} = i_{m, P}$.
 
-After simplification, we obtain the following system of equivalencies between the 3 parameters of the radially-symmetric model ($a$, $b$ and $h$) and the 4 parameters of the cable model ($d_1$, $L_1$, $d_2$ and $L_2$):
+After simplification, we obtain the following system of equivalences between the 3 parameters of the radially-symmetric model ($a$, $b$ and $h$) and the 4 parameters of the cable model ($d_1$, $L_1$, $d_2$ and $L_2$):
 
 - $a^2 = d_1 \cdot L_1$
 - $b^2 - a^2 = d_2 \cdot L_2$
 - $\ln(\frac{a + b}{a}) = 4 \cdot h \big(\frac{L_1}{d_1^2} + \frac{L_2}{d_2^2}\big)$
 
-In order to solve the system, we must equalize the number of unkowns with the number of equations. Therefore, we impose identical diameters to the two compartments of the cable model ($d_1 = d_2 = d$), yielding the following system:
+In order to solve the system, we must equalize the number of unknowns with the number of equations. Therefore, we impose identical diameters to the two compartments of the cable model ($d_1 = d_2 = d$), yielding the following system:
 
 - $a^2 = d \cdot L_1$
 - $b^2 - a^2 = d \cdot L_2$
