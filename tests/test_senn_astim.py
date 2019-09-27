@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-26 12:24:13
+# @Last Modified time: 2019-09-27 11:27:41
 
 import numpy as np
 
@@ -116,7 +116,7 @@ class TestSennAstim(TestFiber):
         # Fiber model parameters
         pneuron = getPointNeuron('FH')  # Frog myelinated node membrane equations
         fiberD = 10e-6                  # fiber diameter (m)
-        nnodes = 5
+        nnodes = 15
         rho_a = 54.7                    # axoplasm resistivity (Ohm.cm)
         d_ratio = 0.6                   # axon / fiber diameter ratio
         nodeL = 1.5e-6                  # node length (m)
