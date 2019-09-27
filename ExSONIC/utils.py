@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 14:38:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-10 13:45:52
+# @Last Modified time: 2019-09-27 12:15:56
 
 import os
 import pickle
@@ -81,3 +81,16 @@ def fitTauSD(durations, currents, method='Weiss'):
         lambda t, tau: method(t, tau, I0),
         durations, currents, p0=chronaxie(durations, currents))[0][0]
     return tau_e, method(durations, tau_e, I0)
+
+
+def extractIndexesFromLabels(labels):
+    ''' Extract a list of indexes as integers from a list of labels containing indexes. '''
+    prefix = os.path.commonprefix(labels)
+    if len(prefix) == 0:
+        return None
+    labels_wo_prefix = [s.split(prefix)[1] for s in labels]
+    try:
+        indexed_labels = [int(s) for s in labels_wo_prefix]
+        return prefix, indexed_labels
+    except ValueError as err:
+        return None
