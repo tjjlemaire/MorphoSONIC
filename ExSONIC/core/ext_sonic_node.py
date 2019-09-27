@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-06 14:43:07
+# @Last Modified time: 2019-09-27 14:42:12
 
 import numpy as np
 import pandas as pd
@@ -101,7 +101,7 @@ class ExtendedSonicNode(SonicNode):
             sec.Ra = self.rs
 
     def setTopology(self):
-        self.connector = SeriesConnector(vref='Vm_{}'.format(self.mechname))
+        self.connector = SeriesConnector(vref='Vm_{}'.format(self.mechname), rmin=1e2)
         logger.debug('building custom {}-based topology'.format(self.connector.vref))
         list(map(self.connector.attach, self.sections.values()))
         self.connector.connect(self.sections['sonophore'], self.sections['surroundings'])
@@ -153,7 +153,7 @@ class ExtendedSonicNode(SonicNode):
 
         # Set stimulus amplitude and integrate model
         self.setStimAmp(Adrive)
-        self.integrate(tstim + toffset, tstim, PRF, DC, dt, atol)
+        integrate(self, tstim + toffset, tstim, PRF, DC, dt, atol)
 
         # Store output in dataframes
         data = {}

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-18 21:14:43
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-06 16:32:35
+# @Last Modified time: 2019-09-27 15:12:58
 
 import matplotlib.pyplot as plt
 from PySONIC.parsers import *
@@ -191,9 +191,8 @@ class SpatiallyExtendedAStimParser(SpatiallyExtendedParser, AStimParser):
     def __init__(self):
         AStimParser.__init__(self)
         SpatiallyExtendedParser.__init__(self)
-        self.defaults.pop('method')
-        self.allowed.pop('method')
-        self.to_parse.pop('method')
+        for x in [self.defaults, self.allowed, self.to_parse]:
+            x.pop('method')
 
     def parse(self):
         args = SpatiallyExtendedParser.parse(self, args=AStimParser.parse(self))
@@ -207,6 +206,40 @@ class SpatiallyExtendedAStimParser(SpatiallyExtendedParser, AStimParser):
     @staticmethod
     def parsePlot(*args):
         return SpatiallyExtendedParser.parsePlot(*args)
+
+
+class AStimSennParser(SennParser, AStimParser):
+
+    def __init__(self):
+        AStimParser.__init__(self)
+        SennParser.__init__(self)
+        for x in [self.defaults, self.allowed, self.to_parse]:
+            x.pop('method')
+        self.defaults.update({'tstim': 0.1, 'toffset': 3.})
+
+    @staticmethod
+    def parseSimInputs(args):
+        return AStimParser.parseSimInputs(args) + SpatiallyExtendedParser.parseSimInputs(args)
+
+    def parsePlot(self, *args):
+        return SennParser.parsePlot(self, *args)
+
+
+class NodeAstimSennParser(AStimSennParser):
+
+    amp_unit = 'kPa'
+
+    def __init__(self):
+        super().__init__()
+        self.defaults.update({'inode': None})
+        self.addNodeStim()
+
+    def addNodeStim(self):
+        self.add_argument(
+            '--inode', nargs='+', type=int, help='Node index for acoustic source')
+
+    def parseAmp(self, args):
+        return AStimParser.parseAmp(self, args)
 
 
 class ExtSonicNodeAStimParser(SpatiallyExtendedAStimParser):

@@ -3,16 +3,13 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-15 20:33:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-18 21:23:27
+# @Last Modified time: 2019-09-27 14:48:34
 
 ''' Run A-STIM simulations of an extended SONIC node with a specific point-neuron mechanism. '''
-
-import matplotlib.pyplot as plt
 
 from PySONIC.core import Batch, PointNeuron
 from PySONIC.utils import logger
 from PySONIC.parsers import EStimParser
-
 from ExSONIC.core import ExtendedSonicNode
 from ExSONIC.parsers import ExtSonicNodeAStimParser
 

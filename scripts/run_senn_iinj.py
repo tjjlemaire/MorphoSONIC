@@ -3,12 +3,10 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-09-06 16:12:33
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-27 13:38:19
+# @Last Modified time: 2019-09-27 14:28:13
 
 ''' Run simulations of an SENN fiber model with a specific point-neuron mechanism
     upon intracellular electrical stimulation. '''
-
-import matplotlib.pyplot as plt
 
 from PySONIC.core import Batch, PointNeuron
 from PySONIC.utils import logger
