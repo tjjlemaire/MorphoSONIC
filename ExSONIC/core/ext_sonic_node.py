@@ -3,13 +3,13 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-27 14:42:12
+# @Last Modified time: 2019-10-01 10:44:48
 
 import numpy as np
 import pandas as pd
 from neuron import h
 
-from PySONIC.utils import si_format, pow10_format, logger, debug, binarySearch
+from PySONIC.utils import si_format, pow10_format, logger, debug, binarySearch, logCache
 from PySONIC.constants import *
 from PySONIC.core import Model, PointNeuron
 from PySONIC.postpro import detectSpikes, prependDataFrame
@@ -190,6 +190,7 @@ class ExtendedSonicNode(SonicNode):
         nspikes_surroundings = detectSpikes(data['surroundings'])[0].size
         return nspikes_start > 0 and nspikes_end > 0
 
+    @logCache(os.path.join(os.path.split(__file__)[0], 'nanoextsonic_titrations.log'))
     def titrate(self, tstim, toffset, PRF=100., DC=1.):
         ''' Use a binary search to determine the threshold amplitude needed to obtain
             neural excitation for a given duration, PRF and duty cycle.

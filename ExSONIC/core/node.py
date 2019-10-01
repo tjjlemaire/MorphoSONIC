@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-10 14:02:33
+# @Last Modified time: 2019-10-01 12:55:34
 
 import pickle
 import abc
@@ -15,7 +15,7 @@ from neuron import h
 
 from PySONIC.constants import *
 from PySONIC.core import Model, PointNeuron, NeuronalBilayerSonophore
-from PySONIC.utils import si_format, timer, logger, binarySearch, plural, debug
+from PySONIC.utils import si_format, timer, logger, binarySearch, plural, debug, logCache
 from PySONIC.postpro import prependDataFrame
 
 from .pyhoc import *
@@ -317,8 +317,8 @@ class SonicNode(Node):
         self.Arange = (0., self.pylkp.refs['A'].max())
 
     def __repr__(self):
-        return '{}({:.1f} nm, {}, {:.0f} kHz)'.format(
-            self.__class__.__name__, self.a * 1e9, self.pneuron, self.Fdrive * 1e-3)
+        return '{}({:.1f} nm, {}, {:.0f} kHz, fs={})'.format(
+            self.__class__.__name__, self.a * 1e9, self.pneuron, self.Fdrive * 1e-3, self.fs)
 
     def strBiophysics(self):
         return super().strBiophysics() + ', a = {}m{}, f = {}Hz'.format(
@@ -348,4 +348,8 @@ class SonicNode(Node):
 
     def getPltScheme(self, *args, **kwargs):
         return self.nbls.getPltScheme(*args, **kwargs)
+
+    @logCache(os.path.join(os.path.split(__file__)[0], 'sonicnode_titrations.log'))
+    def titrate(self, tstim, toffset, PRF=100., DC=1., xfunc=None):
+        return super().titrate(tstim, toffset, PRF=PRF, DC=DC, xfunc=xfunc)
 
