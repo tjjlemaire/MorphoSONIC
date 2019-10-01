@@ -5,7 +5,9 @@ Created on Fri Sep 27 15:38:32 2019
 @author: Maria
 """
 
+import os
 import numpy as np
+import matplotlib.pyplot as plt
 
 from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import logger, si_format
@@ -25,58 +27,50 @@ class TestSennUnmyelinated(TestFiber):
         # Fiber model parameters
         pneuron = getPointNeuron('FH')       # mammalian fiber membrane equations
         fiberD = 10e-6                       # fiber diameter (m)
-        nnodes = 45
         rho_a = 54.7                         # axoplasm resistivity (Ohm.cm)
         d_ratio = 0.6                        # axon / fiber diameter ratio
-        #nodeL = 1.5e-6                       # node length (m)
-        fiberL = 10e-3                       # fiber length (m) 
-        #fiber = IinjUnmyelinatedSennFiber(pneuron, fiberD, nnodes, rs=rho_a, nodeL=nodeL, d_ratio=d_ratio)
-        fiber = IinjUnmyelinatedSennFiber(pneuron, fiberD, nnodes, rs=rho_a, fiberL=fiberL, d_ratio=d_ratio)
+        fiberL = 1e-2                       # fiber length (m) 
 
         # Intracellular stimulation parameters
         tstim = 10e-6   # s
-        toffset = 3e-3  # s
+        toffset = 3e-2  # s
         PRF = 100.      # Hz
         DC = 1.         # -
 
-        # Create extracellular current source
+#        # Create extracellular current source
         psource = IntracellularCurrent(0, mode='anode')
 
-        # Titrate for a specific duration and simulate fiber at threshold current
-        #logger.info(f'Running titration for {si_format(tstim)}s pulse')
-        #Ithr = fiber.titrate(psource, tstim, toffset, PRF, DC)  # A
-        data, meta = fiber.simulate(psource, 0.0000003, tstim, toffset, PRF, DC)
-
-#        # Compare output metrics to reference
-#        pulse_sim_metrics = {  # Output metrics
-#            'Ithr': Ithr,                             # A
-#            'cv': fiber.getConductionVelocity(data),  # m/s
-#            'dV': fiber.getSpikeAmp(data)             # mV
-#        }
-
-        # Plot membrane potential traces for specific duration at threshold current
-        fig1 = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
-#
-#        # Reset fiber model to avoid NEURON integration errors
-#        fiber.reset()
-#
-#        # Compute and plot strength-duration curve for intracellular injection at central node
-#        psource = IntracellularCurrent(nnodes // 2, mode='anode')
-#        durations = np.array([10, 20, 40, 60, 80, 100, 150, 200, 250, 300, 400, 500], dtype=float) * 1e-6  # s
-#        Ithrs_sim = np.array([fiber.titrate(psource, x, toffset, PRF, DC) for x in durations])  # A
-#
-#        # Plot strength-duration curve
-#        fig2 = strengthDurationCurve(fiber, durations, {'sim': Ithrs_sim}, Ifactor=1e9, scale='lin')
-#
-#        # Compare output metrics to reference
-#        SDcurve_sim_metrics = {  # Output metrics
-#            'chr': chronaxie(durations, Ithrs_sim)  # s
-#        }
-#
-#        logger.info(f'Comparing metrics for {si_format(tstim)}s intracellular anodic pulse')
-#        self.logOutputMetrics(pulse_sim_metrics)
-#        logger.info(f'Comparing metrics for strength-duration curves')
-#        self.logOutputMetrics(SDcurve_sim_metrics)
+        
+        nnodes = np.logspace(0, 4, 100)
+        nnodes = np.asarray(np.ceil(nnodes) // 2 * 2 + 1, dtype=int)
+        Ithrs = np.empty(nnodes.size)
+        print(nnodes)
+        fname = 'Ithrs.txt'
+        if os.path.isfile(fname):
+            Ithrs = np.loadtxt(fname, delimiter=',')
+        else:
+            for i, x in enumerate(nnodes):
+                if x == 1:
+                    x = 3
+                fiber = IinjUnmyelinatedSennFiber(pneuron, fiberD, x, rs=rho_a, fiberL=fiberL, d_ratio=d_ratio)
+                logger.info(f'Running titration for {si_format(tstim)}s pulse')
+                Ithrs[i] = fiber.titrate(psource, tstim, toffset, PRF, DC)  # A
+            np.savetxt('Ithrs.txt', Ithrs, delimiter=',')
+        
+        nodeL = fiberL / nnodes
+        Ithr_ref = Ithrs[-1]
+        rel_errors = (Ithrs - Ithr_ref) / Ithr_ref
+        max_rel_error = 0.01
+        max_nodeL = np.interp(max_rel_error, rel_errors[::-1], nodeL[::-1], left=np.nan, right=np.nan)
+        
+        plt.plot(nodeL, rel_errors, label='convergence')
+        plt.xlabel('node length')
+        plt.ylabel('relative error')
+        plt.xscale('log')
+        plt.yscale('log')
+        plt.axhline(max_rel_error, label='error threshold', color='k', linestyle='--')
+        plt.axvline(max_nodeL, label=f'max node length ({max_nodeL * 1e6:.2f} um)', color='k')
+        plt.legend()
 
 if __name__ == '__main__':
     tester = TestSennUnmyelinated()

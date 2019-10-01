@@ -650,9 +650,8 @@ class UnmyelinatedSennFiber(metaclass=abc.ABCMeta):
         self.fiberL = fiberL
 
         # Define fiber geometrical parameters
-        self.nodeD = self.d_ratio * self.fiberD   # m
-        #self.nodeL = nodeL                        # m
-        self.nodeL = self.fiberL/self.nnodes
+        self.nodeD = self.d_ratio * self.fiberD   # m                      # m
+        self.nodeL = self.fiberL/ (self.nnodes -1)
         self.interD = self.d_ratio * self.fiberD  # m
         self.interL = 0           # m
 
@@ -885,6 +884,8 @@ class UnmyelinatedSennFiber(metaclass=abc.ABCMeta):
         Amin, Amax = self.getArange(psource)
         A_conv_thr = np.abs(Amax - Amin) / 1e4
         Athr = pow2Search(self.titrationFunc, [psource, tstim, toffset, PRF, DC], 1, Amin, Amax)
+        if np.isnan(Athr):
+            return Athr
         Arange = (Athr / 2, Athr)
         return binarySearch(
             self.titrationFunc, [psource, tstim, toffset, PRF, DC], 1, Arange, A_conv_thr)
@@ -1098,7 +1099,7 @@ class VextUnmyelinatedSennFiber(EStimUnmyelinatedSennFiber):
 class IinjUnmyelinatedSennFiber(EStimUnmyelinatedSennFiber):
 
     simkey = 'senn_Iinj'
-    A_range = (1e-11, 1e-5)  # nA
+    A_range = (1e-8, 1e-6)  # nA
 
     def preProcessAmps(self, Iinj):
         ''' Assign array of injeccted injected currents.
