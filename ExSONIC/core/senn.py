@@ -985,9 +985,12 @@ class UnmyelinatedSennFiber(metaclass=abc.ABCMeta):
             :return: array of condiction speeds per spike (m/s).
         '''
         d = np.diff(self.getNodeCoords())[0]  # node-to-node distance (m)
+        print(d)
         tspikes = self.getSpikesTimings(data)  # spikes timing dataframe
+        print(tspikes)
         delays = np.abs(np.diff(tspikes.values, axis=1))  # node-to-node delays (s)
         delays = delays[:, 1:-1]  # remove delays from both extremity segments
+        print(delays)
         cv = d / delays  # node-to-node conduction velocities (m/s)
         return np.mean(cv)
 
