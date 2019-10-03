@@ -2,7 +2,7 @@
 
 ## Rationale
 
-*NEURON* provides a great environment to design and simulate spatially-extended neuron models with multiple compartments. However, morphological sections are approximated by cylindrical compartments and connected in a cable-like topological organization, which is not suited for the representation of radially-symmetric models.
+*NEURON* provides a great environment to design and simulate spatially-extended neuron models with multiple compartments. However, it only implements linear spatial discretization, where morphological sections are approximated by cylindrical compartments and connected in a cable-like topological organization. That is not suited for the representation of radially-symmetric models.
 
 Due to this fixed morphological representation mode, a precise geometrical conversion scheme must be defined in order to enable the simulation of radially-symmetric models with *NEURON*. Particularly, such a conversion scheme must ensure that the axial and membrane currents are correct.
 
