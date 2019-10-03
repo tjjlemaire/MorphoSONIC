@@ -383,7 +383,6 @@ class SennFiber(metaclass=abc.ABCMeta):
                 tspikes[id] = tzcross
             else:
                 tspikes[id] = t[ispikes]
-
         return pd.DataFrame(tspikes)
 
     def getConductionVelocity(self, data):
@@ -960,7 +959,6 @@ class UnmyelinatedSennFiber(metaclass=abc.ABCMeta):
                     return None
             else:
                 assert ispikes.size == nspikes, 'Inconsistent number of spikes in different nodes'
-
             if zcross:
                 # Consider spikes as time of zero-crossing preceding each peak
                 t = data[id]['t'].values  # s
@@ -972,10 +970,12 @@ class UnmyelinatedSennFiber(metaclass=abc.ABCMeta):
                 errmsg = 'Ascending zero crossing #{} (t = {:.2f} ms) not preceding peak #{} (t = {:.2f} ms)'
                 for ispike, (tzc, tpeak) in enumerate(zip(tzcross, t[ispikes])):
                     assert tzc < tpeak, errmsg.format(ispike, tzc * 1e3, ispike, tpeak * 1e3)
-                tspikes[id] = tzcross
+                if id=='node0':
+                    tspikes[id] = tzcross[-1]
+                else:
+                    tspikes[id] = tzcross
             else:
                 tspikes[id] = t[ispikes]
-
         return pd.DataFrame(tspikes)
 
     def getConductionVelocity(self, data):
@@ -985,12 +985,9 @@ class UnmyelinatedSennFiber(metaclass=abc.ABCMeta):
             :return: array of condiction speeds per spike (m/s).
         '''
         d = np.diff(self.getNodeCoords())[0]  # node-to-node distance (m)
-        print(d)
         tspikes = self.getSpikesTimings(data)  # spikes timing dataframe
-        print(tspikes)
         delays = np.abs(np.diff(tspikes.values, axis=1))  # node-to-node delays (s)
         delays = delays[:, 1:-1]  # remove delays from both extremity segments
-        print(delays)
         cv = d / delays  # node-to-node conduction velocities (m/s)
         return np.mean(cv)
 
