@@ -354,10 +354,10 @@ class SennFiber(metaclass=abc.ABCMeta):
         '''
         tspikes = {}
         nspikes = None
-        for id in self.ids:
+        for id, df in data.items():
 
             # Detect spikes on current trace
-            ispikes, *_ = detectSpikes(data[id], key='Vm', mph=SPIKE_MIN_VAMP, mpt=SPIKE_MIN_DT,
+            ispikes, *_ = detectSpikes(df, key='Vm', mph=SPIKE_MIN_VAMP, mpt=SPIKE_MIN_DT,
                                        mpp=SPIKE_MIN_VPROM)
 
             # Assert consistency of spikes propagation
@@ -371,8 +371,8 @@ class SennFiber(metaclass=abc.ABCMeta):
 
             if zcross:
                 # Consider spikes as time of zero-crossing preceding each peak
-                t = data[id]['t'].values  # s
-                Vm = data[id]['Vm'].values  # mV
+                t = df['t'].values  # s
+                Vm = df['Vm'].values  # mV
                 i_zcross = np.where(np.diff(np.sign(Vm)) > 0)[0]  # detect ascending zero-crossings
                 slopes = (Vm[i_zcross + 1] - Vm[i_zcross]) / (t[i_zcross + 1] - t[i_zcross])  # slopes (mV/s)
                 offsets = Vm[i_zcross] - slopes * t[i_zcross]  # offsets (mV)
@@ -385,18 +385,38 @@ class SennFiber(metaclass=abc.ABCMeta):
                 tspikes[id] = t[ispikes]
         return pd.DataFrame(tspikes)
 
-    def getConductionVelocity(self, data):
+    def getConductionVelocity(self, data, ids=None):
         ''' Compute average conduction speed from simulation results.
 
             :param data: simulation output dataframe
             :return: array of condiction speeds per spike (m/s).
         '''
-        d = np.diff(self.getNodeCoords())[0]  # node-to-node distance (m)
-        tspikes = self.getSpikesTimings(data)  # spikes timing dataframe
+        # By default, consider all fiber nodes
+        if ids is None:
+            ids = self.ids
+
+        # Remove end nodes from calculations if present
+        for x in [0, -1]:
+            if self.ids[x] in ids:
+                ids.remove(self.ids[x])
+
+        # Compute node to node distances
+        indexes = [self.ids.index(id) for id in ids]  # relevant node indexes
+        xcoords = self.getNodeCoords()[indexes]  # corresponding x-coordinates
+        distances = np.diff(xcoords)  # node-to-node distances (m)
+
+        # Compute node-to-node delays
+        tspikes = self.getSpikesTimings({id: data[id] for id in ids})  # relevant spikes timing dataframe
         delays = np.abs(np.diff(tspikes.values, axis=1))  # node-to-node delays (s)
-        delays = delays[:, 1:-1]  # remove delays from both extremity segments
-        cv = d / delays  # node-to-node conduction velocities (m/s)
-        return np.mean(cv)
+
+        # Compute conduction velocities
+        distances = np.tile(distances, (1, delays.shape[0]))
+        velocities = distances / delays  # m/s
+
+        # Average over all spikes and all segments
+        cv = np.mean(velocities)  # m/s
+
+        return cv
 
     @staticmethod
     def getSpikeAmp(data, key='Vm'):
@@ -674,7 +694,7 @@ class UnmyelinatedSennFiber(metaclass=abc.ABCMeta):
         ''' clear all sections and re-initialize model. '''
         self.clear()
         self.__init__(self.pneuron, self.fiberD, self.nnodes, rs=self.rs,
-                      nodeL=self.nodeL, d_ratio=self.d_ratio)
+                      fiberL=self.fiberL, d_ratio=self.d_ratio)
 
     @staticmethod
     def inputs():
@@ -945,10 +965,10 @@ class UnmyelinatedSennFiber(metaclass=abc.ABCMeta):
         '''
         tspikes = {}
         nspikes = None
-        for id in self.ids:
+        for id, df in data.items():
 
             # Detect spikes on current trace
-            ispikes, *_ = detectSpikes(data[id], key='Vm', mph=SPIKE_MIN_VAMP, mpt=SPIKE_MIN_DT,
+            ispikes, *_ = detectSpikes(df, key='Vm', mph=SPIKE_MIN_VAMP, mpt=SPIKE_MIN_DT,
                                        mpp=SPIKE_MIN_VPROM)
 
             # Assert consistency of spikes propagation
@@ -961,8 +981,8 @@ class UnmyelinatedSennFiber(metaclass=abc.ABCMeta):
                 assert ispikes.size == nspikes, 'Inconsistent number of spikes in different nodes'
             if zcross:
                 # Consider spikes as time of zero-crossing preceding each peak
-                t = data[id]['t'].values  # s
-                Vm = data[id]['Vm'].values  # mV
+                t = df['t'].values  # s
+                Vm = df['Vm'].values  # mV
                 i_zcross = np.where(np.diff(np.sign(Vm)) > 0)[0]  # detect ascending zero-crossings
                 slopes = (Vm[i_zcross + 1] - Vm[i_zcross]) / (t[i_zcross + 1] - t[i_zcross])  # slopes (mV/s)
                 offsets = Vm[i_zcross] - slopes * t[i_zcross]  # offsets (mV)
@@ -978,18 +998,38 @@ class UnmyelinatedSennFiber(metaclass=abc.ABCMeta):
                 tspikes[id] = t[ispikes]
         return pd.DataFrame(tspikes)
 
-    def getConductionVelocity(self, data):
+    def getConductionVelocity(self, data, ids=None):
         ''' Compute average conduction speed from simulation results.
 
             :param data: simulation output dataframe
             :return: array of condiction speeds per spike (m/s).
         '''
-        d = np.diff(self.getNodeCoords())[0]  # node-to-node distance (m)
-        tspikes = self.getSpikesTimings(data)  # spikes timing dataframe
+        # By default, consider all fiber nodes
+        if ids is None:
+            ids = self.ids
+
+        # Remove end nodes from calculations if present
+        for x in [0, -1]:
+            if self.ids[x] in ids:
+                ids.remove(self.ids[x])
+
+        # Compute node to node distances
+        indexes = [self.ids.index(id) for id in ids]  # relevant node indexes
+        xcoords = self.getNodeCoords()[indexes]  # corresponding x-coordinates
+        distances = np.diff(xcoords)  # node-to-node distances (m)
+
+        # Compute node-to-node delays
+        tspikes = self.getSpikesTimings({id: data[id] for id in ids})  # relevant spikes timing dataframe
         delays = np.abs(np.diff(tspikes.values, axis=1))  # node-to-node delays (s)
-        delays = delays[:, 1:-1]  # remove delays from both extremity segments
-        cv = d / delays  # node-to-node conduction velocities (m/s)
-        return np.mean(cv)
+
+        # Compute conduction velocities
+        distances = np.tile(distances, (1, delays.shape[0]))
+        velocities = distances / delays  # m/s
+
+        # Average over all spikes and all segments
+        cv = np.mean(velocities)  # m/s
+
+        return cv
 
     @staticmethod
     def getSpikeAmp(data, key='Vm'):
@@ -1099,7 +1139,7 @@ class VextUnmyelinatedSennFiber(EStimUnmyelinatedSennFiber):
 class IinjUnmyelinatedSennFiber(EStimUnmyelinatedSennFiber):
 
     simkey = 'senn_Iinj'
-    A_range = (1e-8, 1e-6)  # nA
+    A_range = (1e-11, 1e-6)  # nA
 
     def preProcessAmps(self, Iinj):
         ''' Assign array of injeccted injected currents.
