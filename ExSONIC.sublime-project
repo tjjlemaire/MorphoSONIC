@@ -32,6 +32,7 @@
 				"__pycache__",
 				"*.egg-info",
 				"notebooks",
+				".ipynb_checkpoints"
 			],
 			"path": "."
 		}

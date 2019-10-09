@@ -65,70 +65,87 @@ The membrane mechanisms of several conductance-based point-neuron models are imp
 
 ## NEURON 7.x
 
+**In the following instructions, replace 7.x by the appropriate *NEURON* version.**
+
 ### Windows
 
-- Go to the NEURON website https://neuron.yale.edu/neuron/download/ and download the appropriate *NEURON* installer for Windows
-
-- Run the *NEURON* installer and follow the procedure:
+1. Go to the [NEURON website](https://neuron.yale.edu/neuron/download/) and download the appropriate *NEURON* installer for Windows
+2. Run the *NEURON* installer and follow the procedure:
   - Confirm installation directory (`c:\nrn`)
   - Check the option "Set DOS environment"
-  - Click on "Install"
-After completion you should see a new folder named `NEURON 7.x x86_64` on your Desktop.
-
-- Open the `NEURON 7.x x86_64` folder and run the "NEURON Demo" executable. You should see the NEURON GUI appearing.
-- Click on "Release" on the "NEURON Demonstrations" window. A number of windows should appear.
-- Click on "Init & Run" button from the "RunControl" window. You should see the trace of a single action potential on the first Graph window.
-- Exit *NEURON* by clicking on "File->Quit" in the "NEURON Main Menu" window
-- Log out and back in to make sure your environment variables are updated.
-
-### Ubuntu
-
-In the following instructions, replace 7.x by the appropriate *NEURON* version.
-
-- Install ncurses LINUX package:
-``` $ apt install ncurses-dev ```
-
-- Download the NEURON source code archive:
-
-https://neuron.yale.edu/ftp/neuron/versions/v-7.x/nrn-7.x.tar.gz
-
-- Unzip the archive:
-``` $ tar xzf nrn-7.x.tar.gz ```
-
-- Install NEURON (without GUI)
+  - Click on "Install". After completion you should see a new folder named `NEURON 7.x x86_64` on your Desktop.
+3. Check that *NEURON* has been properly installed by running the demo:
+  - Open the `NEURON 7.x x86_64` folder and run the "NEURON Demo" executable. You should see the NEURON GUI appearing.
+  - Click on "Release" on the "NEURON Demonstrations" window. A number of windows should appear.
+  - Click on "Init & Run" button from the "RunControl" window. You should see the trace of a single action potential on the first Graph window.
+  - Exit *NEURON* by clicking on "File->Quit" in the "NEURON Main Menu" window
+4. Log out and back in to make sure your environment variables are updated.
+5. Open a terminal and check that the *NEURON* import in Python works correctly (no error should be raised):
 ```
-$ cd nrn-7.x
-$ ./configure --prefix=/usr/local/nrn-7.x --without-iv --with-nrnpython=<path/to/python/executable>
-$ make
-$ make install
-$ make clean
-```
-Example of path to Anaconda3 Python3.6 executable: `/opt/apps/anaconda3/bin/python3.6`
-
-- Add *NEURON* executables to the global environment file:
-```
-$ vim /etc/environment
-    PATH=<old_path>:/usr/local/nrn-7.x/x86_64/bin
-    exit
-```
-
-- Check that *NEURON* has been properly installed:
-```
-$ nrniv -python
-NEURON -- VERSION 7.x master (...) ...
-Duke, Yale, and the BlueBrain Project -- Copyright 1984-xxxx
-See http://neuron.yale.edu/neuron/credits
-
+python
+>>> from neuron import h
 >>> quit()
 ```
 
-- Go back to unzipped archive directory
-``` $ cd <path/to/unzipped/archive> ```
+### Mac
 
-- Install the neuron package for Python 3.x:
+1. Go to the [NEURON website](https://neuron.yale.edu/neuron/download/) and download the appropriate *NEURON* installer for Mac
+2. Run the *NEURON* installer
+3. Check that *NEURON* has been properly installed by running the demo:
+  - Try to run the *neurondemo* (in the NEURON folder). If the NEURON GUI appears correctly, go to 4. Otherwise, follow the steps:
+  - Install *XQuartz* from https://www.xquartz.org
+  - Restart the computer 
+  - Try to run the *neurondemo* again. It should execute properly.
+4. If you don’t have *XCode*, install it from the App Store 
+5. Go to https://developer.apple.com/downloads, sign with the ID Apple, download the right Command Line Tools based on your OS X and XCode versions, and install it
+6. Open a terminal and add *NEURON* python package to your python path: `export PYTHONPATH=/Applications/NEURON-7.x/nrn/lib/python`
+7. Restart the computer
+8. Open a terminal and check that the *NEURON* import in Python works correctly (no error should be raised):
 ```
-$ cd src/nrnpython
-$ <path/to/python/executable> setup.py install
+python
+>>> from neuron import h
+>>> quit()
+```
+
+### Ubuntu
+
+1. Open a terminal
+2. Install the *ncurses* LINUX package: `apt install ncurses-dev`
+3. Download the [NEURON source code archive](https://neuron.yale.edu/ftp/neuron/versions/v-7.x/nrn-7.x.tar.gz)
+4. Unzip the archive: `tar xzf nrn-7.x.tar.gz`
+5. Install NEURON (without GUI):
+```
+cd nrn-7.x
+./configure --prefix=/usr/local/nrn-7.x --without-iv --with-nrnpython=<path/to/python/executable>
+make
+make install
+make clean
+```
+6. Add *NEURON* executables to the global environment file:
+```
+vim /etc/environment
+PATH=<old_path>:/usr/local/nrn-7.x/x86_64/bin
+exit
+```
+7. Check that *NEURON* has been properly installed:
+```
+nrniv -python
+NEURON -- VERSION 7.x master (...) ...
+Duke, Yale, and the BlueBrain Project -- Copyright 1984-xxxx
+See http://neuron.yale.edu/neuron/credits
+>>> quit()
+```
+8. Go back to unzipped archive directory: `cd <path/to/unzipped/archive>`
+9. Install the neuron package for Python 3.x:
+```
+cd src/nrnpython
+<path/to/python/executable> setup.py install
+```
+10. Open a terminal and check that the *NEURON* import in Python works correctly (no error should be raised):
+```
+python
+>>> from neuron import h
+>>> quit()
 ```
 
 ## PySONIC package
@@ -139,22 +156,10 @@ $ <path/to/python/executable> setup.py install
 ## ExSONIC package
 
 - Open a terminal.
-
-- Activate a Python3 environment if needed, e.g. on the tnesrv5 machine:
-
-```$ source /opt/apps/anaconda3/bin activate```
-
-- Check that the appropriate version of pip is activated:
-
-```$ pip --version```
-
-- Go to the package directory (where the setup.py file is located):
-
-```$ cd <path_to_directory>```
-
-- Install the package and all its dependencies:
-
-```$ pip install -e .```
+- Activate a Python3 environment if needed, e.g. on the tnesrv5 machine: `source /opt/apps/anaconda3/bin activate`
+- Check that the appropriate version of pip is activated: `pip --version`
+- Go to the package directory (where the setup.py file is located): `cd <path_to_directory>`
+- Install the package and all its dependencies: `pip install -e .`
 
 # Usage
 
@@ -250,19 +255,19 @@ You can easily run simulations of punctual and spatially-extended models using t
 
 - Use `run_node_estim.py` for simulations of **point-neuron models** upon **intracellular electrical stimulation**. For instance, a regular-spiking (RS) neuron injected with 10 mA/m2 intracellular current for 30 ms:
 
-```$ python run_node_estim.py -n RS -A 10 --tstim 30 -p Vm```
+```python run_node_estim.py -n RS -A 10 --tstim 30 -p Vm```
 
 - Use `run_node_astim.py` for simulations of **point-neuron models** upon **ultrasonic stimulation**. For instance, a 32 nm radius bilayer sonophore within a regular-spiking (RS) neuron membrane, sonicated at 500 kHz and 100 kPa for 150 ms:
 
-```$ python run_node_astim.py -n RS -a 32 -f 500 -A 100 --tstim 150 --method sonic -p Qm```
+```python run_node_astim.py -n RS -a 32 -f 500 -A 100 --tstim 150 --method sonic -p Qm```
 
 - Use `run_ext_node_astim.py` for simulations of the **nanometer-scale, spatially-extended SONIC model** of any neuron type upon **ultrasonic stimulation**. For instance, a 32 nm radius bilayer sonophore surrounded by a circular "US-insensitive" patch, within a regular-spiking (RS) neuron membrane with 30% sonophore coverage, sonicated at 500 kHz and 100 kPa for 150 ms:
 
-```$ python run_ext_sonic_node_astim.py -n RS -a 32 --fs 30 -f 500 -A 100 --tstim 150 --method sonic -p Qm --compare --section all```
+```python run_ext_sonic_node_astim.py -n RS -a 32 --fs 30 -f 500 -A 100 --tstim 150 --method sonic -p Qm --compare --section all```
 
 - Use `run_senn_estim.py` for simulations of a **SENN-type myelinated fiber model** of any diameter and with any number of nodes upon **extracellular electrical stimulation**. For instance, a 20 um diameter, 11 nodes fiber with Frankenhaeuser-Huxley (FH) nodal membrane dynamics, stimulated at 0.6 mA for 0.1 ms by a cathodal point-source electrode located one internodal distance above the central node:
 
-```$ python run_senn_estim.py -n FH -d 20 --nnodes 11 -A -0.6 --tstim 0.1 -p Vm --compare --section all```
+```python run_senn_estim.py -n FH -d 20 --nnodes 11 -A -0.6 --tstim 0.1 -p Vm --compare --section all```
 
 ### Saving and visualizing results
 
