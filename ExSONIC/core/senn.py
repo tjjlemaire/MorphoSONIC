@@ -155,7 +155,7 @@ class SennFiber(metaclass=abc.ABCMeta):
             rs = self.rs
         return 4 * rs * L / (np.pi * d**2) * 1e-2  # Ohm
 
-    def setResistivity(self):
+    def setResistivity(self): ####ASK!
         ''' Set sections axial resistivity, corrected to account for internodes and membrane capacitance
             in the Q-based differentiation scheme. '''
 
@@ -210,6 +210,7 @@ class SennFiber(metaclass=abc.ABCMeta):
             setattr(sec, f'stimon_{self.mechname}', value)
         return value
 
+    ##ASK!!
     def toggleStim(self):
         return toggleStim(self)
 
@@ -233,6 +234,7 @@ class SennFiber(metaclass=abc.ABCMeta):
                 si_format(PRF, 2, space=' '), DC * 1e2) if DC < 1.0 else ''))
 
         # Set recording vectors
+        ##ASK!!!
         t = setTimeProbe()
         stim = setStimProbe(self.sections[self.ids[0]], self.mechname)
         probes = {k: self.nodes[k].setProbesDict(v) for k, v in self.sections.items()}
@@ -436,7 +438,6 @@ class EStimSennFiber(SennFiber):
 
     def __init__(self, pneuron, fiberD, nnodes, **kwargs):
         mechname = pneuron.name + 'auto'
-        # self.connector = SeriesConnector(vref=f'Vm_{mechname}', rmin=None)
         # self.connector = SeriesConnector(vref='v', rmin=None)
         self.connector = None
         super().__init__(pneuron, fiberD, nnodes, **kwargs)
@@ -642,7 +643,7 @@ class UnmyelinatedSennFiber(metaclass=abc.ABCMeta):
         ''' Keyword used to characterize stimulation modality. '''
         raise NotImplementedError
 
-    #def __init__(self, pneuron, fiberD, nnodes, rs=1e2, nodeL=2.5e-6, d_ratio=0.7):
+
     def __init__(self, pneuron, fiberD, nnodes, rs=1e2, fiberL=10e-3, d_ratio=0.7):
         ''' Initialize fiber model.
 
@@ -669,7 +670,7 @@ class UnmyelinatedSennFiber(metaclass=abc.ABCMeta):
         self.fiberL = fiberL
 
         # Define fiber geometrical parameters
-        self.nodeD = self.d_ratio * self.fiberD   # m                      # m
+        self.nodeD = self.d_ratio * self.fiberD   # m
         self.nodeL = self.fiberL/ (self.nnodes -1)
         self.interD = self.d_ratio * self.fiberD  # m
         self.interL = 0           # m
@@ -750,8 +751,8 @@ class UnmyelinatedSennFiber(metaclass=abc.ABCMeta):
         ''' Set sections geometry. '''
         logger.debug(f'defining sections geometry: {self.strGeom()}')
         for sec in self.sections.values():
-            sec.diam = self.nodeD * 1e6  # um
             sec.L = self.nodeL * 1e6     # um
+            sec.diam = self.nodeD * 1e6  # um
             sec.nseg = 1
 
     def resistance(self, d, L, rs=None):
@@ -990,10 +991,7 @@ class UnmyelinatedSennFiber(metaclass=abc.ABCMeta):
                 errmsg = 'Ascending zero crossing #{} (t = {:.2f} ms) not preceding peak #{} (t = {:.2f} ms)'
                 for ispike, (tzc, tpeak) in enumerate(zip(tzcross, t[ispikes])):
                     assert tzc < tpeak, errmsg.format(ispike, tzc * 1e3, ispike, tpeak * 1e3)
-                if id=='node0':
-                    tspikes[id] = tzcross[-1]
-                else:
-                    tspikes[id] = tzcross
+                tspikes[id] = tzcross
             else:
                 tspikes[id] = t[ispikes]
         return pd.DataFrame(tspikes)
@@ -1048,7 +1046,6 @@ class EStimUnmyelinatedSennFiber(UnmyelinatedSennFiber):
 
     def __init__(self, pneuron, fiberD, nnodes, **kwargs):
         mechname = pneuron.name + 'auto'
-        # self.connector = SeriesConnector(vref=f'Vm_{mechname}', rmin=None)
         # self.connector = SeriesConnector(vref='v', rmin=None)
         self.connector = None
         super().__init__(pneuron, fiberD, nnodes, **kwargs)
@@ -1119,7 +1116,7 @@ class EStimUnmyelinatedSennFiber(UnmyelinatedSennFiber):
 class VextUnmyelinatedSennFiber(EStimUnmyelinatedSennFiber):
 
     simkey = 'senn_Vext'
-    A_range = (1e0, 1e3)  # mV
+    A_range = (1e2, 1e6)  # mV
 
     def preProcessAmps(self, Ve):
         ''' Convert array of extracellular potentials into equivalent intracellular injected currents.
@@ -1148,3 +1145,4 @@ class IinjUnmyelinatedSennFiber(EStimUnmyelinatedSennFiber):
             :return: model-sized vector of intracellular injected currents (nA)
         '''
         return Iinj
+    

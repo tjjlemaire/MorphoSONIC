@@ -9,7 +9,7 @@ import os
 import numpy as np
 
 from PySONIC.utils import logger, si_format
-from ExSONIC.core import IinjUnmyelinatedSennFiber
+from ExSONIC.core import VextUnmyelinatedSennFiber
 
 
 def cache(fpath, delimiter=','):
@@ -34,7 +34,8 @@ def convergence(pneuron, fiberD, rho_a, d_ratio, fiberL, tstim, toffset, PRF, DC
     for i, x in enumerate(nnodes):
         if x == 1:
             x = 3
-        fiber = IinjUnmyelinatedSennFiber(pneuron, fiberD, x, rs=rho_a, fiberL=fiberL, d_ratio=d_ratio)
+        fiber = VextUnmyelinatedSennFiber(pneuron, fiberD, x, rs=rho_a, fiberL=fiberL, d_ratio=d_ratio)
         logger.info(f'Running titration for {si_format(tstim)}s pulse')
         Ithrs[i] = fiber.titrate(psource, tstim, toffset, PRF, DC)  # A
+        fiber.reset()
     return Ithrs
