@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-10-03 14:46:38
+# @Last Modified time: 2019-10-10 15:13:31
 
 import abc
 import pickle
@@ -155,7 +155,7 @@ class SennFiber(metaclass=abc.ABCMeta):
             rs = self.rs
         return 4 * rs * L / (np.pi * d**2) * 1e-2  # Ohm
 
-    def setResistivity(self):
+    def setResistivity(self): ####ASK!
         ''' Set sections axial resistivity, corrected to account for internodes and membrane capacitance
             in the Q-based differentiation scheme. '''
 
@@ -384,7 +384,6 @@ class SennFiber(metaclass=abc.ABCMeta):
                 tspikes[id] = tzcross
             else:
                 tspikes[id] = t[ispikes]
-
         return pd.DataFrame(tspikes)
 
     def getConductionVelocity(self, data, ids=None):
@@ -438,7 +437,6 @@ class EStimSennFiber(SennFiber):
 
     def __init__(self, pneuron, fiberD, nnodes, **kwargs):
         mechname = pneuron.name + 'auto'
-        # self.connector = SeriesConnector(vref=f'Vm_{mechname}', rmin=None)
         # self.connector = SeriesConnector(vref='v', rmin=None)
         self.connector = None
         super().__init__(pneuron, fiberD, nnodes, **kwargs)
@@ -633,3 +631,169 @@ class SonicSennFiber(SennFiber):
         for key in ['simkey', 'neuron', 'Astim', 'tstim']:
             del pneuron_codes[key]
         return {**fiber_codes, **psource_codes, **{'tstim': '{:.2f}ms'.format(tstim * 1e3)},**pneuron_codes}
+
+
+class UnmyelinatedSennFiber(SennFiber):
+
+    tscale = 'ms'  # relevant temporal scale of the model
+
+    @property
+    @abc.abstractmethod
+    def simkey(self):
+        ''' Keyword used to characterize stimulation modality. '''
+        raise NotImplementedError
+
+
+    def __init__(self, pneuron, fiberD, nnodes, rs=1e2, fiberL=10e-3, d_ratio=0.7):
+        ''' Initialize fiber model.
+
+            :param pneuron: point-neuron model object
+            :param fiberD: fiber outer diameter (m)
+            :param nnodes: number of nodes
+            :param rs: axoplasmic resistivity (Ohm.cm)
+            :param nodeL: nominal node length (m)
+            :param d_ratio: ratio of axon (inner-myelin) and fiber (outer-myelin) diameters
+        '''
+        if not isinstance(pneuron, PointNeuron):
+            raise TypeError(f'{pneuron} is not a valid PointNeuron instance')
+        if nnodes % 2 == 0:
+            raise ValueError('Number of nodes must be odd')
+        if fiberD <= 0:
+            raise ValueError('Fiber diameter must be positive')
+
+        # Assign attributes
+        self.pneuron = pneuron
+        self.rs = rs  # Ohm.cm
+        self.nnodes = nnodes
+        self.fiberD = fiberD
+        self.d_ratio = d_ratio
+        self.fiberL = fiberL
+
+        # Define fiber geometrical parameters
+        self.nodeD = self.d_ratio * self.fiberD   # m
+        self.nodeL = self.fiberL/ (self.nnodes -1)
+        self.interD = self.d_ratio * self.fiberD  # m
+        self.interL = 0           # m
+
+        # Compute nodal and internodal axial resistance ()
+        self.R_node = self.resistance(self.nodeD, self.nodeL)  # Ohm
+        self.R_inter = self.resistance(self.interD, self.interL)  # Ohm
+
+        # Create node sections with assigned membrane dynamics
+        self.ids = [f'node{i}' for i in range(self.nnodes)]
+        self.createSections(self.ids)
+        self.mechname = self.nodes[self.ids[0]].mechname
+        self.setGeometry()  # must be called PRIOR to build_custom_topology()
+        self.setResistivity()
+        self.setTopology()
+
+    def reset(self):
+        ''' clear all sections and re-initialize model. '''
+        self.clear()
+        self.__init__(self.pneuron, self.fiberD, self.nnodes, rs=self.rs,
+                      fiberL=self.fiberL, d_ratio=self.d_ratio)
+
+
+class EStimUnmyelinatedSennFiber(UnmyelinatedSennFiber):
+
+    def __init__(self, pneuron, fiberD, nnodes, **kwargs):
+        mechname = pneuron.name + 'auto'
+        self.connector = SeriesConnector(vref='v', rmin=None)
+        #self.connector = None
+        super().__init__(pneuron, fiberD, nnodes, **kwargs)
+
+    def createSections(self, ids):
+        ''' Create morphological sections. '''
+        self.nodes = {id: IintraNode(self.pneuron, id, cell=self) for id in ids}
+        self.sections = {id: node.section for id, node in self.nodes.items()}
+
+    def preProcessAmps(self, amps):
+        return NotImplementedError
+
+    def setStimAmps(self, amps):
+        ''' Set distributed stimulation amplitudes.
+
+            :param amps: model-sized vector of stimulus amplitudes
+        '''
+        self.Iinj = self.preProcessAmps(amps)
+        logger.debug('injected intracellular currents: Iinj = [{}] nA'.format(
+            ', '.join([f'{I:.2f}' for I in self.Iinj])))
+
+        # Assign current clamps
+        self.iclamps = []
+        for i, sec in enumerate(self.sections.values()):
+            iclamp = h.IClamp(sec(0.5))
+            iclamp.delay = 0  # we want to exert control over amp starting at 0 ms
+            iclamp.dur = 1e9  # dur must be long enough to span all our changes
+            self.iclamps.append(iclamp)
+
+    def setStimON(self, value):
+        value = super().setStimON(value)
+        for iclamp, Iinj in zip(self.iclamps, self.Iinj):
+            iclamp.amp = value * Iinj
+        return value
+
+    def getPltVars(self, *args, **kwargs):
+        return self.pneuron.getPltVars(*args, **kwargs)
+
+    def getPltScheme(self, *args, **kwargs):
+        return self.pneuron.getPltScheme(*args, **kwargs)
+
+    def getArange(self, psource):
+        return [psource.computeSourceAmp(self, x) for x in self.A_range]
+
+    def titrationFunc(self, args):
+        psource, A, *args = args
+        if psource.is_cathodal:
+            A = -A
+        data, _ = self.simulate(psource, A, *args)
+        return self.isExcited(data)
+
+    def titrate(self, psource, *args, **kwargs):
+        Ithr = super().titrate(psource, *args, **kwargs)
+        if psource.is_cathodal:
+            Ithr = -Ithr
+        return Ithr
+
+    def filecodes(self, *args):
+        psource, A, tstim, *args = args
+        fiber_codes = super().filecodes(*args)
+        psource_codes = psource.filecodes(A)
+        pneuron_codes = self.pneuron.filecodes(A, tstim, *args)
+        for key in ['simkey', 'neuron', 'Astim', 'tstim']:
+            del pneuron_codes[key]
+        return {**fiber_codes, **psource_codes, **{'tstim': '{:.2f}ms'.format(tstim * 1e3)},**pneuron_codes}
+
+
+class VextUnmyelinatedSennFiber(EStimUnmyelinatedSennFiber):
+
+    simkey = 'senn_Vext'
+    A_range = (1e0, 1e5)  # mV
+
+    def preProcessAmps(self, Ve):
+        ''' Convert array of extracellular potentials into equivalent intracellular injected currents.
+
+            :param Ve: model-sized vector of extracellular potentials (mV)
+            :return: model-sized vector of intracellular injected currents (nA)
+        '''
+        logger.debug('Extracellular potentials: Ve = [{}] mV'.format(
+            ', '.join([f'{v:.2f}' for v in Ve])))
+        Iinj =  np.diff(Ve, 2) / (self.R_node + self.R_inter) * 1e6  # nA
+        Iinj = np.pad(Iinj, (1, 1), 'constant')  # zero-padding on both extremities
+        logger.debug('Equivalent intracellular currents: Iinj = [{}] nA'.format(
+            ', '.join([f'{I:.2f}' for I in Iinj])))
+        return Iinj
+
+
+class IinjUnmyelinatedSennFiber(EStimUnmyelinatedSennFiber):
+
+    simkey = 'senn_Iinj'
+    A_range = (1e-11, 1e-6)  # nA
+
+    def preProcessAmps(self, Iinj):
+        ''' Assign array of injeccted injected currents.
+
+            :param Iinj: model-sized vector of intracellular injected currents (nA)
+            :return: model-sized vector of intracellular injected currents (nA)
+        '''
+        return Iinj
