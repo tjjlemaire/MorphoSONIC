@@ -31,14 +31,14 @@ PRF = 100.      # Hz
 DC = 1.         # -
 
 x0 = 0              # point-electrode located above central node (m)
-z0 = 100*fiberD     # point-electrode to fiber distance (m, 1 internode length)
+z0 = 0.5*100*fiberD     # point-electrode to fiber distance (m, 1 internode length)
 mode = 'cathode'    # cathodic pulse   
 rho_e = 300.0       # resistivity of external medium (Ohm.cm, from McNeal 1976)
 
 psource = ExtracellularCurrent(x0, z0, rho=rho_e, mode=mode)
 
 #Choose the number of nodes range
-nnodes = np.logspace(0, 4, 100)
+nnodes = np.logspace(0, 3, 100)
 nnodes = np.asarray(np.ceil(nnodes) // 2 * 2 + 1, dtype=int)
 
 #run the convergence
@@ -55,17 +55,13 @@ max_nodeL = np.interp(max_rel_error, rel_errors[::-1], nodeL[::-1], left=np.nan,
 print(max_nodeL)
 
 #Plotting
-#plt.plot(nnodes, rel_errors, label = 'errors')
 fig, ax = plt.subplots()
 ax.plot(nodeL, rel_errors * 100, label = 'errors')
 ax.axhline(max_rel_error * 100, linestyle ='dashed', label = 'threshold error', color = 'k')
-#plt.axvline(min_nodes, label = 'min nnodes', color = 'k')
 ax.axvline(max_nodeL, label = 'max length', color = 'k')
-#plt.xlabel('Number of nodes')
 ax.set_xlabel('Node length, m')
 ax.set_ylabel('relative error (%)')
 ax.set_xscale('log')
 ax.invert_xaxis()
 ax.legend()
-#plt.title(f'Minimum number of nodes = {int(min_nodes)}')
 ax.set_title(f'Maximum node length = {max_nodeL * 1e6:.2f} um')

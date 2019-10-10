@@ -210,7 +210,6 @@ class SennFiber(metaclass=abc.ABCMeta):
             setattr(sec, f'stimon_{self.mechname}', value)
         return value
 
-    ##ASK!!
     def toggleStim(self):
         return toggleStim(self)
 
@@ -234,7 +233,6 @@ class SennFiber(metaclass=abc.ABCMeta):
                 si_format(PRF, 2, space=' '), DC * 1e2) if DC < 1.0 else ''))
 
         # Set recording vectors
-        ##ASK!!!
         t = setTimeProbe()
         stim = setStimProbe(self.sections[self.ids[0]], self.mechname)
         probes = {k: self.nodes[k].setProbesDict(v) for k, v in self.sections.items()}
@@ -1046,8 +1044,8 @@ class EStimUnmyelinatedSennFiber(UnmyelinatedSennFiber):
 
     def __init__(self, pneuron, fiberD, nnodes, **kwargs):
         mechname = pneuron.name + 'auto'
-        # self.connector = SeriesConnector(vref='v', rmin=None)
-        self.connector = None
+        self.connector = SeriesConnector(vref='v', rmin=None)
+        #self.connector = None
         super().__init__(pneuron, fiberD, nnodes, **kwargs)
 
     def createSections(self, ids):
@@ -1116,7 +1114,7 @@ class EStimUnmyelinatedSennFiber(UnmyelinatedSennFiber):
 class VextUnmyelinatedSennFiber(EStimUnmyelinatedSennFiber):
 
     simkey = 'senn_Vext'
-    A_range = (1e2, 1e6)  # mV
+    A_range = (1e0, 1e5)  # mV
 
     def preProcessAmps(self, Ve):
         ''' Convert array of extracellular potentials into equivalent intracellular injected currents.
