@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-10-10 15:13:31
+# @Last Modified time: 2019-10-10 15:39:15
 
 import abc
 import pickle
@@ -13,7 +13,7 @@ from inspect import signature
 
 from PySONIC.core import Model, PointNeuron, NeuronalBilayerSonophore
 from PySONIC.neurons import *
-from PySONIC.utils import si_format, pow10_format, logger, plural, binarySearch, pow2Search
+from PySONIC.utils import si_format, pow10_format, logger, plural, binarySearch, pow2Search, fileCache
 from PySONIC.constants import *
 from PySONIC.postpro import detectSpikes, prependDataFrame
 
@@ -783,6 +783,20 @@ class VextUnmyelinatedSennFiber(EStimUnmyelinatedSennFiber):
         logger.debug('Equivalent intracellular currents: Iinj = [{}] nA'.format(
             ', '.join([f'{I:.2f}' for I in Iinj])))
         return Iinj
+
+
+@fileCache('.', 'Ithrs', ext='csv')
+def convergence(pneuron, fiberD, rho_a, d_ratio, fiberL, tstim, toffset, PRF, DC, psource, nnodes):
+    Ithrs = np.empty(nnodes.size)
+    for i, x in enumerate(nnodes):
+        if x == 1:
+            x = 3
+        fiber = VextUnmyelinatedSennFiber(pneuron, fiberD, x, rs=rho_a, fiberL=fiberL, d_ratio=d_ratio)
+        logger.info(f'Running titration for {si_format(tstim)}s pulse')
+        Ithrs[i] = fiber.titrate(psource, tstim, toffset, PRF, DC)  # A
+        fiber.reset()
+    return Ithrs
+
 
 
 class IinjUnmyelinatedSennFiber(EStimUnmyelinatedSennFiber):
