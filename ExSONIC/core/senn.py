@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-10-10 15:39:15
+# @Last Modified time: 2019-10-16 18:31:38
 
 import abc
 import pickle
@@ -394,7 +394,7 @@ class SennFiber(metaclass=abc.ABCMeta):
         '''
         # By default, consider all fiber nodes
         if ids is None:
-            ids = self.ids
+            ids = self.ids.copy()
 
         # Remove end nodes from calculations if present
         for x in [0, -1]:
