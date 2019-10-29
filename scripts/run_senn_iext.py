@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-15 20:33:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-27 14:28:04
+# @Last Modified time: 2019-10-29 16:22:45
 
 ''' Run simulations of an SENN fiber model with a specific point-neuron mechanism
     upon extracellular electrical stimulation. '''
@@ -39,7 +39,7 @@ def main():
                                     for zps in args['zps']:
                                         if zps is None:
                                             zps = fiber.interL
-                                        psource = ExtracellularCurrent(xps, zps, args['mode'])
+                                        psource = ExtracellularCurrent((xps, zps), args['mode'])
                                         if args['save']:
                                             simqueue = [[item[0], psource, *item[1:]] for item in queue]
                                         else:

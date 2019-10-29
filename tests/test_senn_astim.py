@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-10-16 18:33:30
+# @Last Modified time: 2019-10-29 19:06:42
 
 import numpy as np
 
@@ -24,7 +24,7 @@ class TestSennAstim(TestFiber):
         # Fiber model parameters
         pneuron = getPointNeuron('FH')  # Frog myelinated node membrane equations
         fiberD = 10e-6                  # fiber diameter (m)
-        nnodes = 5
+        nnodes = 15
         rho_a = 54.7                    # axoplasm resistivity (Ohm.cm)
         d_ratio = 0.6                   # axon / fiber diameter ratio
         nodeL = 1.5e-6                  # node length (m)
@@ -165,7 +165,7 @@ class TestSennAstim(TestFiber):
         r_tr = 1.27e-3     # transducer radius (m)
 
         # Create ultrasound source
-        psource = PlanarDiskTransducerSource(x0, z0, Fdrive, rho=rho, c=c, theta=theta, r=r_tr)
+        psource = PlanarDiskTransducerSource((x0, z0), Fdrive, rho=rho, c=c, theta=theta, r=r_tr)
 
         # Titrate for a specific duration and simulate fiber at threshold particle velocity
         logger.info(f'Running titration for {si_format(tstim)}s pulse')
@@ -218,13 +218,13 @@ class TestSennAstim(TestFiber):
         DC = 1.         # -
 
         # Create ultrasound source
-        psource = PlanarDiskTransducerSource(x0, z0, Fdrive, rho=rho, c=c, theta=theta, r=r_tr)
+        psource = PlanarDiskTransducerSource((x0, z0), Fdrive, rho=rho, c=c, theta=theta, r=r_tr)
 
         # Strength-distance curve
         ztr = np.array([0.5, 1.0, 2.0, 4.0]) * fiber.interL # transducer-fiber distances (m)
         uthrs = []
         for dist in ztr:
-           psource.z = dist
+           psource.x = (psource.x[0], dist)
            logger.info(f'Running titration for {si_format(tstim)}s pulse')
            uthrs.append(fiber.titrate(psource, tstim, toffset, PRF, DC))  # m/s
            fiber.reset()
@@ -233,7 +233,7 @@ class TestSennAstim(TestFiber):
            yname='particle velocity', yfactor=1e0, yunit='m/s')
 
         # Strength-duration curve
-        psource.z = z0
+        psource.x = (psource.x[0], z0)
         durations = np.array([0.05, 0.1, 0.2, 0.3, 0.5, 1, 3, 5], dtype=float) * 1e-3  # s
         uthrs = np.array([fiber.titrate(psource, x, toffset, PRF, DC) for x in durations])
         fig4 = strengthDurationCurve(

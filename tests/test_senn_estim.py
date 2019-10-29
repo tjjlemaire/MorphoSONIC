@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-10-10 15:18:03
+# @Last Modified time: 2019-10-29 16:18:48
 
 import numpy as np
 
@@ -54,7 +54,7 @@ class TestSennEstim(TestFiber):
         DC = 1.            # -
 
         # Create extracellular current source
-        psource = ExtracellularCurrent(x0, z0, rho=rho_e, mode=mode)
+        psource = ExtracellularCurrent((x0, z0), rho=rho_e, mode=mode)
 
         # Titrate for a specific duration and simulate fiber at threshold current
         logger.info(f'Running titration for {si_format(tstim)}s pulse')
@@ -79,7 +79,7 @@ class TestSennEstim(TestFiber):
         # Compute and plot strength-duration curve with both polarities
         #fiber.reset()
         durations = np.logspace(0, 4, 5) * 1e-6  # s
-        psources = {k: ExtracellularCurrent(x0, z0, rho=rho_e, mode=k) for k in ['cathode', 'anode']}
+        psources = {k: ExtracellularCurrent((x0, z0), rho=rho_e, mode=k) for k in ['cathode', 'anode']}
         Ithrs = {k: np.array([np.abs(fiber.titrate(v, x, toffset, PRF, DC)) for x in durations])  # A
                 for k, v in psources.items()}
         I0_ref = 0.36e-3  # A
@@ -141,7 +141,7 @@ class TestSennEstim(TestFiber):
         DC = 1.            # -
 
         # Create cathodic and anodic extracellular current sources
-        psources = {k: ExtracellularCurrent(x0, z0, rho=rho_e, mode=k) for k in ['cathode', 'anode']}
+        psources = {k: ExtracellularCurrent((x0, z0), rho=rho_e, mode=k) for k in ['cathode', 'anode']}
 
         # Compute and plot strength-duration curve with both polarities
         durations = np.array([1, 5, 10, 50, 100, 500, 1000, 2000], dtype=float) * 1e-6  # s

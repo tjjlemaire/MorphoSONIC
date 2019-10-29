@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-26 14:59:19
+# @Last Modified time: 2019-10-29 18:56:11
 
 import abc
 import numpy as np
@@ -68,16 +68,25 @@ class IntracellularPointSource(PointSource):
 
 class ExtracellularPointSource(PointSource):
 
-    def __init__(self, x, z):
+    def __init__(self, x):
         self.x = x
-        self.z = z
-        self.attrkeys = ['x', 'z']
+        self.attrkeys = ['x']
 
     def __repr__(self):
-        return f'{self.__class__.__name__}(x = {si_format(self.x)}m, z = {si_format(self.z)}m)'
+        return f'{self.__class__.__name__}(x = {self.strPos()}'
 
-    def distance(self, x, z):
-        return np.sqrt((x - self.x)**2 + (z - self.z)**2)
+    def distance(self, x):
+        return np.linalg.norm(np.asarray(x) - np.asarray(self.x))
+
+    def distances(self, fiber):
+        return np.array([self.distance((item, 0.)) for item in fiber.getNodeCoords()])  # m
+
+    def strPos(self):
+        x_mm = ['{:.1f}'.format(x * 1e3) for x in self.x]
+        return '({})mm'.format(','.join(x_mm))
+
+    def getMinNodeDistance(self, fiber):
+        return min(self.distances(fiber))  # m
 
 
 class CurrentPointSource(PointSource):
@@ -99,13 +108,13 @@ class CurrentPointSource(PointSource):
 
 class ExtracellularCurrent(ExtracellularPointSource, CurrentPointSource):
 
-    def __init__(self, x, z, mode='cathode', rho=300.0):
+    def __init__(self, x, mode='cathode', rho=300.0):
         ''' Initialization.
 
             :param rho: extracellular medium resistivity (Ohm.cm)
         '''
         self.rho = rho
-        ExtracellularPointSource.__init__(self, x, z)
+        ExtracellularPointSource.__init__(self, x)
         CurrentPointSource.__init__(self, mode)
         self.attrkeys.append('rho')
 
@@ -131,21 +140,41 @@ class ExtracellularCurrent(ExtracellularPointSource, CurrentPointSource):
 
     def computeNodesAmps(self, fiber, I):
         ''' Compute extracellular potential value at all fiber nodes. '''
-        distances = self.distance(fiber.getNodeCoords(), 0.)  # m
-        return self.Vext(I, distances)  # mV
+        return self.Vext(I, self.distances(fiber))  # mV
 
     def computeSourceAmp(self, fiber, Ve):
-        # Compute distance of closest node to point-source
-        rmin = min(self.distance(fiber.getNodeCoords(), 0.))  # m
-
-        # Compute the current needed to generate the extracellular potential value at this node
-        return self.Iext(Ve, rmin)  # A
+        # Compute the current needed to generate the extracellular potential value at closest node
+        return self.Iext(Ve, self.getMinNodeDistance(fiber))  # A
 
     def filecodes(self, A):
         return {
-            'psource': f'ps({(self.x * 1e3):.1f},{(self.z * 1e3):.1f})mm',
+            'psource': f'ps{self.strPos()}',
             'A': f'{(A * 1e3):.2f}mA'
         }
+
+
+# class ExtracellularCurrentArray:
+
+#     def __init__(self, positions, rel_amps, **kwargs):
+#         ''' Initialization.
+
+#             :param rho: extracellular medium resistivity (Ohm.cm)
+#         '''
+#         if len(rel_amps) != len(positions):
+#             raise ValueError('number of positions does not match number of source relative amplitudes')
+#         self.rel_amps = rel_amps
+#         self.psources = [ExtracellularCurrent(x, **kwargs) for x in positions]
+
+#     def computeNodesAmps(self, fiber, I):
+#         ''' Compute extracellular potential value at all fiber nodes. '''
+#         Vext = []
+#         for psource, rel_amp in zip(self.psources, self.rel_amps):
+#             distances = psource.distance(fiber.getNodeCoords(), 0.)  # m
+#             Vext.append(psource.Vext(I * rel_amp, distances))  # mV
+#         return np.sum(np.array(Vext), axis=0)
+
+#     def strAmp(self, amp):
+#         return 'xxx'
 
 
 class IntracellularCurrent(IntracellularPointSource, CurrentPointSource):
@@ -206,7 +235,7 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
     modality = {'name': 'u', 'unit': 'm/s'}
     conv_factor = 1e0
 
-    def __init__(self, x, z, Fdrive, rho=1204.1, c=1515.0, theta=0, r=2e-3):
+    def __init__(self, x, Fdrive, rho=1204.1, c=1515.0, theta=0, r=2e-3):
         ''' Initialization.
 
             :param rho: medium density (kg/m3)
@@ -214,7 +243,7 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
             :param theta: transducer angle of incidence (radians)
             :param r: transducer radius (m)
         '''
-        super().__init__(x, z)
+        super().__init__(x)
         self.Fdrive = Fdrive  # Hz
         self.rho = rho
         self.c = c
@@ -258,10 +287,11 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
         node_coords = np.array([fiber.getNodeCoords(), np.zeros(fiber.nnodes)])
 
         # Rotate around source incident angle
-        node_coords = rotAroundPoint2D(node_coords, self.theta, (self.x, self.z))
+        node_coords = rotAroundPoint2D(node_coords, self.theta, self.x)
 
         # Compute amplitudes assuming radial symmetry (i.e. as if every point was along the normal axis)
-        return self.normalAxisAmp(self.distance(*node_coords), u)  # Pa
+        distances = np.array([self.distance(item) for item in node_coords.T])  # m
+        return self.normalAxisAmp(distances, u)  # Pa
 
     def computeSourceAmp(self, fiber, A):
         ''' Compute transducer particle velocity amplitude from target acoustic amplitude
@@ -271,15 +301,14 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
             :param A: target acoustic amplitude (Pa)
             :return: particle velocity normal to the transducer surface.
         '''
-        # Compute distance of closest node to point-source
-        rmin = min(self.distance(fiber.getNodeCoords(), 0.))  # m
 
         # Compute the particle velocity needed to generate the acoustic amplitude value at this node
-        return A / self.relNormalAxisAmp(rmin)  # m/s
+        return A / self.relNormalAxisAmp(self.getMinNodeDistance(fiber))  # m/s
 
     def filecodes(self, u):
+        pos_mm = ','.join(['{:.1f}'.format(x * 1e3) for x in self.x])
         return {
-            'psource': f'ps({(self.x * 1e3):.1f},{(self.z * 1e3):.1f})mm',
+            'psource': f'ps({pos_mm})mm',
             'f': f'{self.Fdrive * 1e-3:.0f}kHz',
             'u': f'{si_format(u, 2)}m/s'
         }

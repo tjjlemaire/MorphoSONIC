@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-10-16 17:56:55
+# @Last Modified time: 2019-10-29 16:13:39
 
 import numpy as np
 import pandas as pd
@@ -65,7 +65,7 @@ def figtitle(meta):
             meta['neuron'],
             meta['fiberD'] * 1e6,
             meta['nnodes'],
-            meta['psource'].x * 1e3, meta['psource'].z * 1e3,
+            *[item * 1e3 for item in meta['psource'].x],
             wavetype,
             meta['A'] * 1e3,
             meta['tstim'] * 1e3,
