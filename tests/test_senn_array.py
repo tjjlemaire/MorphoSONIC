@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-10-28 18:33:04
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-10-30 15:56:57
+# @Last Modified time: 2019-10-30 17:37:59
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -76,9 +76,14 @@ ax.plot(inodes[1:-1], d2Ve_net, c='k', label='combined effect')
 ax.legend(frameon=False)
 
 # Fiber simulations
-# Ithr = fiber.titrate(parray, tstim, toffset, PRF, DC)
-# I = Ithr * 1.2
 data, meta = fiber.simulate(parray, I, tstim, toffset, PRF, DC)
 fig3 = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
+
+# TODO:
+# - try to see if unidirectional activation an also be reached also with unique polarity across sources
+# - vary sources - fiber distance
+# - vary inter-source distance
+# - vary current amplitudes
+# - vary number of sources
 
 plt.show()
