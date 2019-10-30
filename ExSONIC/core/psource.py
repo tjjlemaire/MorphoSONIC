@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-10-29 18:56:11
+# @Last Modified time: 2019-10-30 15:52:14
 
 import abc
 import numpy as np
@@ -39,6 +39,11 @@ class PointSource(metaclass=abc.ABCMeta):
 
     @property
     @abc.abstractmethod
+    def strPos(self):
+        raise NotImplementedError
+
+    @property
+    @abc.abstractmethod
     def computeNodesAmps(self, fiber, A):
         return NotImplementedError
 
@@ -55,7 +60,7 @@ class IntracellularPointSource(PointSource):
         self.attrkeys = ['inode']
 
     def __repr__(self):
-        return f'{self.__class__.__name__}(inode = {self.inode})'
+        return f'{self.__class__.__name__}({self.strPos()})'
 
     def computeNodesAmps(self, fiber, A):
         amps = np.zeros(fiber.nnodes)
@@ -65,6 +70,9 @@ class IntracellularPointSource(PointSource):
     def computeSourceAmp(self, fiber, A):
         return A
 
+    def strPos(self):
+        return f'node {self.inode}'
+
 
 class ExtracellularPointSource(PointSource):
 
@@ -73,7 +81,7 @@ class ExtracellularPointSource(PointSource):
         self.attrkeys = ['x']
 
     def __repr__(self):
-        return f'{self.__class__.__name__}(x = {self.strPos()}'
+        return f'{self.__class__.__name__}(x = {self.strPos()})'
 
     def distance(self, x):
         return np.linalg.norm(np.asarray(x) - np.asarray(self.x))
@@ -151,30 +159,6 @@ class ExtracellularCurrent(ExtracellularPointSource, CurrentPointSource):
             'psource': f'ps{self.strPos()}',
             'A': f'{(A * 1e3):.2f}mA'
         }
-
-
-# class ExtracellularCurrentArray:
-
-#     def __init__(self, positions, rel_amps, **kwargs):
-#         ''' Initialization.
-
-#             :param rho: extracellular medium resistivity (Ohm.cm)
-#         '''
-#         if len(rel_amps) != len(positions):
-#             raise ValueError('number of positions does not match number of source relative amplitudes')
-#         self.rel_amps = rel_amps
-#         self.psources = [ExtracellularCurrent(x, **kwargs) for x in positions]
-
-#     def computeNodesAmps(self, fiber, I):
-#         ''' Compute extracellular potential value at all fiber nodes. '''
-#         Vext = []
-#         for psource, rel_amp in zip(self.psources, self.rel_amps):
-#             distances = psource.distance(fiber.getNodeCoords(), 0.)  # m
-#             Vext.append(psource.Vext(I * rel_amp, distances))  # mV
-#         return np.sum(np.array(Vext), axis=0)
-
-#     def strAmp(self, amp):
-#         return 'xxx'
 
 
 class IntracellularCurrent(IntracellularPointSource, CurrentPointSource):

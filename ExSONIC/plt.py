@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-10-29 16:13:39
+# @Last Modified time: 2019-10-30 15:48:42
 
 import numpy as np
 import pandas as pd
@@ -61,22 +61,22 @@ def figtitle(meta):
                     meta['neuron'], meta['a'] * 1e9, meta['fs'] * 1e2, meta['deff'] * 1e9, meta['rs'], wavetype, meta['Fdrive'] * 1e-3,
                     meta['Adrive'] * 1e-3, meta['tstim'] * 1e3, suffix, meta['method'])
     elif simkey == 'senn_Vext':
-        return 'SENN fiber ({} neuron, d = {:.1f}um, {} nodes), ({:.1f}, {:.1f})mm point-source {} E-STIM {:.2f}mA, {:.2f}ms{}'.format(
+        return 'SENN fiber ({} neuron, d = {:.1f}um, {} nodes), {} point-source {} E-STIM {:.2f}mA, {:.2f}ms{}'.format(
             meta['neuron'],
             meta['fiberD'] * 1e6,
             meta['nnodes'],
-            *[item * 1e3 for item in meta['psource'].x],
+            meta['psource'].strPos(),
             wavetype,
             meta['A'] * 1e3,
             meta['tstim'] * 1e3,
             suffix
         )
     elif simkey == 'senn_Iinj':
-        return 'SENN fiber ({} neuron, d = {:.1f}um, {} nodes), node {} point-source {} E-STIM {:.2f}nA, {:.2f}ms{}'.format(
+        return 'SENN fiber ({} neuron, d = {:.1f}um, {} nodes), {} point-source {} E-STIM {:.2f}nA, {:.2f}ms{}'.format(
             meta['neuron'],
             meta['fiberD'] * 1e6,
             meta['nnodes'],
-            meta['psource'].inode,
+            meta['psource'].strPos(),
             wavetype,
             meta['A'] * 1e9,
             meta['tstim'] * 1e3,
@@ -85,7 +85,7 @@ def figtitle(meta):
     elif simkey == 'senn_SONIC':
         psource = meta['psource']
         try:
-            s = f'node {psource.inode} point-source'
+            s = f'{psource.strPos()} point-source'
         except AttributeError:
             s = f'{si_format(psource.r)}m radius planar transducer'
 
@@ -102,7 +102,7 @@ def figtitle(meta):
             suffix
         )
 
-    return 'dummy title'
+    return 'NO PREDEFINED TITLE'
 
 
 class SectionGroupedTimeSeries(GroupedTimeSeries):

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-10-29 16:18:48
+# @Last Modified time: 2019-10-30 15:53:57
 
 import numpy as np
 
@@ -77,7 +77,7 @@ class TestSennEstim(TestFiber):
         fig1 = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
 
         # Compute and plot strength-duration curve with both polarities
-        #fiber.reset()
+        fiber.reset()
         durations = np.logspace(0, 4, 5) * 1e-6  # s
         psources = {k: ExtracellularCurrent((x0, z0), rho=rho_e, mode=k) for k in ['cathode', 'anode']}
         Ithrs = {k: np.array([np.abs(fiber.titrate(v, x, toffset, PRF, DC)) for x in durations])  # A
