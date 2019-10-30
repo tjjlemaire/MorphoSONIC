@@ -3,10 +3,11 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-10-30 15:52:14
+# @Last Modified time: 2019-10-30 15:58:38
 
 import abc
 import numpy as np
+from scipy.optimize import brentq
 
 from PySONIC.utils import si_format, rotAroundPoint2D
 
@@ -296,3 +297,42 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
             'f': f'{self.Fdrive * 1e-3:.0f}kHz',
             'u': f'{si_format(u, 2)}m/s'
         }
+
+
+class PointSourceArray:
+
+    def __init__(self, psources, rel_amps):
+        if len(rel_amps) != len(psources):
+            raise ValueError('number of point-sources does not match number of relative amplitudes')
+        self.rel_amps = rel_amps
+        self.psources = psources
+
+    def strAmp(self, A):
+        return ', '.join([p.strAmp(A * r) for p, r in zip(self.psources, self.rel_amps)])
+
+    def computeNodesAmps(self, fiber, A):
+        amps = np.array([
+            p.computeNodesAmps(fiber, A * r) for p, r in zip(self.psources, self.rel_amps)])
+        return amps.sum(axis=0)
+
+    def computeSourceAmp(self, fiber, A):
+        # Compute the individual source amplitudes required for each point source
+        # to reach the desired output amplitude at their closest fiber node
+        source_amps = np.abs([p.computeSourceAmp(fiber, A) / r
+                              for p, r in zip(self.psources, self.rel_amps)])
+
+        # Define an exploration range for the combined effect of all sources
+        # to reach the target amplitude at a fiber node
+        Amin, Amax = min(source_amps) * 1e-3, max(source_amps) * 1e3
+
+        # Search for source array amplitude that matches the target amplitude
+        Asource = brentq(lambda x: self.computeNodesAmps(fiber, x).max() - A, Amin, Amax, xtol=1e-16)
+        return Asource
+
+    def filecodes(self, A):
+        keys = self.psources[0].filecodes(A)
+        return {key: '_'.join([p.filecodes(A * r)[key] for p, r in zip(self.psources, self.rel_amps)])
+                for key in keys}
+
+    def strPos(self):
+        return '({})'.format(', '.join([p.strPos() for p in self.psources]))
