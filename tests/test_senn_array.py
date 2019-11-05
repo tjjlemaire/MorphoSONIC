@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-10-28 18:33:04
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-10-30 17:37:59
+# @Last Modified time: 2019-11-05 11:59:30
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -39,7 +39,7 @@ DC = 1.            # -
 I = -1e-3  # A
 
 # Point-source array
-nsources = 3
+nsources = 2
 x = np.linspace(0, 2 * fiber.interL, nsources)
 x -= (np.ptp(x) / 2 + fiber.interL)
 z = np.ones(nsources) * z0
