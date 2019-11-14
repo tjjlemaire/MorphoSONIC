@@ -1,66 +1,58 @@
-TITLE RE neuron membrane mechanism
+TITLE RE membrane mechanism
 
 COMMENT
-Equations governing the effective membrane dynamics of a thalamic reticular neuron upon ultrasonic
-stimulation, based on the multi-Scale Optmimized Neuronal Intramembrane Cavitation (SONIC) model.
+Equations governing the effective membrane dynamics of a Thalamic reticular neuron
+upon electrical / ultrasonic stimulation, based on the SONIC model.
+
+Reference: Lemaire, T., Neufeld, E., Kuster, N., and Micera, S. (2019).
+Understanding ultrasound neuromodulation using a computationally efficient
+and interpretable model of intramembrane cavitation. J. Neural Eng.
 
 @Author: Theo Lemaire, EPFL
-@Date:   2018-08-21
+@Date: 2019-07-05
 @Email: theo.lemaire@epfl.ch
 ENDCOMMENT
 
 INDEPENDENT {t FROM 0 TO 1 WITH 1 (ms)}
 
-UNITS {
-    (mA) = (milliamp)
-    (mV) = (millivolt)
-    (uF) = (microfarad)
-    (kPa) = (kilopascal)
-}
-
 NEURON {
-    SUFFIX RE
-
-    NONSPECIFIC_CURRENT iNa
-    NONSPECIFIC_CURRENT iKd
-    NONSPECIFIC_CURRENT iCaT
-    NONSPECIFIC_CURRENT iLeak
-
-    RANGE Adrive, Vm : section specific
-    RANGE stimon     : common to all sections (but set as RANGE to be accessible from caller)
+   SUFFIX REauto
+   NONSPECIFIC_CURRENT iNa : Sodium current
+   NONSPECIFIC_CURRENT iKd : delayed-rectifier Potassium current
+   NONSPECIFIC_CURRENT iCaT : low-threshold (Ts-type) Calcium current
+   NONSPECIFIC_CURRENT iLeak : non-specific leakage current
+   RANGE Adrive, Vm : section specific
+   RANGE stimon     : common to all sections (but set as RANGE to be accessible from caller)
 }
-
 
 PARAMETER {
-    stimon       : Stimulation state
-    Adrive (kPa) : Stimulation amplitude
-
-    cm = 1              (uF/cm2)
-    ENa = 50            (mV)
-    ECa = 120           (mV)
-    EK = -90            (mV)
-    ELeak = -90.0       (mV)
-    gNabar = 0.2        (S/cm2)
-    gKdbar = 0.02       (S/cm2)
-    gCaTbar = 0.003      (S/cm2)
-    gLeak =  5e-5       (S/cm2)
+   stimon       : Stimulation state
+   Adrive (kPa) : Stimulation amplitude
+   gNabar = 0.2 (S/cm2)
+   ENa = 50.0 (mV)
+   gKdbar = 0.02 (S/cm2)
+   EK = -90.0 (mV)
+   gCaTbar = 0.003 (S/cm2)
+   ECa = 120.0 (mV)
+   gLeak = 5e-05 (S/cm2)
+   ELeak = -90.0 (mV)
 }
 
 STATE {
-    m  : iNa activation gate
-    h  : iNa inactivation gate
-    n  : iKd activation gate
-    s  : iCaT activation gate
-    u  : iCaT inactivation gate
+   m : iNa activation gate
+   h : iNa inactivation gate
+   n : iKd gate
+   s : iCaT activation gate
+   u : iCaT inactivation gate
 }
 
 ASSIGNED {
-    Vm      (mV)
-    v       (mV)
-    iNa     (mA/cm2)
-    iKd     (mA/cm2)
-    iCaT     (mA/cm2)
-    iLeak   (mA/cm2)
+   v  (nC/cm2)
+   Vm (mV)
+   iNa (mA/cm2)
+   iKd (mA/cm2)
+   iCaT (mA/cm2)
+   iLeak (mA/cm2)
 }
 
 FUNCTION_TABLE V(A(kPa), Q(nC/cm2)) (mV)
@@ -76,26 +68,26 @@ FUNCTION_TABLE uinf(A(kPa), Q(nC/cm2)) ()
 FUNCTION_TABLE tauu(A(kPa), Q(nC/cm2)) (ms)
 
 INITIAL {
-    m = alpham(0, v) / (alpham(0, v) + betam(0, v))
-    h = alphah(0, v) / (alphah(0, v) + betah(0, v))
-    n = alphan(0, v) / (alphan(0, v) + betan(0, v))
-    s = sinf(0, v)
-    u = uinf(0, v)
+   m = alpham(Adrive * stimon, v) / (alpham(Adrive * stimon, v) + betam(Adrive * stimon, v))
+   h = alphah(Adrive * stimon, v) / (alphah(Adrive * stimon, v) + betah(Adrive * stimon, v))
+   n = alphan(Adrive * stimon, v) / (alphan(Adrive * stimon, v) + betan(Adrive * stimon, v))
+   s = sinf(Adrive * stimon, v)
+   u = uinf(Adrive * stimon, v)
 }
 
 BREAKPOINT {
-    SOLVE states METHOD cnexp
-    Vm = V(Adrive * stimon, v)
-    iNa = gNabar * m * m * m * h * (Vm - ENa)
-    iKd = gKdbar * n * n * n * n * (Vm - EK)
-    iCaT = gCaTbar * s * s * u * (Vm - ECa)
-    iLeak = gLeak * (Vm - ELeak)
+   SOLVE states METHOD cnexp
+   Vm = V(Adrive * stimon, v)
+   iNa = gNabar * m * m * m * h * (Vm - ENa)
+   iKd = gKdbar * n * n * n * n * (Vm - EK)
+   iCaT = gCaTbar * s * s * u * (Vm - ECa)
+   iLeak = gLeak * (Vm - ELeak)
 }
 
 DERIVATIVE states {
-    m' = alpham(Adrive * stimon, v) * (1 - m) - betam(Adrive * stimon, v) * m
-    h' = alphah(Adrive * stimon, v) * (1 - h) - betah(Adrive * stimon, v) * h
-    n' = alphan(Adrive * stimon, v) * (1 - n) - betan(Adrive * stimon, v) * n
-    s' = (sinf(Adrive * stimon, v) - s) / taus(Adrive * stimon, v)
-    u' = (uinf(Adrive * stimon, v) - u) / tauu(Adrive * stimon, v)
+   m' = alpham(Adrive * stimon, v) * (1 - m) - betam(Adrive * stimon, v) * m
+   h' = alphah(Adrive * stimon, v) * (1 - h) - betah(Adrive * stimon, v) * h
+   n' = alphan(Adrive * stimon, v) * (1 - n) - betan(Adrive * stimon, v) * n
+   s' = (sinf(Adrive * stimon, v) - s) / taus(Adrive * stimon, v)
+   u' = (uinf(Adrive * stimon, v) - u) / tauu(Adrive * stimon, v)
 }

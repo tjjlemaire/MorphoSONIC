@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-09-27 14:28:52
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-27 15:12:28
+# @Last Modified time: 2019-11-15 00:42:18
 
 ''' Run simulations of an SENN SONIC fiber model with a specific point-neuron mechanism
     upon ultrasound stimulation at one onde. '''
@@ -11,13 +11,13 @@
 from PySONIC.core import Batch, PointNeuron
 from PySONIC.utils import logger
 from PySONIC.parsers import EStimParser
-from ExSONIC.core import SonicSennFiber, NodeAcousticSource
-from ExSONIC.parsers import NodeAstimSennParser
+from ExSONIC.core import SonicFiber, myelinatedFiber, NodeAcousticSource
+from ExSONIC.parsers import NodeAStimMyelinatedFiberParser
 
 
 def main():
     # Parse command line arguments
-    parser = NodeAstimSennParser()
+    parser = NodeAStimMyelinatedFiberParser()
     args = parser.parse()
     logger.setLevel(args['loglevel'])
     if args['mpi']:
@@ -36,15 +36,14 @@ def main():
                                 for a in args['radius']:
                                     for Fdrive in args['freq']:
                                         for fs in args['fs']:
-                                            fiber = SonicSennFiber(
-                                                pneuron, fiberD, nnodes, a=a, Fdrive=Fdrive, rs=rs,
-                                                nodeL=nodeL, d_ratio=d_ratio)
+                                            fiber = myelinatedFiber(SonicFiber, pneuron, fiberD, nnodes,
+                                                rs=rs, nodeL=nodeL, d_ratio=d_ratio, a=a, Fdrive=Fdrive)
                                             for inode in args['inode']:
                                                 if inode is None:
                                                     inode = nnodes // 2
                                                 psource = NodeAcousticSource(inode, Fdrive)
                                                 if args['save']:
-                                                    simqueue = [[item[0], psource, *item[1:]] for item in queue]
+                                                    simqueue = [([psource, *item[0]], item[1]) for item in queue]
                                                     method = fiber.simAndSave
                                                 else:
                                                     simqueue = [[psource, *item] for item in queue]

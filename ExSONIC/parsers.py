@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-18 21:14:43
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-27 15:12:58
+# @Last Modified time: 2019-11-14 23:18:34
 
 import matplotlib.pyplot as plt
 from PySONIC.parsers import *
@@ -63,7 +63,7 @@ class SpatiallyExtendedParser(Parser):
         plt.show()
 
 
-class SennParser(SpatiallyExtendedParser):
+class MyelinatedFiberParser(SpatiallyExtendedParser):
 
     def __init__(self):
         super().__init__()
@@ -107,11 +107,11 @@ class SennParser(SpatiallyExtendedParser):
         return SpatiallyExtendedParser.parsePlot(args, output)
 
 
-class EStimSennParser(SennParser, PWSimParser):
+class EStimMyelinatedFiberParser(MyelinatedFiberParser, PWSimParser):
 
     def __init__(self):
         PWSimParser.__init__(self)
-        SennParser.__init__(self)
+        MyelinatedFiberParser.__init__(self)
         self.defaults.update({'tstim': 0.1, 'toffset': 3.})
         self.allowed.update({'mode': ['cathode', 'anode']})
         self.addElectrodeMode()
@@ -134,7 +134,7 @@ class EStimSennParser(SennParser, PWSimParser):
         return EStimParser.parseAmp(self, args)
 
     def parse(self):
-        args = SennParser.parse(self, args=PWSimParser.parse(self))
+        args = MyelinatedFiberParser.parse(self, args=PWSimParser.parse(self))
         if isIterable(args['mode']):
             args['mode'] = args['mode'][0]
         return args
@@ -144,10 +144,10 @@ class EStimSennParser(SennParser, PWSimParser):
         return PWSimParser.parseSimInputs(args) + SpatiallyExtendedParser.parseSimInputs(args)
 
     def parsePlot(self, *args):
-        return SennParser.parsePlot(self, *args)
+        return MyelinatedFiberParser.parsePlot(self, *args)
 
 
-class IextSennParser(EStimSennParser):
+class IextraMyelinatedFiberParser(EStimMyelinatedFiberParser):
 
     amp_unit = 'mA'
 
@@ -171,7 +171,7 @@ class IextSennParser(EStimSennParser):
         return args
 
 
-class IinjSennParser(EStimSennParser):
+class IintraMyelinatedFiberParser(EStimMyelinatedFiberParser):
 
     amp_unit = 'nA'
 
@@ -208,11 +208,11 @@ class SpatiallyExtendedAStimParser(SpatiallyExtendedParser, AStimParser):
         return SpatiallyExtendedParser.parsePlot(*args)
 
 
-class AStimSennParser(SennParser, AStimParser):
+class AStimMyelinatedFiberParser(MyelinatedFiberParser, AStimParser):
 
     def __init__(self):
         AStimParser.__init__(self)
-        SennParser.__init__(self)
+        MyelinatedFiberParser.__init__(self)
         for x in [self.defaults, self.allowed, self.to_parse]:
             x.pop('method')
         self.defaults.update({'tstim': 0.1, 'toffset': 3.})
@@ -222,10 +222,10 @@ class AStimSennParser(SennParser, AStimParser):
         return AStimParser.parseSimInputs(args) + SpatiallyExtendedParser.parseSimInputs(args)
 
     def parsePlot(self, *args):
-        return SennParser.parsePlot(self, *args)
+        return MyelinatedFiberParser.parsePlot(self, *args)
 
 
-class NodeAstimSennParser(AStimSennParser):
+class NodeAStimMyelinatedFiberParser(AStimMyelinatedFiberParser):
 
     amp_unit = 'kPa'
 

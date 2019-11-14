@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-15 20:33:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-10-29 16:22:45
+# @Last Modified time: 2019-11-15 00:40:23
 
 ''' Run simulations of an SENN fiber model with a specific point-neuron mechanism
     upon extracellular electrical stimulation. '''
@@ -11,13 +11,13 @@
 from PySONIC.core import Batch, PointNeuron
 from PySONIC.utils import logger
 from PySONIC.parsers import EStimParser
-from ExSONIC.core import VextSennFiber, ExtracellularCurrent
-from ExSONIC.parsers import IextSennParser
+from ExSONIC.core import IextraFiber, myelinatedFiber, ExtracellularCurrent
+from ExSONIC.parsers import IextraMyelinatedFiberParser
 
 
 def main():
     # Parse command line arguments
-    parser = IextSennParser()
+    parser = IextraMyelinatedFiberParser()
     args = parser.parse()
     logger.setLevel(args['loglevel'])
     if args['mpi']:
@@ -33,15 +33,15 @@ def main():
                     for rs in args['rs']:
                         for nodeL in args['nodeL']:
                             for d_ratio in args['d_ratio']:
-                                fiber = VextSennFiber(
-                                    pneuron, fiberD, nnodes, rs=rs, nodeL=nodeL, d_ratio=d_ratio)
+                                fiber = myelinatedFiber(IextraFiber, pneuron, fiberD, nnodes,
+                                    rs=rs, nodeL=nodeL, d_ratio=d_ratio)
                                 for xps in args['xps']:
                                     for zps in args['zps']:
                                         if zps is None:
                                             zps = fiber.interL
                                         psource = ExtracellularCurrent((xps, zps), args['mode'])
                                         if args['save']:
-                                            simqueue = [[item[0], psource, *item[1:]] for item in queue]
+                                            simqueue = [([psource, *item[0]], item[1]) for item in queue]
                                         else:
                                             simqueue = [[psource, *item] for item in queue]
                                         batch = Batch(

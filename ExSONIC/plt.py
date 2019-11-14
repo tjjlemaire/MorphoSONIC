@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-10-30 15:48:42
+# @Last Modified time: 2019-11-14 23:07:54
 
 import numpy as np
 import pandas as pd
@@ -11,98 +11,10 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 from PySONIC.plt import GroupedTimeSeries, CompTimeSeries
-from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import logger, si_format, getPow10
 
-from .core import ExtendedSonicNode, VextSennFiber, IinjSennFiber, SonicSennFiber
+from .core import *
 from .utils import loadData, chronaxie, extractIndexesFromLabels
-
-
-def getModel(meta):
-    ''' Return appropriate model object based on a dictionary of meta-information. '''
-    simkey = meta['simkey']
-    if simkey == 'nano_ext_SONIC':
-        model = ExtendedSonicNode(
-            getPointNeuron(meta['neuron']),
-            meta['rs'],
-            a=meta['a'],
-            Fdrive=meta['Fdrive'],
-            fs=meta['fs'],
-            deff=meta['deff']
-        )
-    elif simkey == 'senn_Vext':
-        model = VextSennFiber(
-            getPointNeuron(meta['neuron']),
-            meta['fiberD'], meta['nnodes'], rs=meta['rs'])
-    elif simkey == 'senn_Iinj':
-        model = IinjSennFiber(
-            getPointNeuron(meta['neuron']),
-            meta['fiberD'], meta['nnodes'], rs=meta['rs'])
-    elif simkey == 'senn_SONIC':
-        model = SonicSennFiber(
-            getPointNeuron(meta['neuron']), meta['fiberD'], meta['nnodes'],
-            a=meta['a'], Fdrive=meta['Fdrive'], fs=meta['fs'], rs=meta['rs'])
-    else:
-        raise ValueError(f'Unknown model type:{simkey}')
-    return model
-
-
-def figtitle(meta):
-    ''' Return appropriate title based on simulation metadata. '''
-    if meta['DC'] < 1:
-        wavetype = 'PW'
-        suffix = ', {:.2f}Hz PRF, {:.0f}% DC'.format(meta['PRF'], meta['DC'] * 1e2)
-    else:
-        wavetype = 'CW'
-        suffix = ''
-    simkey = meta['simkey']
-    if simkey == 'nano_ext_SONIC':
-        return 'extended SONIC node ({} neuron, {:.1f}nm, {:.0f}% coverage, deff = {:.0f} nm, rs = {:.0f} Ohm.cm): {} A-STIM {:.0f}kHz {:.2f}kPa, {:.0f}ms{}'.format(
-                    meta['neuron'], meta['a'] * 1e9, meta['fs'] * 1e2, meta['deff'] * 1e9, meta['rs'], wavetype, meta['Fdrive'] * 1e-3,
-                    meta['Adrive'] * 1e-3, meta['tstim'] * 1e3, suffix, meta['method'])
-    elif simkey == 'senn_Vext':
-        return 'SENN fiber ({} neuron, d = {:.1f}um, {} nodes), {} point-source {} E-STIM {:.2f}mA, {:.2f}ms{}'.format(
-            meta['neuron'],
-            meta['fiberD'] * 1e6,
-            meta['nnodes'],
-            meta['psource'].strPos(),
-            wavetype,
-            meta['A'] * 1e3,
-            meta['tstim'] * 1e3,
-            suffix
-        )
-    elif simkey == 'senn_Iinj':
-        return 'SENN fiber ({} neuron, d = {:.1f}um, {} nodes), {} point-source {} E-STIM {:.2f}nA, {:.2f}ms{}'.format(
-            meta['neuron'],
-            meta['fiberD'] * 1e6,
-            meta['nnodes'],
-            meta['psource'].strPos(),
-            wavetype,
-            meta['A'] * 1e9,
-            meta['tstim'] * 1e3,
-            suffix
-        )
-    elif simkey == 'senn_SONIC':
-        psource = meta['psource']
-        try:
-            s = f'{psource.strPos()} point-source'
-        except AttributeError:
-            s = f'{si_format(psource.r)}m radius planar transducer'
-
-        return 'SONIC SENN fiber ({} neuron, a = {:.1f}nm, d = {:.1f}um, {} nodes), {} {} A-STIM {:.0f}kHz, {:.2f}kPa, {:.2f}ms{}'.format(
-            meta['neuron'],
-            meta['a'] * 1e9,
-            meta['fiberD'] * 1e6,
-            meta['nnodes'],
-            s,
-            wavetype,
-            meta['Fdrive'] * 1e-3,
-            meta['A'] * 1e-3,
-            meta['tstim'] * 1e3,
-            suffix
-        )
-
-    return 'NO PREDEFINED TITLE'
 
 
 class SectionGroupedTimeSeries(GroupedTimeSeries):
@@ -117,8 +29,8 @@ class SectionGroupedTimeSeries(GroupedTimeSeries):
     def getModel(meta):
         return getModel(meta)
 
-    def figtitle(self, *args, **kwargs):
-        return figtitle(*args, **kwargs) + f' - {self.section_id} section'
+    def figtitle(self, model, meta):
+        return super().figtitle(model, meta) + f' - {self.section_id} section'
 
     def getData(self, entry, frequency=1, trange=None):
         if entry is None:
@@ -180,9 +92,6 @@ class SectionCompTimeSeries(CompTimeSeries):
 
     def getCompLabels(self, comp_values):
         return np.arange(len(comp_values)), comp_values
-
-    def figtitle(self, *args, **kwargs):
-        return figtitle(*args, **kwargs)
 
     def checkColors(self, colors):
         if colors is None:

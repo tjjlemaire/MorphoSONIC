@@ -3,14 +3,15 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-10-28 18:33:04
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-05 11:59:30
+# @Last Modified time: 2019-11-14 23:11:08
 
 import numpy as np
 import matplotlib.pyplot as plt
 
+from PySONIC.core import PulsedProtocol
 from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import logger, si_format
-from ExSONIC.core import VextSennFiber, ExtracellularCurrent, PointSourceArray
+from ExSONIC.core import IextraFiber, myelinatedFiber, ExtracellularCurrent, PointSourceArray
 from ExSONIC.plt import SectionCompTimeSeries
 
 
@@ -21,7 +22,7 @@ nnodes = 21                     # number of nodes
 rho_a = 110.0                   # axoplasm resistivity (Ohm.cm, from McNeal 1976)
 d_ratio = 0.7                   # axon / fiber diameter ratio (from McNeal 1976)
 nodeL = 2.5e-6                  # node length (m, from McNeal 1976)
-fiber = VextSennFiber(pneuron, fiberD, nnodes, rs=rho_a, nodeL=nodeL, d_ratio=d_ratio)
+fiber = myelinatedFiber(IextraFiber, pneuron, fiberD, nnodes, rs=rho_a, nodeL=nodeL, d_ratio=d_ratio)
 xnodes = fiber.getNodeCoords()
 inodes = np.arange(fiber.nnodes) + 1
 
@@ -32,8 +33,7 @@ x0 = 0.            # point-electrode located above central node (m)
 mode = 'cathode'   # cathodic pulse
 tstim = 1.5e-3     # s
 toffset = 3e-3     # s
-PRF = 100.         # Hz
-DC = 1.            # -
+pp = PulsedProtocol(tstim, toffset)
 
 # Stimulation current
 I = -1e-3  # A
@@ -76,7 +76,7 @@ ax.plot(inodes[1:-1], d2Ve_net, c='k', label='combined effect')
 ax.legend(frameon=False)
 
 # Fiber simulations
-data, meta = fiber.simulate(parray, I, tstim, toffset, PRF, DC)
+data, meta = fiber.simulate(parray, I, pp)
 fig3 = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
 
 # TODO:

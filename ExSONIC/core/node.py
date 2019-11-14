@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-10-01 12:55:34
+# @Last Modified time: 2019-11-14 20:25:55
 
 import pickle
 import abc
@@ -15,7 +15,7 @@ from neuron import h
 
 from PySONIC.constants import *
 from PySONIC.core import Model, PointNeuron, NeuronalBilayerSonophore
-from PySONIC.utils import si_format, timer, logger, binarySearch, plural, debug, logCache
+from PySONIC.utils import si_format, timer, logger, binarySearch, plural, debug, logCache, filecode, simAndSave
 from PySONIC.postpro import prependDataFrame
 
 from .pyhoc import *
@@ -27,6 +27,7 @@ class Node(metaclass=abc.ABCMeta):
     ''' Generic node interface. '''
 
     tscale = 'ms'  # relevant temporal scale of the model
+    titration_var = 'A'  # name of the titration parameter
 
     @property
     @abc.abstractmethod
@@ -34,7 +35,7 @@ class Node(metaclass=abc.ABCMeta):
         ''' Keyword used to characterize stimulation modality. '''
         raise NotImplementedError
 
-    def __init__(self, pneuron, id=None, auto_nmodl=True, cell=None, pylkp=None):
+    def __init__(self, pneuron, id=None, cell=None, pylkp=None):
         ''' Initialization.
 
             :param pneuron: point-neuron model
@@ -53,11 +54,9 @@ class Node(metaclass=abc.ABCMeta):
             logger.debug('Creating {} model'.format(self))
 
         # Load mechanisms and set function tables of appropriate membrane mechanism
-        self.auto_nmodl = auto_nmodl
-        self.mechname = self.pneuron.name
-        if self.auto_nmodl:
-            self.mechname += 'auto'
-        load_mechanisms(getNmodlDir(), self.mechname)
+        self.modfile = f'{self.pneuron.name}.mod'
+        self.mechname = f'{self.pneuron.name}auto'
+        load_mechanisms(getNmodlDir(), self.modfile)
         self.setFuncTables()
 
         # Create section and set membrane mechanism
@@ -67,7 +66,7 @@ class Node(metaclass=abc.ABCMeta):
     def __repr__(self):
         return '{}({})'.format(self.__class__.__name__, self.pneuron)
 
-    def strBiophysics(self):
+    def str_biophysics(self):
         return '{} neuron'.format(self.pneuron.name)
 
     def clear(self):
@@ -155,26 +154,18 @@ class Node(metaclass=abc.ABCMeta):
         return PointNeuron.getNSpikes(data)
 
     @Model.logNSpikes
-    @Model.checkTitrate('A')
+    @Model.checkTitrate
     @Model.addMeta
-    def simulate(self, A, tstim, toffset, PRF, DC, dt=None, atol=None):
+    def simulate(self, A, pp, dt=None, atol=None):
         ''' Set appropriate recording vectors, integrate and return output variables.
 
             :param A: stimulus amplitude (in modality units)
-            :param tstim: stimulus duration (s)
-            :param toffset: stimulus offset duration (s)
-            :param PRF: pulse repetition frequency (Hz)
-            :param DC: stimulus duty cycle
+            :param pp: pulse protocol object
             :param dt: integration time step for fixed time step method (s)
             :param atol: absolute error tolerance for adaptive time step method (default = 1e-3)
+            :return: output dataframe
         '''
-        logger.info(
-            '%s: simulation @ %s = %s%s, t = %ss (%ss offset)%s',
-            self, self.modality['name'],
-            si_format(A * self.modality['factor'], space=' ', precision=2), self.modality['unit'],
-            *si_format([tstim, toffset], 1, space=' '),
-            (', PRF = {}Hz, DC = {:.2f}%'.format(
-                si_format(PRF, 2, space=' '), DC * 1e2) if DC < 1.0 else ''))
+        logger.info(self.desc(self.meta(A, pp)))
 
         # Set recording vectors
         t = setTimeProbe()
@@ -183,7 +174,7 @@ class Node(metaclass=abc.ABCMeta):
 
         # Set stimulus amplitude and integrate model
         self.setStimAmp(A)
-        integrate(self, tstim + toffset, tstim, PRF, DC, dt, atol)
+        integrate(self, pp, dt, atol)
 
         # Store output in dataframe
         data = pd.DataFrame({
@@ -199,18 +190,21 @@ class Node(metaclass=abc.ABCMeta):
 
         return data
 
-    def meta(self, A, tstim, toffset, PRF, DC):
-        return self.pneuron.meta(A, tstim, toffset, PRF, DC)
+    def meta(self, A, pp):
+        meta = self.pneuron.meta(A, pp)
+        meta['A'] = meta['Astim']
+        return meta
 
-    def titrate(self, tstim, toffset, PRF=100., DC=1., xfunc=None):
+    def desc(self, meta):
+        m = self.modality
+        Astr = f'{m["name"]} = {si_format(meta["A"] * m["factor"], 2)}{m["unit"]}'
+        return f'{self}: simulation @ {Astr}, {meta["pp"].pprint()}'
+
+    def titrate(self, pp, xfunc=None):
         ''' Use a binary search to determine the threshold amplitude needed to obtain
-            neural excitation for a given duration, PRF and duty cycle.
+            neural excitation for a given pulsing protocol.
 
-            :param tstim: duration of US stimulation (s)
-            :param toffset: duration of the offset (s)
-            :param PRF: pulse repetition frequency (Hz)
-            :param DC: pulse duty cycle (-)
-            :param method: integration method
+            :param pp: pulsed protocol object
             :param xfunc: function determining whether condition is reached from simulation output
             :return: determined threshold amplitude (Pa)
         '''
@@ -220,37 +214,18 @@ class Node(metaclass=abc.ABCMeta):
 
         return binarySearch(
             lambda x: xfunc(self.simulate(*x)[0]),
-            [tstim, toffset, PRF, DC], 0, self.Arange, self.A_conv_thr)
+            [pp], 0, self.Arange, self.A_conv_thr)
+
+    @property
+    @abc.abstractmethod
+    def filecodes(self, *args):
+        return NotImplementedError
 
     def filecode(self, *args):
-        ''' Generate file code given a specific combination of model input parameters. '''
-        # If meta dictionary was passed, generate inputs list from it
-        if len(args) == 1 and isinstance(args[0], dict):
-            meta = args[0]
-            meta.pop('tcomp', None)
-            sig = signature(self.filecodes).parameters
-            args = [meta[k] for k in sig]
+        return filecode(self, *args)
 
-        # Create file code by joining string-encoded inputs with underscores
-        codes = self.filecodes(*args).values()
-        return '_'.join([x for x in codes if x is not None])
-
-    def simAndSave(self, outdir, *args):
-        ''' Simulate the model and save the results in a specific output directory. '''
-        out = self.simulate(*args)
-        if out is None:
-            return None
-        data, meta = out
-        if None in args:
-            args = list(args)
-            iNone = next(i for i, arg in enumerate(args) if arg is None)
-            sig = signature(self.meta).parameters
-            args[iNone] = meta[self.modality['name']]
-        fpath = '{}/{}.pkl'.format(outdir, self.filecode(*args))
-        with open(fpath, 'wb') as fh:
-            pickle.dump({'meta': meta, 'data': data}, fh)
-        logger.debug('simulation data exported to "%s"', fpath)
-        return fpath
+    def simAndSave(self, *args, **kwargs):
+        return simAndSave(self, *args, **kwargs)
 
 
 class IintraNode(Node):
@@ -320,8 +295,8 @@ class SonicNode(Node):
         return '{}({:.1f} nm, {}, {:.0f} kHz, fs={})'.format(
             self.__class__.__name__, self.a * 1e9, self.pneuron, self.Fdrive * 1e-3, self.fs)
 
-    def strBiophysics(self):
-        return super().strBiophysics() + ', a = {}m{}, f = {}Hz'.format(
+    def str_biophysics(self):
+        return super().str_biophysics() + ', a = {}m{}, f = {}Hz'.format(
             si_format(self.a, space=' '),
             ', fs = {:.0f}%'.format(self.fs * 1e2) if self.fs is not None else '',
             si_format(self.Fdrive, space=' '))
@@ -338,10 +313,12 @@ class SonicNode(Node):
         setattr(self.section, 'Adrive_{}'.format(self.mechname), Adrive * 1e-3)
 
     def filecodes(self, *args):
-        return self.nbls.filecodes(self.Fdrive, *args, self.fs, 'NEURON')
+        return self.nbls.filecodes(self.Fdrive, *args, self.fs, 'NEURON', None)
 
-    def meta(self, A, tstim, toffset, PRF, DC):
-        return self.nbls.meta(self.Fdrive, A, tstim, toffset, PRF, DC, self.fs, 'NEURON')
+    def meta(self, A, pp):
+        meta = self.nbls.meta(self.Fdrive, A, pp, self.fs, 'NEURON', None)
+        meta['A'] = meta['Adrive']
+        return meta
 
     def getPltVars(self, *args, **kwargs):
         return self.nbls.getPltVars(*args, **kwargs)
@@ -350,6 +327,6 @@ class SonicNode(Node):
         return self.nbls.getPltScheme(*args, **kwargs)
 
     @logCache(os.path.join(os.path.split(__file__)[0], 'sonicnode_titrations.log'))
-    def titrate(self, tstim, toffset, PRF=100., DC=1., xfunc=None):
-        return super().titrate(tstim, toffset, PRF=PRF, DC=DC, xfunc=xfunc)
+    def titrate(self, pp, xfunc=None):
+        return super().titrate(pp, xfunc=xfunc)
 
