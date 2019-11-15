@@ -7,6 +7,7 @@
 
 import abc
 import numpy as np
+import random as rd
 
 from PySONIC.utils import si_format, rotAroundPoint2D
 
@@ -206,7 +207,7 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
     modality = {'name': 'u', 'unit': 'm/s'}
     conv_factor = 1e0
 
-    def __init__(self, x, z, Fdrive, rho=1204.1, c=1515.0, theta=0, r=2e-3):
+    def __init__(self, x, z, Fdrive, rho=1204.1, c=1515.0, r=2e-3):
         ''' Initialization.
 
             :param rho: medium density (kg/m3)
@@ -218,10 +219,12 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
         self.Fdrive = Fdrive  # Hz
         self.rho = rho
         self.c = c
-        self.theta = theta
         self.r = r
         for k in ['rho', 'c', 'theta']:
             self.attrkeys.append(k)
+
+        #Angular frequency
+#        self.w = 2 * np.pi * self.Fdrive
 
         # Angular wave number
         self.kf = 2 * np.pi * self.Fdrive / self.c
@@ -236,7 +239,7 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
         ez = np.exp(j * self.kf * z)
         ezr = np.exp(j * self.kf * np.sqrt(z**2 + self.r**2))
         return np.abs(self.rho * self.c * (ez - ezr))
-
+    
     def normalAxisAmp(self, z, u):
         ''' Compute the acoustic amplitude at a given distance along the transducer normal axis.
 
@@ -244,7 +247,113 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
             :param u: particle velocity normal to the transducer surface (m/s)
             :return: acoustic amplitude (Pa)
         '''
-        return u * self.relNormalAxisAmp(z)
+        return u * self.relNormalAxisAmp(z)    
+
+    def DPSM_paper100sources (self):
+        l=np.array([1,7,13,20,26,33])
+        radius = []
+        angle = []
+        for i in range(len(l)):
+            a = i * self.r * np.ones(l[i])/ (len(l)-0.5)
+            b = 2 * np.pi * np.arange(l[i]) / l[i]
+            radius = np.concatenate((radius,a), axis=None)
+            angle = np.concatenate((angle,b), axis=None)
+        xsource = radius * np.cos(angle)
+        ysource = radius * np.sin(angle)
+        return xsource, ysource
+        
+    def DPSM_squaredsources (self, m):
+        xs = []
+        ys = []
+        Atot = self.r**2 * np.pi   # Area of the transducer
+        A = Atot / m              # Area associated at each point source
+        s = np.sqrt(A)             # Side of the square associated at each point source
+        y = - round(self.r/s - 1/2) * s                                # Initial y value
+        while y <= round(self.r/s -1/2) * s + s * 1e-3:
+            x = - round( np.sqrt( self.r**2 - y**2)/s -1/2) * s         # Initial x value for every y iteration
+            while x <= round( np.sqrt( self.r**2 - y**2)/s -1/2) * s + s*1e-3:
+                xs.append(x)
+                ys.append(y)
+                x = x + s
+            y = y + s
+        xsource = np.array(xs)
+        ysource = np.array(ys)
+        return xsource, ysource
+    
+    def DPSM_concentricsources (self, m):
+        radius = [0]
+        angle = [0]
+        nl = np.int((3 * np.pi -1 + np.sqrt( 9*np.pi**2 - 14*np.pi + 1 +4*np.pi*m)) / (2 * np.pi))  # Number of concentric layers
+        d = self.r / (nl - 1/2)                # Distance between layers 
+        for i in range(nl - 1):
+            ml = round(2 * np.pi * (i + 1))    # Number of point sources in the layer
+            rl = (i + 1) * d                   # Radius of the concentric layer
+            r = rl * np.ones(ml)
+            a = rd.uniform(0, 2*np.pi) + 2 * np.pi * np.arange(ml) / ml
+            radius = np.concatenate((radius, r), axis=None)   # Point sources radius vector
+            angle = np.concatenate((angle, a), axis=None)     # Point sources angle vector 
+        xsource = radius * np.cos(angle)                      # xy coordinates of point sources
+        ysource = radius * np.sin(angle)
+        return xsource, ysource
+
+    def DPSM_sunflowersources(self, m, alpha=1):
+        ''' Generate a population of uniformly distributed 2D data points
+            in a unit circle.
+    
+            :param m: number of data points
+            :param alpha: coefficient determining evenness of the boundary
+            :return: 2D matrix of Cartesian (x, y) positions
+        '''
+        nbounds = np.round(alpha * np.sqrt(m))    # number of boundary points
+        phi = (np.sqrt(5) + 1) / 2                # golden ratio
+        k = np.arange(1, m + 1)                   # index vector
+        theta = 2 * np.pi * k / phi**2            # angle vector
+        r = np.sqrt((k - 1) / (m - nbounds - 1))  # radius vector
+        r[r > 1] = 1
+        x = r * np.cos(theta)
+        y = r * np.sin(theta)
+        return self.r * np.vstack((x, y))
+
+    def DPSM_linearsources (self, m):
+        xs = []
+        ys = []
+        m = 100
+        s = self.r * 2 / m
+        y = 0
+        x = - round( np.sqrt( self.r**2)/s -1/2) * s
+        while x <= round( np.sqrt( self.r**2)/s -1/2) * s + s*1e-3:
+            xs.append(x)
+            ys.append(y)
+            x = x + s
+        xsource = np.array(xs)
+        ysource = np.array(ys)
+        return xsource, ysource       
+
+    def DPSM_point (self, x, z, u, xsource, ysource, meff):
+        j = complex(0, 1)  # imaginary number
+        ds = self.r**2 * np.pi / meff
+        deltax = xsource - x * np.ones(meff)
+        distance = np.sqrt(deltax**2 + ysource*ysource + z**2 * np.ones(meff))
+#        return np.abs(- j * self.rho * self.w * ds * u * sum( np.exp(j * self.kf * distance) / distance) / 2 * np.pi)
+        return np.abs(- j * self.rho * self.Fdrive * ds * u * sum( np.exp(j * self.kf * distance) / distance))
+    
+    def DPSM (self, x, z, u, m, d):
+        nx = len(x)
+        nz = len(z)
+        results = np.array ([[0 for x in range(nx)] for y in range(nz)]) 
+        if d == 'sunflower':
+            xsource, ysource = self.DPSM_sunflowersources(m)
+        if d == 'squared':
+            xsource, ysource = self.DPSM_squaredsources(m)
+        if d == 'concentric':
+            xsource, ysource = self.DPSM_concentricsources(m)
+        if d == 'linear':
+            xsource, ysource = self.DPSM_linearsources(m)
+        meff = len(xsource)
+        for i in range(nx):
+            for j in range(nz):
+                results[i][j] = self.DPSM_point (x[i], z[j], u, xsource, ysource, meff)
+        return results
 
     def computeNodesAmps(self, fiber, u):
         ''' Compute acoustic amplitude value at all fiber nodes, given
