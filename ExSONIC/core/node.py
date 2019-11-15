@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-14 20:25:55
+# @Last Modified time: 2019-11-15 10:59:03
 
 import pickle
 import abc
@@ -192,12 +192,11 @@ class Node(metaclass=abc.ABCMeta):
 
     def meta(self, A, pp):
         meta = self.pneuron.meta(A, pp)
-        meta['A'] = meta['Astim']
         return meta
 
     def desc(self, meta):
         m = self.modality
-        Astr = f'{m["name"]} = {si_format(meta["A"] * m["factor"], 2)}{m["unit"]}'
+        Astr = f'{m["name"]} = {si_format(meta[m["name"]] * m["factor"], 2)}{m["unit"]}'
         return f'{self}: simulation @ {Astr}, {meta["pp"].pprint()}'
 
     def titrate(self, pp, xfunc=None):
@@ -317,7 +316,6 @@ class SonicNode(Node):
 
     def meta(self, A, pp):
         meta = self.nbls.meta(self.Fdrive, A, pp, self.fs, 'NEURON', None)
-        meta['A'] = meta['Adrive']
         return meta
 
     def getPltVars(self, *args, **kwargs):
