@@ -253,7 +253,7 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
         ez = np.exp(j * self.kf * z)
         ezr = np.exp(j * self.kf * np.sqrt(z**2 + self.r**2))
         return np.abs(self.rho * self.c * (ez - ezr))
-    
+
     def normalAxisAmp(self, z, u):
         ''' Compute the acoustic amplitude at a given distance along the transducer normal axis.
 
@@ -261,7 +261,7 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
             :param u: particle velocity normal to the transducer surface (m/s)
             :return: acoustic amplitude (Pa)
         '''
-        return u * self.relNormalAxisAmp(z)    
+        return u * self.relNormalAxisAmp(z)
 
     def DPSM_paper100sources (self):
         l=np.array([1,7,13,20,26,33])
@@ -275,7 +275,7 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
         xsource = radius * np.cos(angle)
         ysource = radius * np.sin(angle)
         return xsource, ysource
-        
+
     def DPSM_squaredsources (self, m):
         xs = []
         ys = []
@@ -293,19 +293,19 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
         xsource = np.array(xs)
         ysource = np.array(ys)
         return xsource, ysource
-    
+
     def DPSM_concentricsources (self, m):
         radius = [0]
         angle = [0]
         nl = np.int((3 * np.pi -1 + np.sqrt( 9*np.pi**2 - 14*np.pi + 1 +4*np.pi*m)) / (2 * np.pi))  # Number of concentric layers
-        d = self.r / (nl - 1/2)                # Distance between layers 
+        d = self.r / (nl - 1/2)                # Distance between layers
         for i in range(nl - 1):
             ml = round(2 * np.pi * (i + 1))    # Number of point sources in the layer
             rl = (i + 1) * d                   # Radius of the concentric layer
             r = rl * np.ones(ml)
             a = rd.uniform(0, 2*np.pi) + 2 * np.pi * np.arange(ml) / ml
             radius = np.concatenate((radius, r), axis=None)   # Point sources radius vector
-            angle = np.concatenate((angle, a), axis=None)     # Point sources angle vector 
+            angle = np.concatenate((angle, a), axis=None)     # Point sources angle vector
         xsource = radius * np.cos(angle)                      # xy coordinates of point sources
         ysource = radius * np.sin(angle)
         return xsource, ysource
@@ -313,7 +313,7 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
     def DPSM_sunflowersources(self, m, alpha=1):
         ''' Generate a population of uniformly distributed 2D data points
             in a unit circle.
-    
+
             :param m: number of data points
             :param alpha: coefficient determining evenness of the boundary
             :return: 2D matrix of Cartesian (x, y) positions
@@ -341,7 +341,7 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
             x = x + s
         xsource = np.array(xs)
         ysource = np.array(ys)
-        return xsource, ysource       
+        return xsource, ysource
 
     def DPSM_point (self, x, z, u, xsource, ysource, meff):
         j = complex(0, 1)  # imaginary number
@@ -350,11 +350,11 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
         distance = np.sqrt(deltax**2 + ysource*ysource + z**2 * np.ones(meff))
 #        return np.abs(- j * self.rho * self.w * ds * u * sum( np.exp(j * self.kf * distance) / distance) / 2 * np.pi)
         return np.abs(- j * self.rho * self.Fdrive * ds * u * sum( np.exp(j * self.kf * distance) / distance))
-    
+
     def DPSM (self, x, z, u, m, d):
         nx = len(x)
         nz = len(z)
-        results = np.array ([[0 for x in range(nx)] for y in range(nz)]) 
+        results = np.array ([[0 for x in range(nx)] for y in range(nz)])
         if d == 'sunflower':
             xsource, ysource = self.DPSM_sunflowersources(m)
         if d == 'squared':
