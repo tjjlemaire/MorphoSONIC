@@ -3,9 +3,10 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-15 18:05:04
+# @Last Modified time: 2019-11-15 19:20:19
 
 import numpy as np
+import matplotlib.pyplot as plt
 
 from PySONIC.core import PulsedProtocol
 from PySONIC.neurons import getPointNeuron
@@ -255,27 +256,48 @@ class TestSennEstim(TestFiber):
         pneuron = getPointNeuron('sundt')  # C-fiber membrane equations
         fiberD = 0.8e-6                    # peripheral axon diameter, from Sundt 2015 (m)
         rho_a = 1e2                        # axoplasm resistivity, from Sundt 2015 (Ohm.cm)
-        fiberL = 1e-2                      # axon length (m)
-        maxNodeL = 10e-6                  # maximum node length
+        fiberL = 2e-2                      # axon length (m)
+        maxNodeL = 100e-6                  # maximum node length
 
         # Stimulation parameters
-        pp = PulsedProtocol(5e-3, 15e-3)           # short simulus
-        psource = ExtracellularCurrent((0, 1e-2))  # point-source located 1 cm above central node
+        pp = PulsedProtocol(1e-4, 15e-3)           # short simulus
+        psource = ExtracellularCurrent((0, 1e-3))  # point-source located 1 mm above central node
 
         # Initialize unmyelinated fiber
         logger.info('creating model ...')
         fiber = unmyelinatedFiber(
             IextraFiber, pneuron, fiberD, rs=rho_a, fiberL=fiberL, maxNodeL=maxNodeL)
+        inodes = np.arange(fiber.nnodes) + 1
 
         # Perform titration to find threshold current
         # logger.info(f'Running titration for {si_format(pp.tstim)}s pulse')
         # Ithr = fiber.titrate(psource, pp)  # A
         # logger.info(f'Ithr = {si_format(Ithr, 2)}A')
         # I = 1.2 * Ithr
-        I = -4e1
+        I = -3e-1
+
+        # Plot extracellular potentials
+        Ve = psource.computeNodesAmps(fiber, I)
+        fig, ax = plt.subplots()
+        ax.set_title('Extracellular potential')
+        ax.set_xlabel('# node')
+        ax.set_ylabel('$V_e\ (mV)$')
+        ax.plot(inodes, Ve)
+        ax.axhline(0, linestyle='--' ,color='k')
+
+        # Plot activating function
+        Iinjs = fiber.preProcessAmps(Ve)
+        fig, ax = plt.subplots()
+        ax.set_title('Activating function')
+        ax.set_xlabel('# node')
+        ax.set_ylabel('injected current (nA)')
+        ax.plot(inodes, Iinjs)
+        ax.axhline(0, linestyle='--' ,color='k')
+
+        # # Simulate fiber
         data, meta = fiber.simulate(psource, I, pp)
 
-        # Remove end nodes
+        # # Remove end nodes
         # npad = 10
         # fiber.ids = fiber.ids[npad:-npad]
         # data = {k: data[k] for k in fiber.ids}

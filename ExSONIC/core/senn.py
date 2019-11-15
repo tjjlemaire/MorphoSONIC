@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-15 13:52:58
+# @Last Modified time: 2019-11-15 18:57:12
 
 import abc
 import pickle
@@ -133,6 +133,9 @@ class SennFiber(metaclass=abc.ABCMeta):
         xcoords = (self.nodeL + self.interL) * np.arange(self.nnodes) + self.nodeL / 2
         return xcoords - xcoords[int((self.nnodes - 1) / 2)]
 
+    def length(self):
+        return self.nnodes * self.nodeL + (self.nnodes - 1) * self.interL
+
     @property
     @abc.abstractmethod
     def createSections(self, ids):
@@ -237,8 +240,10 @@ class SennFiber(metaclass=abc.ABCMeta):
         stim = setStimProbe(self.sections[self.ids[0]], self.mechname)
         probes = {k: self.nodes[k].setProbesDict(v) for k, v in self.sections.items()}
 
-        # Set distributed stimulus amplitudes and integrate model
+        # Set distributed stimulus amplitudes
         self.setStimAmps(psource.computeNodesAmps(self, A))
+
+        # Integrate model
         integrate(self, pp, dt, atol)
 
         # Store output in dataframes
