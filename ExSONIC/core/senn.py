@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-15 11:03:16
+# @Last Modified time: 2019-11-15 13:52:58
 
 import abc
 import pickle
@@ -12,7 +12,7 @@ import pandas as pd
 from inspect import signature
 
 from PySONIC.core import Model, PointNeuron, NeuronalBilayerSonophore
-from PySONIC.utils import si_format, pow10_format, logger, plural, binarySearch, pow2Search, filecode, simAndSave, fileCache
+from PySONIC.utils import si_format, pow10_format, logger, plural, binarySearch, pow2Search, filecode, simAndSave
 from PySONIC.constants import *
 from PySONIC.postpro import detectSpikes, prependDataFrame
 
@@ -629,16 +629,6 @@ def unmyelinatedFiber(fiber_class, pneuron, fiberD, rs=1e2, fiberL=1e-2, maxNode
     interL = 0.      # m
 
     # Create fiber model instance
-    return fiber_class(pneuron, nnodes, rs, nodeD, nodeL, interD, interL, **kwargs)
-
-
-@fileCache('.', 'Ithrs', ext='csv')
-def convergence(pneuron, fiberD, rs, d_ratio, fiberL, pp, psource, nodeL_range):
-    Ithrs = np.empty(nodeL_range.size)
-    for i, x in enumerate(nodeL_range):
-        fiber = unmyelinatedFiber(
-            IextraFiber, pneuron, fiberD, x, rs=rs, fiberL=fiberL, d_ratio=d_ratio, maxNodeL=x)
-        logger.info(f'Running titration with {si_format(x)}m max node length')
-        Ithrs[i] = fiber.titrate(psource, pp)  # A
-        fiber.reset()
-    return Ithrs
+    fiber = fiber_class(pneuron, nnodes, rs, nodeD, nodeL, interD, interL, **kwargs)
+    fiber.A_range = (fiber.A_range[0], 1e7)  # mV
+    return fiber

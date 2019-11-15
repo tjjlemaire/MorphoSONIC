@@ -3,14 +3,14 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-14 22:43:37
+# @Last Modified time: 2019-11-15 16:46:12
 
 import numpy as np
 
 from PySONIC.core import PulsedProtocol
 from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import logger, si_format
-from ExSONIC.core import IextraFiber, IintraFiber, myelinatedFiber
+from ExSONIC.core import IextraFiber, IintraFiber, myelinatedFiber, unmyelinatedFiber
 from ExSONIC.core import ExtracellularCurrent, IntracellularCurrent
 from ExSONIC.test import TestFiber
 from ExSONIC.plt import SectionCompTimeSeries, strengthDurationCurve
@@ -248,6 +248,51 @@ class TestSennEstim(TestFiber):
         self.logOutputMetrics(pulse_sim_metrics, pulse_ref_metrics)
         logger.info(f'Comparing metrics for strength-duration curves')
         self.logOutputMetrics(SDcurve_sim_metrics, SDcurve_ref_metrics)
+
+    def test_Sundt2015(self, is_profiled=False):
+
+        # Fiber model parameters
+        pneuron = getPointNeuron('sundt')  # C-fiber membrane equations
+        fiberD = 0.8e-6                    # peripheral axon diameter, from Sundt 2015 (m)
+        rho_a = 1e2                        # axoplasm resistivity, from Sundt 2015 (Ohm.cm)
+        fiberL = 1e-2                      # axon length (m)
+        maxNodeL = 10e-6                  # maximum node length
+
+        # Stimulation parameters
+        pp = PulsedProtocol(5e-3, 15e-3)           # short simulus
+        psource = ExtracellularCurrent((0, 1e-2))  # point-source located 1 cm above central node
+
+        # Initialize unmyelinated fiber
+        logger.info('creating model ...')
+        fiber = unmyelinatedFiber(
+            IextraFiber, pneuron, fiberD, rs=rho_a, fiberL=fiberL, maxNodeL=maxNodeL)
+
+        # Perform titration to find threshold current
+        # logger.info(f'Running titration for {si_format(pp.tstim)}s pulse')
+        # Ithr = fiber.titrate(psource, pp)  # A
+        # logger.info(f'Ithr = {si_format(Ithr, 2)}A')
+        # I = 1.2 * Ithr
+        I = -4e1
+        data, meta = fiber.simulate(psource, I, pp)
+
+        # Remove end nodes
+        # npad = 10
+        # fiber.ids = fiber.ids[npad:-npad]
+        # data = {k: data[k] for k in fiber.ids}
+
+        # Assess excitation
+        logger.info('fiber is {}excited'.format({True: '', False: 'not '}[fiber.isExcited(data)]))
+
+        # Plot membrane potential traces for specific duration at threshold current
+        fig = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
+
+        # Log output metrics
+        # sim_metrics = {
+        #     'cv': fiber.getConductionVelocity(data),  # m/s
+        #     'dV': fiber.getSpikeAmp(data)             # mV
+        # }
+        # self.logOutputMetrics(sim_metrics)
+
 
 
 if __name__ == '__main__':

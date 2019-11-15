@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-14 23:07:54
+# @Last Modified time: 2019-11-15 16:22:54
 
 import numpy as np
 import pandas as pd
@@ -112,14 +112,14 @@ class SectionCompTimeSeries(CompTimeSeries):
             out = extractIndexesFromLabels(labels)
             if out is not None:
                 prefix, label_indexes = out
-                sorted_indexes = list(range(nlabels))
+                sorted_indexes = (np.array(range(nlabels)) + min(label_indexes)).tolist()
                 if label_indexes == sorted_indexes:
                     logger.debug(f'creating colorbar legend for {prefix} index')
                     use_cbar_legend = True
         if use_cbar_legend:
             colors = [h.get_color() for h in handles]
             cmap = mpl.colors.ListedColormap(colors)
-            bounds = np.arange(nlabels + 1) + 1
+            bounds = np.arange(nlabels + 1) + 1 + min(label_indexes)
             ticks = bounds[:-1] + 0.5
             if nlabels > 10:
                 ticks = [ticks[0], ticks[-1]]
