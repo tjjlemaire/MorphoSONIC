@@ -3,13 +3,15 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-10-10 15:18:03
+# @Last Modified time: 2019-11-15 16:46:12
 
 import numpy as np
 
+from PySONIC.core import PulsedProtocol
 from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import logger, si_format
-from ExSONIC.core import VextSennFiber, IinjSennFiber, ExtracellularCurrent, IntracellularCurrent
+from ExSONIC.core import IextraFiber, IintraFiber, myelinatedFiber, unmyelinatedFiber
+from ExSONIC.core import ExtracellularCurrent, IntracellularCurrent
 from ExSONIC.test import TestFiber
 from ExSONIC.plt import SectionCompTimeSeries, strengthDurationCurve
 from ExSONIC.utils import chronaxie
@@ -41,7 +43,8 @@ class TestSennEstim(TestFiber):
         rho_a = 110.0                   # axoplasm resistivity (Ohm.cm, from McNeal 1976)
         d_ratio = 0.7                   # axon / fiber diameter ratio (from McNeal 1976)
         nodeL = 2.5e-6                  # node length (m, from McNeal 1976)
-        fiber = VextSennFiber(pneuron, fiberD, nnodes, rs=rho_a, nodeL=nodeL, d_ratio=d_ratio)
+        fiber = myelinatedFiber(IextraFiber, pneuron, fiberD, nnodes,
+                                rs=rho_a, nodeL=nodeL, d_ratio=d_ratio)
 
         # Electrode and stimulation parameters (from Reilly 1985)
         rho_e = 300.0      # resistivity of external medium (Ohm.cm, from McNeal 1976)
@@ -50,16 +53,15 @@ class TestSennEstim(TestFiber):
         mode = 'cathode'   # cathodic pulse
         tstim = 100e-6     # s
         toffset = 3e-3     # s
-        PRF = 100.         # Hz
-        DC = 1.            # -
+        pp = PulsedProtocol(tstim, toffset)
 
         # Create extracellular current source
-        psource = ExtracellularCurrent(x0, z0, rho=rho_e, mode=mode)
+        psource = ExtracellularCurrent((x0, z0), rho=rho_e, mode=mode)
 
         # Titrate for a specific duration and simulate fiber at threshold current
         logger.info(f'Running titration for {si_format(tstim)}s pulse')
-        Ithr = fiber.titrate(psource, tstim, toffset, PRF, DC)  # A
-        data, meta = fiber.simulate(psource, Ithr, tstim, toffset, PRF, DC)
+        Ithr = fiber.titrate(psource, pp)  # A
+        data, meta = fiber.simulate(psource, Ithr, pp)
 
         # Compare output metrics to reference
         pulse_sim_metrics = {  # Output metrics
@@ -77,11 +79,12 @@ class TestSennEstim(TestFiber):
         fig1 = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
 
         # Compute and plot strength-duration curve with both polarities
-        #fiber.reset()
+        fiber.reset()
         durations = np.logspace(0, 4, 5) * 1e-6  # s
-        psources = {k: ExtracellularCurrent(x0, z0, rho=rho_e, mode=k) for k in ['cathode', 'anode']}
-        Ithrs = {k: np.array([np.abs(fiber.titrate(v, x, toffset, PRF, DC)) for x in durations])  # A
-                for k, v in psources.items()}
+        pps = [PulsedProtocol(x, toffset) for x in durations]
+        psources = {k: ExtracellularCurrent((x0, z0), rho=rho_e, mode=k) for k in ['cathode', 'anode']}
+        Ithrs = {k: np.array([np.abs(fiber.titrate(v, x)) for x in pps])  # A
+                 for k, v in psources.items()}
         I0_ref = 0.36e-3  # A
         Ithrs['cathode ref'] = np.array([96.3, 9.44, 1.89, 1.00, 1.00]) * I0_ref  # A
 
@@ -129,7 +132,8 @@ class TestSennEstim(TestFiber):
         rho_a = 110.0                   # axoplasm resistivity (Ohm.cm, from McNeal 1976)
         d_ratio = 0.7                   # axon / fiber diameter ratio (from McNeal 1976)
         nodeL = 2.5e-6                  # node length (m, from McNeal 1976)
-        fiber = VextSennFiber(pneuron, fiberD, nnodes, rs=rho_a, nodeL=nodeL, d_ratio=d_ratio)
+        fiber = myelinatedFiber(IextraFiber, pneuron, fiberD, nnodes,
+                                rs=rho_a, nodeL=nodeL, d_ratio=d_ratio)
 
         # Electrode and stimulation parameters (from Reilly 1987)
         rho_e = 300.0      # resistivity of external medium (Ohm.cm, from McNeal 1976)
@@ -137,15 +141,13 @@ class TestSennEstim(TestFiber):
         x0 = 0.            # point-electrode located above central node (m)
         tstim = 100e-6     # s
         toffset = 3e-3     # s
-        PRF = 100.         # Hz
-        DC = 1.            # -
 
         # Create cathodic and anodic extracellular current sources
-        psources = {k: ExtracellularCurrent(x0, z0, rho=rho_e, mode=k) for k in ['cathode', 'anode']}
+        psources = {k: ExtracellularCurrent((x0, z0), rho=rho_e, mode=k) for k in ['cathode', 'anode']}
 
         # Compute and plot strength-duration curve with both polarities
         durations = np.array([1, 5, 10, 50, 100, 500, 1000, 2000], dtype=float) * 1e-6  # s
-        Ithrs = {k: np.array([np.abs(fiber.titrate(v, x, toffset, PRF, DC)) for x in durations])  # A
+        Ithrs = {k: np.array([np.abs(fiber.titrate(v, PulsedProtocol(x, toffset))) for x in durations])  # A
                 for k, v in psources.items()}
         Qthrs = {k: v * durations for k, v in Ithrs.items()}  # C
 
@@ -189,21 +191,21 @@ class TestSennEstim(TestFiber):
         rho_a = 54.7                    # axoplasm resistivity (Ohm.cm)
         d_ratio = 0.6                   # axon / fiber diameter ratio
         nodeL = 1.5e-6                  # node length (m)
-        fiber = IinjSennFiber(pneuron, fiberD, nnodes, rs=rho_a, nodeL=nodeL, d_ratio=d_ratio)
+        fiber = myelinatedFiber(IintraFiber, pneuron, fiberD, nnodes,
+                                rs=rho_a, nodeL=nodeL, d_ratio=d_ratio)
 
         # Intracellular stimulation parameters
         tstim = 10e-6   # s
         toffset = 3e-3  # s
-        PRF = 100.      # Hz
-        DC = 1.         # -
+        pp = PulsedProtocol(tstim, toffset)
 
         # Create extracellular current source
         psource = IntracellularCurrent(0, mode='anode')
 
         # Titrate for a specific duration and simulate fiber at threshold current
         logger.info(f'Running titration for {si_format(tstim)}s pulse')
-        Ithr = fiber.titrate(psource, tstim, toffset, PRF, DC)  # A
-        data, meta = fiber.simulate(psource, 1.2 * Ithr, tstim, toffset, PRF, DC)
+        Ithr = fiber.titrate(psource, pp)  # A
+        data, meta = fiber.simulate(psource, 1.2 * Ithr, pp)
 
         # Compare output metrics to reference
         pulse_sim_metrics = {  # Output metrics
@@ -226,7 +228,7 @@ class TestSennEstim(TestFiber):
         psource = IntracellularCurrent(nnodes // 2, mode='anode')
         durations = np.array([10, 20, 40, 60, 80, 100, 150, 200, 250, 300, 400, 500], dtype=float) * 1e-6  # s
         Ithrs_ref = np.array([4.4, 2.8, 1.95, 1.6, 1.45, 1.4, 1.30, 1.25, 1.25, 1.25, 1.25, 1.25]) * 1e-9  # A
-        Ithrs_sim = np.array([fiber.titrate(psource, x, toffset, PRF, DC) for x in durations])  # A
+        Ithrs_sim = np.array([fiber.titrate(psource, PulsedProtocol(x, toffset)) for x in durations])  # A
         Qthrs_sim = Ithrs_sim * durations  # C
 
         # Plot strength-duration curve
@@ -246,6 +248,51 @@ class TestSennEstim(TestFiber):
         self.logOutputMetrics(pulse_sim_metrics, pulse_ref_metrics)
         logger.info(f'Comparing metrics for strength-duration curves')
         self.logOutputMetrics(SDcurve_sim_metrics, SDcurve_ref_metrics)
+
+    def test_Sundt2015(self, is_profiled=False):
+
+        # Fiber model parameters
+        pneuron = getPointNeuron('sundt')  # C-fiber membrane equations
+        fiberD = 0.8e-6                    # peripheral axon diameter, from Sundt 2015 (m)
+        rho_a = 1e2                        # axoplasm resistivity, from Sundt 2015 (Ohm.cm)
+        fiberL = 1e-2                      # axon length (m)
+        maxNodeL = 10e-6                  # maximum node length
+
+        # Stimulation parameters
+        pp = PulsedProtocol(5e-3, 15e-3)           # short simulus
+        psource = ExtracellularCurrent((0, 1e-2))  # point-source located 1 cm above central node
+
+        # Initialize unmyelinated fiber
+        logger.info('creating model ...')
+        fiber = unmyelinatedFiber(
+            IextraFiber, pneuron, fiberD, rs=rho_a, fiberL=fiberL, maxNodeL=maxNodeL)
+
+        # Perform titration to find threshold current
+        # logger.info(f'Running titration for {si_format(pp.tstim)}s pulse')
+        # Ithr = fiber.titrate(psource, pp)  # A
+        # logger.info(f'Ithr = {si_format(Ithr, 2)}A')
+        # I = 1.2 * Ithr
+        I = -4e1
+        data, meta = fiber.simulate(psource, I, pp)
+
+        # Remove end nodes
+        # npad = 10
+        # fiber.ids = fiber.ids[npad:-npad]
+        # data = {k: data[k] for k in fiber.ids}
+
+        # Assess excitation
+        logger.info('fiber is {}excited'.format({True: '', False: 'not '}[fiber.isExcited(data)]))
+
+        # Plot membrane potential traces for specific duration at threshold current
+        fig = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
+
+        # Log output metrics
+        # sim_metrics = {
+        #     'cv': fiber.getConductionVelocity(data),  # m/s
+        #     'dV': fiber.getSpikeAmp(data)             # mV
+        # }
+        # self.logOutputMetrics(sim_metrics)
+
 
 
 if __name__ == '__main__':

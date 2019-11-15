@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-26 09:12:32
+# @Last Modified time: 2019-11-14 19:12:32
 # @Author: Theo Lemaire
 # @Date:   2018-08-21 19:48:04
 # @Last Modified by:   Theo Lemaire
@@ -27,11 +27,11 @@ NEURON_aliases = {'O': 'O1', 'C': 'C1'}
 nrn_dll_loaded = []
 
 
-def load_mechanisms(path, mechname=None):
+def load_mechanisms(path, modfile=None):
     ''' Rewrite of NEURON's native load_mechanisms method to ensure Windows and Linux compatibility.
 
         :param path: full path to directory containing the MOD files of the mechanisms to load.
-        :param mechname (optional): name of specific mechanism to check for untracked changes
+        :param modfile (optional): name of specific mechanism to check for untracked changes
         in source file.
     '''
 
@@ -58,12 +58,12 @@ def load_mechanisms(path, mechname=None):
         return
 
     # If mechanism name is provided, check for untracked changes in source file
-    if mechname is not None:
-        mod_path = os.path.join(path, '{}.mod'.format(mechname))
+    if modfile is not None:
+        mod_path = os.path.join(path, modfile)
         if not os.path.isfile(mod_path):
-            raise RuntimeError('"{}.mod" not found in "{}"'.format(mechname, path))
+            raise RuntimeError('"{}" not found in "{}"'.format(modfile, path))
         if os.path.getmtime(mod_path) > os.path.getmtime(lib_path):
-            raise UserWarning('"{}.mod" more recent than compiled library'.format(mechname))
+            raise UserWarning('"{}" more recent than compiled library'.format(modfile))
 
     # Load library file and add directory to list of loaded libraries
     h.nrn_load_dll(lib_path)
@@ -188,7 +188,7 @@ def insertVext(sec, xr=1e20, xg=1e10, xc=0.):
     sec.xc[0] = xc
 
 
-def integrate(model, tstop, tstim, PRF, DC, dt, atol):
+def integrate(model, pp, dt, atol):
     ''' Integrate a model differential variables for a given duration, while updating the
         value of the boolean parameter stimon during ON and OFF periods throughout the numerical
         integration, according to stimulus parameters.
@@ -196,14 +196,14 @@ def integrate(model, tstop, tstim, PRF, DC, dt, atol):
         Integration uses an adaptive time step method by default.
 
         :param model: model instance
-        :param tstop: duration of numerical integration (s)
-        :param tstim: stimulus duration (s)
-        :param PRF: pulse repetition frequency (Hz)
-        :param DC: stimulus duty cycle
+        :param pp: pulsed protocol object
         :param dt: integration time step (s). If provided, the fixed time step method is used.
         :param atol: absolute error tolerance (default = 1e-3). If provided, the adaptive
             time step method is used.
     '''
+    tstim, toffset, PRF, DC = pp.tstim, pp.toffset, pp.PRF, pp.DC
+    tstop = tstim + toffset
+
     # Convert input parameters to NEURON units
     tstim *= 1e3
     tstop *= 1e3
@@ -268,3 +268,14 @@ def toggleStim(model):
         model.cvode.re_init()
     else:
         h.fcurrent()
+
+
+def setStimON(model, value):
+    ''' Set stimulation ON or OFF.
+
+        :param value: new stimulation state (0 = OFF, 1 = ON)
+        :return: new stimulation state
+    '''
+    for sec in model.sections.values():
+        setattr(sec, f'stimon_{model.mechname}', value)
+    return value

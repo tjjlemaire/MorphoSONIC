@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-10-01 10:44:48
+# @Last Modified time: 2019-11-14 22:49:56
 
 import numpy as np
 import pandas as pd
@@ -23,6 +23,7 @@ from ..constants import *
 class ExtendedSonicNode(SonicNode):
 
     simkey = 'nano_ext_SONIC'
+    titration_var = 'Adrive'  # name of the titration parameter
 
     def __init__(self, pneuron, rs, a=32e-9, Fdrive=500e3, fs=0.5, deff=100e-9):
 
@@ -90,7 +91,7 @@ class ExtendedSonicNode(SonicNode):
 
     def setBiophysics(self):
         ''' Set section-specific membrane properties with specific sonophore membrane coverage. '''
-        logger.debug('defining membrane biophysics: {}'.format(self.strBiophysics()))
+        logger.debug('defining membrane biophysics: {}'.format(self.str_biophysics()))
         for sec in self.sections.values():
             sec.insert(self.mechname)
 
@@ -115,36 +116,21 @@ class ExtendedSonicNode(SonicNode):
         setattr(self.sections['surroundings'], 'Adrive_{}'.format(self.mechname), 0.)
 
     def setStimON(self, value):
-        ''' Set stimulation ON or OFF.
-
-            :param value: new stimulation state (0 = OFF, 1 = ON)
-            :return: new stimulation state
-        '''
-        for sec in self.sections.values():
-            setattr(sec, 'stimon_{}'.format(self.mechname), value)
-        return value
+        return setStimON(self, value)
 
     @Model.logNSpikes
-    @Model.checkTitrate('Adrive')
+    @Model.checkTitrate
     @Model.addMeta
-    def simulate(self, Adrive, tstim, toffset, PRF, DC, dt=None, atol=None):
+    def simulate(self, Adrive, pp, dt=None, atol=None):
         ''' Set appropriate recording vectors, integrate and return output variables.
 
             :param A: acoustic pressure amplitude (Pa)
-            :param tstim: stimulus duration (s)
-            :param toffset: stimulus offset duration (s)
-            :param PRF: pulse repetition frequency (Hz)
-            :param DC: stimulus duty cycle
+            :param pp: pulse protocol object
             :param dt: integration time step (s)
         '''
-
-        logger.info(
-            '%s: simulation @ %s = %s%s, t = %ss (%ss offset)%s',
-            self, self.modality['name'],
-            si_format(Adrive * self.modality['factor'], space=' ', precision=2), self.modality['unit'],
-            *si_format([tstim, toffset], 1, space=' '),
-            (', PRF = {}Hz, DC = {:.2f}%'.format(
-                si_format(PRF, 2, space=' '), DC * 1e2) if DC < 1.0 else ''))
+        m = self.modality
+        Astr = f'{m["name"]} = {si_format(Adrive * m["factor"], 2)}{m["unit"]}'
+        logger.info(f'{self}: simulation @ {Astr}, {pp.pprint()}')
 
         # Set recording vectors
         t = setTimeProbe()
@@ -153,7 +139,7 @@ class ExtendedSonicNode(SonicNode):
 
         # Set stimulus amplitude and integrate model
         self.setStimAmp(Adrive)
-        integrate(self, tstim + toffset, tstim, PRF, DC, dt, atol)
+        integrate(self, pp, dt, atol)
 
         # Store output in dataframes
         data = {}
@@ -191,14 +177,11 @@ class ExtendedSonicNode(SonicNode):
         return nspikes_start > 0 and nspikes_end > 0
 
     @logCache(os.path.join(os.path.split(__file__)[0], 'nanoextsonic_titrations.log'))
-    def titrate(self, tstim, toffset, PRF=100., DC=1.):
+    def titrate(self, pp):
         ''' Use a binary search to determine the threshold amplitude needed to obtain
-            neural excitation for a given duration, PRF and duty cycle.
+            neural excitation for a given pulsing protocol.
 
-            :param tstim: duration of US stimulation (s)
-            :param toffset: duration of the offset (s)
-            :param PRF: pulse repetition frequency (Hz)
-            :param DC: pulse duty cycle (-)
+            :param pp: pulse protocol object
             :param method: integration method
             :param xfunc: function determining whether condition is reached from simulation output
             :return: determined threshold amplitude (Pa)
@@ -206,12 +189,12 @@ class ExtendedSonicNode(SonicNode):
         xfunc = self.isExcited
         return binarySearch(
             lambda x: xfunc(self.simulate(*x)[0]),
-            [tstim, toffset, PRF, DC], 0, self.Arange, self.A_conv_thr)
+            [pp], 0, self.Arange, self.A_conv_thr)
 
 
-    def filecodes(self, Adrive, tstim, toffset, PRF, DC):
+    def filecodes(self, Adrive, pp):
         # Get parent codes and supress irrelevant entries
-        codes = self.nbls.filecodes(self.Fdrive, Adrive, tstim, toffset, PRF, DC, self.fs, 'NEURON')
+        codes = self.nbls.filecodes(self.Fdrive, Adrive, pp, self.fs, 'NEURON', None)
         del codes['method']
         codes.update({
             'rs': f'rs{self.rs:.1e}Ohm.cm',
@@ -219,8 +202,8 @@ class ExtendedSonicNode(SonicNode):
         })
         return codes
 
-    def meta(self, Adrive, tstim, toffset, PRF, DC):
-        meta = super().meta(Adrive, tstim, toffset, PRF, DC)
+    def meta(self, Adrive, pp):
+        meta = super().meta(Adrive, pp)
         meta['fs'] = self.fs
         meta['rs'] = self.rs
         meta['deff'] = self.deff

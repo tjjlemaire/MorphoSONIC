@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-03-18 18:06:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-07-05 00:26:29
+# @Last Modified time: 2019-11-14 19:03:10
 
 import os
 
@@ -24,7 +24,7 @@ def main():
         logger.info('generating %s neuron MOD file', pneuron.name)
         translator = NmodlTranslator(pneuron.__class__)
         if args['save']:
-            outfile = '{}auto.mod'.format(pneuron.name)
+            outfile = f'{pneuron.name}.mod'
             outpath = os.path.join(args['outputdir'], outfile)
             logger.info('dumping MOD file in "%s"', args['outputdir'])
             translator.dump(outpath)

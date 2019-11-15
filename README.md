@@ -94,9 +94,9 @@ python
 3. Check that *NEURON* has been properly installed by running the demo:
   - Try to run the *neurondemo* (in the NEURON folder). If the NEURON GUI appears correctly, go to 4. Otherwise, follow the steps:
   - Install *XQuartz* from https://www.xquartz.org
-  - Restart the computer 
+  - Restart the computer
   - Try to run the *neurondemo* again. It should execute properly.
-4. If you don’t have *XCode*, install it from the App Store 
+4. If you don’t have *XCode*, install it from the App Store
 5. Go to https://developer.apple.com/downloads, sign with the ID Apple, download the right Command Line Tools based on your OS X and XCode versions, and install it
 6. Open a terminal and add *NEURON* python package to your python path: `export PYTHONPATH=/Applications/NEURON-7.x/nrn/lib/python`
 7. Restart the computer
@@ -228,7 +228,7 @@ fiber = VextSennFiber(pneuron, fiberD, nnodes, rs=rs)
 # Point-source electrode object
 z0 = fiber.interL  # z-position (m): one internodal distance away from fiber
 x0 = 0.            # x-position (m): aligned with fiber's central node
-elec_psource = CurrentPointSource(x0, z0, mode='cathode')
+elec_psource = CurrentPointSource((x0, z0), mode='cathode')
 
 # Stimulation Parameters
 tstim = 100e-6  # s

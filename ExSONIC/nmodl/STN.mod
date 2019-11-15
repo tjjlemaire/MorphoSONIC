@@ -1,101 +1,90 @@
-TITLE STN neuron membrane mechanism
+TITLE STN membrane mechanism
 
 COMMENT
-Equations governing the effective membrane dynamics of a sub-thalamic nucleus neuron upon ultrasonic
-stimulation, based on the multi-Scale Optmimized Neuronal Intramembrane Cavitation (SONIC) model.
+Equations governing the effective membrane dynamics of a Sub-thalamic nucleus neuron
+upon electrical / ultrasonic stimulation, based on the SONIC model.
+
+Reference: Lemaire, T., Neufeld, E., Kuster, N., and Micera, S. (2019).
+Understanding ultrasound neuromodulation using a computationally efficient
+and interpretable model of intramembrane cavitation. J. Neural Eng.
 
 @Author: Theo Lemaire, EPFL
-@Date:   2019-03-05
+@Date: 2019-07-17
 @Email: theo.lemaire@epfl.ch
 ENDCOMMENT
 
+CONSTANT {
+   Z_Ca = 2
+   FARADAY = 96485.3
+   Rg = 8.31342
+}
+
 INDEPENDENT {t FROM 0 TO 1 WITH 1 (ms)}
 
-UNITS {
-    (mA) = (milliamp)
-    (mV) = (millivolt)
-    (uF) = (microfarad)
-    (kPa) = (kilopascal)
-}
-
 NEURON {
-    SUFFIX STN
-
-    NONSPECIFIC_CURRENT iNa
-    NONSPECIFIC_CURRENT iKd
-    NONSPECIFIC_CURRENT iA
-    NONSPECIFIC_CURRENT iCaT
-    NONSPECIFIC_CURRENT iCaL
-    NONSPECIFIC_CURRENT iKCa
-    NONSPECIFIC_CURRENT iLeak
-
-    RANGE Adrive, Vm : section specific
-    RANGE stimon     : common to all sections (but set as RANGE to be accessible from caller)
+   SUFFIX STNauto
+   NONSPECIFIC_CURRENT iNa : Sodium current
+   NONSPECIFIC_CURRENT iKd : delayed-rectifier Potassium current
+   NONSPECIFIC_CURRENT iA : A-type Potassium current
+   NONSPECIFIC_CURRENT iCaT : low-threshold (T-type) Calcium current
+   NONSPECIFIC_CURRENT iCaL : high-threshold (L-type) Calcium current
+   NONSPECIFIC_CURRENT iKCa : Calcium-activated Potassium current
+   NONSPECIFIC_CURRENT iLeak : non-specific leakage current
+   RANGE Adrive, Vm : section specific
+   RANGE stimon     : common to all sections (but set as RANGE to be accessible from caller)
 }
-
-
-CONSTANT {
-    FARADAY = 96494     (coul)     : moles do not appear in units
-    R = 8.31342         (J/mol/K)  : Universal gas constant
-}
-
 
 PARAMETER {
-    stimon       : Stimulation state
-    Adrive (kPa) : Stimulation amplitude
-
-    cm = 1              (uF/cm2)
-    ENa = 60            (mV)
-    EK = -90            (mV)
-    ELeak = -60.0       (mV)
-    gNabar = 0.049     (S/cm2)
-    gKdbar = 0.057     (S/cm2)
-    gAbar = 0.005      (S/cm2)
-    gCaTbar = 0.005    (S/cm2)
-    gCaLbar = 0.015    (S/cm2)
-    gKCabar = 0.001    (S/cm2)
-    gLeak = 3.5e-4     (S/cm2)
-
-    thetax_d2 = 1e-7   (M)
-    kx_d2 = 2e-8       (M)
-    thetax_r = 1.7e-7  (M)
-    kx_r = -8e-8       (M)
-    tau_d2 = 130       (ms)
-    tau_r = 2          (ms)
-    Cai0 = 5e-9        (M)
-    Cao = 2e-3         (M)
-    KCa = 2            (1/ms)
-    T = 306.15         (K)
-    depth              (m)  : depth of sub-membrane space
-    iCa2Cai                 :conversion factor from iCa (mA/cm2) to Cai derivative (M/ms)
-    ECa                (mV)
+   stimon       : Stimulation state
+   Adrive (kPa) : Stimulation amplitude
+   gNabar = 0.049 (S/cm2)
+   ENa = 60.0 (mV)
+   gKdbar = 0.057 (S/cm2)
+   EK = -90.0 (mV)
+   gAbar = 0.005 (S/cm2)
+   gCaTbar = 0.005 (S/cm2)
+   Cao = 0.002 (M)
+   T = 306.15 ()
+   gCaLbar = 0.015000000000000001 (S/cm2)
+   gKCabar = 0.001 (S/cm2)
+   gLeak = 0.00035 (S/cm2)
+   ELeak = -60.0 (mV)
+   tau_d2 = 130.0 (ms)
+   thetax_d2 = 1e-07 ()
+   kx_d2 = 2e-08 ()
+   tau_r = 2.0 (ms)
+   thetax_r = 1.7e-07 ()
+   kx_r = -8e-08 ()
+   current_to_molar_rate_Ca = 5.062862990011234e-06 (1e7 mol.m-1.C-1)
+   taur_Cai = 0.5 (ms)
+   Cai0 = 5e-09 (M)
 }
 
 STATE {
-    m       : iNa activation gate
-    h       : iNa inactivation gate
-    n       : iKd activation gate
-    a       : iA activation gate
-    b       : iA inactivation gate
-    p       : iCaT activation gate
-    q       : iCaT inactivation gate
-    c       : iCaL activation gate
-    d1      : iCaL inactivation gate
-    d2      : iCaL inactivation gate
-    r       : iCaK activation gate
-    Cai (M) : submembrane Calcium concentration
+   m : iNa activation gate
+   h : iNa inactivation gate
+   n : iKd gate
+   a : iA activation gate
+   b : iA inactivation gate
+   p : iCaT activation gate
+   q : iCaT inactivation gate
+   c : iCaL activation gate
+   d1 : iCaL inactivation gate 1
+   d2 : iCaL inactivation gate 2
+   r : iCaK gate
+   Cai : submembrane Calcium concentration (M)
 }
 
 ASSIGNED {
-    Vm      (mV)
-    v       (mV)
-    iNa     (mA/cm2)
-    iKd     (mA/cm2)
-    iA      (mA/cm2)
-    iCaT    (mA/cm2)
-    iCaL    (mA/cm2)
-    iKCa    (mA/cm2)
-    iLeak   (mA/cm2)
+   v  (nC/cm2)
+   Vm (mV)
+   iNa (mA/cm2)
+   iKd (mA/cm2)
+   iA (mA/cm2)
+   iCaT (mA/cm2)
+   iCaL (mA/cm2)
+   iKCa (mA/cm2)
+   iLeak (mA/cm2)
 }
 
 FUNCTION_TABLE V(A(kPa), Q(nC/cm2)) (mV)
@@ -118,74 +107,70 @@ FUNCTION_TABLE taup(A(kPa), Q(nC/cm2)) (ms)
 FUNCTION_TABLE qinf(A(kPa), Q(nC/cm2)) ()
 FUNCTION_TABLE tauq(A(kPa), Q(nC/cm2)) (ms)
 
+FUNCTION nernst(z_ion, Cion_in, Cion_out, T) {
+    nernst = (Rg * T) / (z_ion * FARADAY) * log(Cion_out / Cion_in) * 1e3
+}
 
 FUNCTION xinf(var, theta, k) {
     xinf = 1 / (1 + exp((var - theta) / k))
 }
 
-FUNCTION d2inf(Cai (M)) {
+FUNCTION d2inf(Cai) {
     d2inf = xinf(Cai, thetax_d2, kx_d2)
 }
 
-FUNCTION rinf(Cai (M)) {
+FUNCTION rinf(Cai) {
     rinf = xinf(Cai, thetax_r, kx_r)
 }
 
-FUNCTION nernst(z, Cin (M), Cout (M), T (K)) (mV) {
-    nernst = (R * T) / (z * FARADAY) * log(Cout / Cin) * 1e3
+FUNCTION derCai(p, q, c, d1, d2, Cai, Vm) {
+    LOCAL iCa_tot
+    iCa_tot = iCaT + iCaL
+    derCai = - current_to_molar_rate_Ca * iCa_tot - Cai / taur_Cai
 }
 
+FUNCTION Caiinf(p, q, c, d1, Vm) {
+    Caiinf = Cai0
+}
 
 INITIAL {
-    m = minf(0, v)
-    h = hinf(0, v)
-    n = ninf(0, v)
-    p = pinf(0, v)
-    q = qinf(0, v)
-    a = ainf(0, v)
-    b = binf(0, v)
-    c = cinf(0, v)
-    d1 = d1inf(0, v)
-    d2 = d2inf(Cai0)
-    r = rinf(Cai0)
-    Cai = Cai0
-
-    ECa = nernst(2, Cai0, Cao, T)
-    Vm = V(0, v)
-    iCaT = gCaTbar * p * p * q * (Vm - ECa)
-    iCaL = gCaLbar * c * c * d1 * d2 * (Vm - ECa)
-    depth = -(iCaT + iCaL) / (2 * FARADAY * KCa * Cai) * 1e-5
-    iCa2Cai = 1e-5 / (2 * depth * FARADAY)
-    :printf("depth = %.2e, iCa2Cai = %.2e \n", depth, iCa2Cai)
+   m = minf(Adrive * stimon, v)
+   h = hinf(Adrive * stimon, v)
+   n = ninf(Adrive * stimon, v)
+   a = ainf(Adrive * stimon, v)
+   b = binf(Adrive * stimon, v)
+   p = pinf(Adrive * stimon, v)
+   q = qinf(Adrive * stimon, v)
+   c = cinf(Adrive * stimon, v)
+   d1 = d1inf(Adrive * stimon, v)
+   d2 = d2inf(Cai)
+   r = rinf(Cai)
+   Cai = Caiinf(p, q, c, d1, Vm)
 }
 
 BREAKPOINT {
-    SOLVE states METHOD cnexp
-    Vm = V(Adrive * stimon, v)
-    ECa = nernst(2, Cai, Cao, T)
-    iNa = gNabar * m * m * m * h * (Vm - ENa)
-    iKd = gKdbar * n * n * n * n * (Vm - EK)
-    iA = gAbar * a * a * b * (Vm - EK)
-    iCaT = gCaTbar * p * p * q * (Vm - ECa)
-    iCaL = gCaLbar * c * c * d1 * d2 * (Vm - ECa)
-    iKCa = gKCabar * r * r * (Vm - EK)
-    iLeak = gLeak * (Vm - ELeak)
+   SOLVE states METHOD cnexp
+   Vm = V(Adrive * stimon, v)
+   iNa = gNabar * m * m * m * h * (Vm - ENa)
+   iKd = gKdbar * n * n * n * n * (Vm - EK)
+   iA = gAbar * a * a * b * (Vm - EK)
+   iCaT = gCaTbar * p * p * q * (Vm - nernst(Z_Ca, Cai, Cao, T))
+   iCaL = gCaLbar * c * c * d1 * d2 * (Vm - nernst(Z_Ca, Cai, Cao, T))
+   iKCa = gKCabar * r * r * (Vm - EK)
+   iLeak = gLeak * (Vm - ELeak)
 }
 
 DERIVATIVE states {
-        m' = (minf(Adrive * stimon, v) - m) / taum(Adrive * stimon, v)
-    h' = (hinf(Adrive * stimon, v) - h) / tauh(Adrive * stimon, v)
-    n' = (ninf(Adrive * stimon, v) - n) / taun(Adrive * stimon, v)
-    p' = (pinf(Adrive * stimon, v) - p) / taup(Adrive * stimon, v)
-    q' = (qinf(Adrive * stimon, v) - q) / tauq(Adrive * stimon, v)
-    a' = (ainf(Adrive * stimon, v) - a) / taua(Adrive * stimon, v)
-    b' = (binf(Adrive * stimon, v) - b) / taub(Adrive * stimon, v)
-    c' = (cinf(Adrive * stimon, v) - c) / tauc(Adrive * stimon, v)
-    d1' = (d1inf(Adrive * stimon, v) - d1) / taud1(Adrive * stimon, v)
-    d2' = (d2inf(Cai) - d2) / tau_d2
-    r' = (rinf(Cai) - r) / tau_r
-    ECa = nernst(2, Cai, Cao, T)
-    iCaT = gCaTbar * p * p * q * (Vm - ECa)
-    iCaL = gCaLbar * c * c * d1 * d2 * (Vm - ECa)
-    Cai' = - iCa2Cai * (iCaT + iCaL) - Cai * KCa
+   m' = (minf(Adrive * stimon, v) - m) / taum(Adrive * stimon, v)
+   h' = (hinf(Adrive * stimon, v) - h) / tauh(Adrive * stimon, v)
+   n' = (ninf(Adrive * stimon, v) - n) / taun(Adrive * stimon, v)
+   a' = (ainf(Adrive * stimon, v) - a) / taua(Adrive * stimon, v)
+   b' = (binf(Adrive * stimon, v) - b) / taub(Adrive * stimon, v)
+   p' = (pinf(Adrive * stimon, v) - p) / taup(Adrive * stimon, v)
+   q' = (qinf(Adrive * stimon, v) - q) / tauq(Adrive * stimon, v)
+   c' = (cinf(Adrive * stimon, v) - c) / tauc(Adrive * stimon, v)
+   d1' = (d1inf(Adrive * stimon, v) - d1) / taud1(Adrive * stimon, v)
+   d2' = (d2inf(Cai) - d2) / tau_d2
+   r' = (rinf(Cai) - r) / tau_r
+   Cai' = derCai(p, q, c, d1, d2, Cai, Vm)
 }
