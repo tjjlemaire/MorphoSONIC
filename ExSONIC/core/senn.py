@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-15 18:57:12
+# @Last Modified time: 2019-11-22 18:56:41
 
 import abc
 import pickle
@@ -171,10 +171,15 @@ class SennFiber(metaclass=abc.ABCMeta):
 
         # Adding extra resistivity to account for half-internodal resistance
         # for each connected side of each node
-        logger.debug('adding extra-resistivity to account for internodal resistance')
-        R_extra = np.array([self.R_inter / 2] + [self.R_inter] * (self.nnodes - 2) + [self.R_inter / 2])  # Ohm
-        rho_extra = R_extra * self.rs / self.R_node  # Ohm.cm
-        rho_nodes += rho_extra  # Ohm.cm
+        if self.R_inter > 0:
+            logger.debug('adding extra-resistivity to account for internodal resistance')
+            R_extra = np.hstack((
+                [self.R_inter / 2],
+                [self.R_inter] * (self.nnodes - 2),
+                [self.R_inter / 2]
+            ))  # Ohm
+            rho_extra = R_extra * self.rs / self.R_node  # Ohm.cm
+            rho_nodes += rho_extra  # Ohm.cm
 
         # In case the axial coupling variable is v (an alias for membrane charge density),
         # multiply resistivity by membrane capacitance to ensure consistency of Q-based

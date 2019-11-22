@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 11:34:09
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-14 23:49:17
+# @Last Modified time: 2019-11-22 18:50:23
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -310,7 +310,7 @@ class TestFiber(TestBase):
             },
             'cv': {
                 'name': 'conduction velocity',
-                'fmt': lambda x: f'{x:.1f} m/s'
+                'fmt': lambda x: f'{x:.2f} m/s'
             },
             'dV': {
                 'name': 'spike amplitude',

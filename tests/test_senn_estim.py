@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-15 19:20:19
+# @Last Modified time: 2019-11-22 18:55:22
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -252,55 +252,55 @@ class TestSennEstim(TestFiber):
 
     def test_Sundt2015(self, is_profiled=False):
 
-        # Fiber model parameters
+        # Unmyelinated fiber model
         pneuron = getPointNeuron('sundt')  # C-fiber membrane equations
         fiberD = 0.8e-6                    # peripheral axon diameter, from Sundt 2015 (m)
         rho_a = 1e2                        # axoplasm resistivity, from Sundt 2015 (Ohm.cm)
-        fiberL = 2e-2                      # axon length (m)
-        maxNodeL = 100e-6                  # maximum node length
-
-        # Stimulation parameters
-        pp = PulsedProtocol(1e-4, 15e-3)           # short simulus
-        psource = ExtracellularCurrent((0, 1e-3))  # point-source located 1 mm above central node
-
-        # Initialize unmyelinated fiber
+        fiberL = 5e-3                      # axon length (m)
+        maxNodeL = 50e-6                   # maximum node length
         logger.info('creating model ...')
         fiber = unmyelinatedFiber(
-            IextraFiber, pneuron, fiberD, rs=rho_a, fiberL=fiberL, maxNodeL=maxNodeL)
+            IintraFiber, pneuron, fiberD, rs=rho_a, fiberL=fiberL, maxNodeL=maxNodeL)
         inodes = np.arange(fiber.nnodes) + 1
+
+        # Stimulation parameters
+        pp = PulsedProtocol(1e-3, 10e-3)           # short simulus
+        # psource = ExtracellularCurrent((0, 0.1 * fiberL))  # 1/10 fiberL above central node
+        inode = fiber.nnodes // 2
+        psource = IntracellularCurrent(inode)
 
         # Perform titration to find threshold current
         # logger.info(f'Running titration for {si_format(pp.tstim)}s pulse')
         # Ithr = fiber.titrate(psource, pp)  # A
         # logger.info(f'Ithr = {si_format(Ithr, 2)}A')
         # I = 1.2 * Ithr
-        I = -3e-1
+        I = 0.2e-9  # A
 
-        # Plot extracellular potentials
-        Ve = psource.computeNodesAmps(fiber, I)
-        fig, ax = plt.subplots()
-        ax.set_title('Extracellular potential')
-        ax.set_xlabel('# node')
-        ax.set_ylabel('$V_e\ (mV)$')
-        ax.plot(inodes, Ve)
-        ax.axhline(0, linestyle='--' ,color='k')
+        # # Plot extracellular potentials
+        # Ve = psource.computeNodesAmps(fiber, I)
+        # fig, ax = plt.subplots()
+        # ax.set_title('Extracellular potential')
+        # ax.set_xlabel('# node')
+        # ax.set_ylabel('$V_e\ (mV)$')
+        # ax.plot(inodes, Ve)
+        # ax.axhline(0, linestyle='--' ,color='k')
 
-        # Plot activating function
-        Iinjs = fiber.preProcessAmps(Ve)
-        fig, ax = plt.subplots()
-        ax.set_title('Activating function')
-        ax.set_xlabel('# node')
-        ax.set_ylabel('injected current (nA)')
-        ax.plot(inodes, Iinjs)
-        ax.axhline(0, linestyle='--' ,color='k')
+        # # Plot activating function
+        # Iinjs = fiber.preProcessAmps(Ve)
+        # fig, ax = plt.subplots()
+        # ax.set_title('Activating function')
+        # ax.set_xlabel('# node')
+        # ax.set_ylabel('injected current (nA)')
+        # ax.plot(inodes, Iinjs)
+        # ax.axhline(0, linestyle='--' ,color='k')
 
         # # Simulate fiber
         data, meta = fiber.simulate(psource, I, pp)
 
-        # # Remove end nodes
-        # npad = 10
-        # fiber.ids = fiber.ids[npad:-npad]
-        # data = {k: data[k] for k in fiber.ids}
+        # Remove end nodes
+        npad = 10
+        fiber.ids = fiber.ids[npad:-npad]
+        data = {k: data[k] for k in fiber.ids}
 
         # Assess excitation
         logger.info('fiber is {}excited'.format({True: '', False: 'not '}[fiber.isExcited(data)]))
@@ -309,11 +309,11 @@ class TestSennEstim(TestFiber):
         fig = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
 
         # Log output metrics
-        # sim_metrics = {
-        #     'cv': fiber.getConductionVelocity(data),  # m/s
-        #     'dV': fiber.getSpikeAmp(data)             # mV
-        # }
-        # self.logOutputMetrics(sim_metrics)
+        sim_metrics = {
+            'cv': fiber.getConductionVelocity(data),  # m/s
+            'dV': fiber.getSpikeAmp(data)             # mV
+        }
+        self.logOutputMetrics(sim_metrics)
 
 
 

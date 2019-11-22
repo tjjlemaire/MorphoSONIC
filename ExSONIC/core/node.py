@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-15 10:59:03
+# @Last Modified time: 2019-11-20 22:37:17
 
 import pickle
 import abc
@@ -245,6 +245,7 @@ class IintraNode(Node):
         '''
         self.printStimAmp(Astim)
         self.Iinj = Astim * self.section(0.5).area() * 1e-6  # nA
+        logger.debug(f'Equivalent injected current: {self.Iinj:.1f} nA')
         self.iclamp = h.IClamp(self.section(0.5))
         self.iclamp.delay = 0  # we want to exert control over amp starting at 0 ms
         self.iclamp.dur = 1e9  # dur must be long enough to span all our changes
