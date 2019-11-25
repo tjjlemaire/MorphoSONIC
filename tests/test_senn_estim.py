@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-22 18:55:22
+# @Last Modified time: 2019-11-25 12:10:45
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -251,6 +251,14 @@ class TestSennEstim(TestFiber):
         self.logOutputMetrics(SDcurve_sim_metrics, SDcurve_ref_metrics)
 
     def test_Sundt2015(self, is_profiled=False):
+        ''' Run C-fiber simulation with identical parameters as in Sundt 2015, Figs 5d
+            (only peripheral axon), and compare resulting conduction velocity and spike
+            amplitude.
+
+            Reference: Sundt D., Gamper N., Jaffe D. B., Spike propagation through the dorsal
+            root ganglia in an unmyelinated sensory neuron: a modeling study.
+            Journal of Neurophysiology (2015)
+        '''
 
         # Unmyelinated fiber model
         pneuron = getPointNeuron('sundt')  # C-fiber membrane equations
@@ -261,44 +269,17 @@ class TestSennEstim(TestFiber):
         logger.info('creating model ...')
         fiber = unmyelinatedFiber(
             IintraFiber, pneuron, fiberD, rs=rho_a, fiberL=fiberL, maxNodeL=maxNodeL)
-        inodes = np.arange(fiber.nnodes) + 1
 
         # Stimulation parameters
-        pp = PulsedProtocol(1e-3, 10e-3)           # short simulus
-        # psource = ExtracellularCurrent((0, 0.1 * fiberL))  # 1/10 fiberL above central node
-        inode = fiber.nnodes // 2
-        psource = IntracellularCurrent(inode)
-
-        # Perform titration to find threshold current
-        # logger.info(f'Running titration for {si_format(pp.tstim)}s pulse')
-        # Ithr = fiber.titrate(psource, pp)  # A
-        # logger.info(f'Ithr = {si_format(Ithr, 2)}A')
-        # I = 1.2 * Ithr
+        pp = PulsedProtocol(1e-3, 10e-3)
+        psource = IntracellularCurrent(fiber.nnodes // 2)
         I = 0.2e-9  # A
 
-        # # Plot extracellular potentials
-        # Ve = psource.computeNodesAmps(fiber, I)
-        # fig, ax = plt.subplots()
-        # ax.set_title('Extracellular potential')
-        # ax.set_xlabel('# node')
-        # ax.set_ylabel('$V_e\ (mV)$')
-        # ax.plot(inodes, Ve)
-        # ax.axhline(0, linestyle='--' ,color='k')
-
-        # # Plot activating function
-        # Iinjs = fiber.preProcessAmps(Ve)
-        # fig, ax = plt.subplots()
-        # ax.set_title('Activating function')
-        # ax.set_xlabel('# node')
-        # ax.set_ylabel('injected current (nA)')
-        # ax.plot(inodes, Iinjs)
-        # ax.axhline(0, linestyle='--' ,color='k')
-
-        # # Simulate fiber
+        # Simulate fiber
         data, meta = fiber.simulate(psource, I, pp)
 
-        # Remove end nodes
-        npad = 10
+        # Discard data from end nodes
+        npad = 2
         fiber.ids = fiber.ids[npad:-npad]
         data = {k: data[k] for k in fiber.ids}
 
@@ -308,13 +289,17 @@ class TestSennEstim(TestFiber):
         # Plot membrane potential traces for specific duration at threshold current
         fig = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
 
-        # Log output metrics
+        # Compare output metrics to reference
+        ref_metrics = {     # Reference metrics (from Sundt 2015 ModelDB files)
+            'cv': 0.44,     # conduction velocity (m/s)
+            'dV': (86, 90)  # spike amplitude (mV)
+        }
         sim_metrics = {
             'cv': fiber.getConductionVelocity(data),  # m/s
             'dV': fiber.getSpikeAmp(data)             # mV
         }
-        self.logOutputMetrics(sim_metrics)
-
+        logger.info(f'Comparing metrics for {si_format(pp.tstim)}s intracellular anodic pulse')
+        self.logOutputMetrics(sim_metrics, ref_metrics)
 
 
 if __name__ == '__main__':

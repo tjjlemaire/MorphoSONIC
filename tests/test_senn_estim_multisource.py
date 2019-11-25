@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-10-28 18:33:04
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-14 23:11:08
+# @Last Modified time: 2019-11-25 12:03:07
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -62,17 +62,17 @@ for i, p in enumerate(psources):
 ax.plot(inodes, Ve_net, c='k', label='combined effect')
 ax.legend(frameon=False)
 
-# Figure 2: activating functions
-d2Ve = np.diff(Ve, 2) / fiber.interL**2
-d2Ve_net = np.diff(Ve_net, 2) / fiber.interL**2
+# Figure 2: activating function
+Iinj = np.array([fiber.preProcessAmps(v) for v in Ve])
+Iinj_net = fiber.preProcessAmps(Ve_net)
 fig2, ax = plt.subplots()
 ax.set_title('Activating function')
 ax.set_xlabel('# node')
-ax.set_ylabel('$d^2V_e / dx^2\ (mV/mm^2)$')
+ax.set_ylabel('eq. injected current (nA)')
 ax.set_xticks(inodes)
 for i, p in enumerate(psources):
-    ax.plot(inodes[1:-1], d2Ve[i], '--', c=f'C{i}', label=f'source {i + 1}')
-ax.plot(inodes[1:-1], d2Ve_net, c='k', label='combined effect')
+    ax.plot(inodes, Iinj[i], '--', c=f'C{i}', label=f'source {i + 1}')
+ax.plot(inodes, Iinj_net, c='k', label='combined effect')
 ax.legend(frameon=False)
 
 # Fiber simulations

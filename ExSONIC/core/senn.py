@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-22 18:56:41
+# @Last Modified time: 2019-11-25 11:49:06
 
 import abc
 import pickle
@@ -640,5 +640,4 @@ def unmyelinatedFiber(fiber_class, pneuron, fiberD, rs=1e2, fiberL=1e-2, maxNode
 
     # Create fiber model instance
     fiber = fiber_class(pneuron, nnodes, rs, nodeD, nodeL, interD, interL, **kwargs)
-    fiber.A_range = (fiber.A_range[0], 1e7)  # mV
     return fiber
