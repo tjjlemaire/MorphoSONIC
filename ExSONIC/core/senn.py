@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-25 11:49:06
+# @Last Modified time: 2019-11-25 13:18:07
 
 import abc
 import pickle
@@ -400,11 +400,11 @@ class SennFiber(metaclass=abc.ABCMeta):
                 tspikes[id] = t[ispikes]
         return pd.DataFrame(tspikes)
 
-    def getConductionVelocity(self, data, ids=None):
+    def getConductionVelocity(self, data, ids=None, out='median'):
         ''' Compute average conduction speed from simulation results.
 
             :param data: simulation output dataframe
-            :return: array of condiction speeds per spike (m/s).
+            :return: conduction speed output (m/s).
         '''
         # By default, consider all fiber nodes
         if ids is None:
@@ -428,15 +428,26 @@ class SennFiber(metaclass=abc.ABCMeta):
         distances = np.tile(distances, (1, delays.shape[0]))
         velocities = distances / delays  # m/s
 
-        # Average over all spikes and all segments
-        cv = np.mean(velocities)  # m/s
-
-        return cv
+        if out == 'range':
+            return velocities.min(), velocities.max()
+        elif out == 'median':
+            return np.median(velocities)
+        elif out == 'mean':
+            return np.mean(velocities)
+        else:
+            raise AttributeError(f'invalid out option: {out}')
 
     @staticmethod
-    def getSpikeAmp(data, key='Vm'):
+    def getSpikeAmp(data, key='Vm', out='range'):
         amps = np.array([np.ptp(df[key].values) for df in data.values()])
-        return amps.min(), amps.max()
+        if out == 'range':
+            return amps.min(), amps.max()
+        elif out == 'median':
+            return np.median(amps)
+        elif out == 'mean':
+            return np.mean(amps)
+        else:
+            raise AttributeError(f'invalid out option: {out}')
 
 
 class EStimFiber(SennFiber):
