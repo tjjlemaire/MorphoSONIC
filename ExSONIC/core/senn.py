@@ -3,10 +3,12 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-25 13:18:07
+# @Last Modified time: 2019-11-25 16:04:36
 
 import abc
 import pickle
+import csv
+import os
 import numpy as np
 import pandas as pd
 from inspect import signature
@@ -20,6 +22,7 @@ from .pyhoc import *
 from ..constants import *
 from .node import IintraNode, SonicNode
 from .connectors import SeriesConnector
+from .psource import IntracellularCurrent
 
 
 class SennFiber(metaclass=abc.ABCMeta):
@@ -337,7 +340,7 @@ class SennFiber(metaclass=abc.ABCMeta):
             'simkey': self.simkey,
             'neuron': self.pneuron.name,
             'nnodes': f'{self.nnodes}node{plural(self.nnodes)}',
-            'rs': f'rs{self.rs:.0f}(Ohm.cm)',
+            'rs': f'rs{self.rs:.0f}ohm.cm',
             'nodeD': f'nodeD{(self.nodeD * 1e6):.1f}um',
             'nodeL': f'nodeL{(self.nodeL * 1e6):.1f}um',
             'interD': f'interD{(self.interD * 1e6):.1f}um',
@@ -521,7 +524,7 @@ class IextraFiber(EStimFiber):
 class IintraFiber(EStimFiber):
 
     simkey = 'senn_Iintra'
-    A_range = (1e-11, 1e-7)  # nA
+    A_range = (1e-12, 1e-7)  # nA
 
 
 class SonicFiber(SennFiber):
@@ -652,3 +655,100 @@ def unmyelinatedFiber(fiber_class, pneuron, fiberD, rs=1e2, fiberL=1e-2, maxNode
     # Create fiber model instance
     fiber = fiber_class(pneuron, nnodes, rs, nodeD, nodeL, interD, interL, **kwargs)
     return fiber
+
+
+def unmyelinatedFiberConvergence(pneuron, fiberD, rho_a, fiberL, maxNodeL_range, pp, outdir):
+    ''' Simulate an unmyelinated fiber model the model upon intracellular current injection
+        at the central node, for increasing spatial resolution (i.e. decreasing node length),
+        and quantify the model convergence via 3 output metrics:
+        - stimulation threshold
+        - conduction velocity
+        - spike amplitude
+
+        :param pneuron: C-fiber membrane equations
+        :param fiberD: fiber diameter (m)
+        :param rho_a: intracellular resistivity (ohm.cm)
+        :param fiberL: fiber length (m)
+        :param maxNodeL_range: maximum node length range (m)
+        :param pp: pulsed protocol object
+        :param outdir: output directory
+        :return: 5 columns dataframe with the following vectors:
+         - 'maxNodeL (m)'
+         - 'nodeL (m)'
+         - 'Ithr (A)'
+         - 'CV (m/s)'
+         - 'dV (mV)'
+    '''
+
+    # Get filecode
+    fiber = unmyelinatedFiber(
+        IintraFiber, pneuron, fiberD, rs=rho_a, fiberL=fiberL, maxNodeL=fiberL / 3)
+    filecodes = fiber.filecodes(IntracellularCurrent(fiber.nnodes // 2), 0.0, pp)
+    for k in ['nnodes', 'nodeL', 'interD', 'interL', 'psource', 'A', 'nature', 'toffset', 'PRF', 'DC']:
+        del filecodes[k]
+    fcode = '_'.join(filecodes.values())
+
+    # Output file and column names
+    fname = f'{fcode}_convergence_results.csv'
+    fpath = os.path.join(outdir, fname)
+    delimiter = '\t'
+    labels = ['maxNodeL (m)', 'nodeL (m)', 'Ithr (A)', 'CV (m/s)', 'dV (mV)']
+
+    # If log file does not exist
+    if not os.path.isfile(fpath):
+
+        # Create log file
+        logger.info(f'creating log file: "{fpath}"')
+        with open(fpath, 'w') as csvfile:
+            writer = csv.writer(csvfile, delimiter=delimiter)
+            writer.writerow(labels)
+
+        # Loop through parameter sweep
+        logger.info('running maxNodeL parameter sweep ({}m - {}m)'.format(
+            *si_format([maxNodeL_range.min(), maxNodeL_range.max()], 2)))
+        for x in maxNodeL_range[::-1]:
+
+            # Initialize fiber with specific max node length
+            logger.info(f'creating model with maxNodeL = {x * 1e6:.2f} um ...')
+            fiber = unmyelinatedFiber(
+                IintraFiber, pneuron, fiberD, rs=rho_a, fiberL=fiberL, maxNodeL=x)
+            logger.info(f'resulting node length: {fiber.nodeL * 1e6:.2f} um')
+
+            # Perform titration to find threshold current
+            psource = IntracellularCurrent(fiber.nnodes // 2)
+            logger.info(f'running titration with intracellular current injected at node {psource.inode}')
+            Ithr = fiber.titrate(psource, pp)  # A
+
+            # If fiber is excited
+            if not np.isnan(Ithr):
+                logger.info(f'Ithr = {si_format(Ithr, 2)}A')
+
+                # Simulate fiber at 1.1 times threshold current
+                data, meta = fiber.simulate(psource, 1.1 * Ithr, pp)
+
+                # Compute CV and spike amplitude
+                cv = fiber.getConductionVelocity(data, out='median')  # m/s
+                dV = fiber.getSpikeAmp(data, out='median')            # mV
+                logger.info(f'CV = {cv:.2f} m/s')
+                logger.info(f'dV = {dV:.2f} mV')
+            else:
+                # Otherwise, assign NaN values to them
+                cv, dV = np.nan, np.nan
+
+            # Log input-output pair into file
+            logger.info('saving result to log file')
+            with open(fpath, 'a', newline='') as csvfile:
+                writer = csv.writer(csvfile, delimiter=delimiter)
+                writer.writerow([x, fiber.nodeL, Ithr, cv, dV])
+
+            # Clear fiber sections
+            fiber.clear()
+
+        logger.info('parameter sweep successfully completed')
+
+    # Load results
+    logger.info('loading results from log file')
+    df = pd.read_csv(fpath, sep=delimiter)
+
+    return df
+
