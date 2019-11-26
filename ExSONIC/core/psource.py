@@ -237,9 +237,6 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
         for k in ['rho', 'c', 'theta']:
             self.attrkeys.append(k)
 
-        #Angular frequency
-#        self.w = 2 * np.pi * self.Fdrive
-
         # Angular wave number
         self.kf = 2 * np.pi * self.Fdrive / self.c
 
@@ -263,56 +260,55 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
         '''
         return u * self.relNormalAxisAmp(z)
 
-    def DPSM_paper100sources (self):
-        l=np.array([1,7,13,20,26,33])
-        radius = []
-        angle = []
-        for i in range(len(l)):
-            a = i * self.r * np.ones(l[i])/ (len(l)-0.5)
-            b = 2 * np.pi * np.arange(l[i]) / l[i]
-            radius = np.concatenate((radius,a), axis=None)
-            angle = np.concatenate((angle,b), axis=None)
-        xsource = radius * np.cos(angle)
-        ysource = radius * np.sin(angle)
-        return xsource, ysource
-
     def DPSM_squaredsources (self, m):
+        ''' Generate a population of uniformly distributed 2D data points
+            in a circle with radius r with squared disposition.
+
+            :param m: number of data points
+            :return: 2D matrix of Cartesian (x, y) positions
+        '''
         xs = []
         ys = []
-        Atot = self.r**2 * np.pi   # Area of the transducer
-        A = Atot / m              # Area associated at each point source
-        s = np.sqrt(A)             # Side of the square associated at each point source
-        y = - round(self.r/s - 1/2) * s                                # Initial y value
+        Atot = self.r**2 * np.pi         # Area of the transducer
+        A = Atot / m                     # Area associated at each point source
+        s = np.sqrt(A)                   # Side of the square associated at each point source
+        y = - round(self.r/s - 1/2) * s                                       # Initial y value
         while y <= round(self.r/s -1/2) * s + s * 1e-3:
-            x = - round( np.sqrt( self.r**2 - y**2)/s -1/2) * s         # Initial x value for every y iteration
+            x = - round( np.sqrt( self.r**2 - y**2)/s -1/2) * s               # Initial x value for every y iteration
             while x <= round( np.sqrt( self.r**2 - y**2)/s -1/2) * s + s*1e-3:
-                xs.append(x)
+                xs.append(x)             
                 ys.append(y)
-                x = x + s
-            y = y + s
+                x = x + s                # Shift the x component
+            y = y + s                    # Shift the y component
         xsource = np.array(xs)
         ysource = np.array(ys)
         return xsource, ysource
 
     def DPSM_concentricsources (self, m):
+        ''' Generate a population of uniformly distributed 2D data points
+            in a circle with radius r with concentric disposition.
+
+            :param m: number of data points
+            :return: 2D matrix of Cartesian (x, y) positions
+        '''
         radius = [0]
         angle = [0]
         nl = np.int((3 * np.pi -1 + np.sqrt( 9*np.pi**2 - 14*np.pi + 1 +4*np.pi*m)) / (2 * np.pi))  # Number of concentric layers
-        d = self.r / (nl - 1/2)                # Distance between layers
+        d = self.r / (nl - 1/2)                  # distance between layers
         for i in range(nl - 1):
-            ml = round(2 * np.pi * (i + 1))    # Number of point sources in the layer
-            rl = (i + 1) * d                   # Radius of the concentric layer
-            r = rl * np.ones(ml)
+            ml = round(2 * np.pi * (i + 1))      # number of point sources in the layer
+            rl = (i + 1) * d                     # radius of the concentric layer
+            r = rl * np.ones(ml)                 #  
             a = rd.uniform(0, 2*np.pi) + 2 * np.pi * np.arange(ml) / ml
-            radius = np.concatenate((radius, r), axis=None)   # Point sources radius vector
-            angle = np.concatenate((angle, a), axis=None)     # Point sources angle vector
-        xsource = radius * np.cos(angle)                      # xy coordinates of point sources
-        ysource = radius * np.sin(angle)
+            radius = np.concatenate((radius, r), axis=None)    # point sources radius array
+            angle = np.concatenate((angle, a), axis=None)      # point sources angle array
+        xsource = radius * np.cos(angle)         # x coordinates of point sources
+        ysource = radius * np.sin(angle)         # y coordinates of point sources
         return xsource, ysource
 
     def DPSM_sunflowersources(self, m, alpha=1):
         ''' Generate a population of uniformly distributed 2D data points
-            in a unit circle.
+            in a circle with radius r.
 
             :param m: number of data points
             :param alpha: coefficient determining evenness of the boundary
@@ -320,15 +316,21 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
         '''
         nbounds = np.round(alpha * np.sqrt(m))    # number of boundary points
         phi = (np.sqrt(5) + 1) / 2                # golden ratio
-        k = np.arange(1, m + 1)                   # index vector
-        theta = 2 * np.pi * k / phi**2            # angle vector
-        r = np.sqrt((k - 1) / (m - nbounds - 1))  # radius vector
+        k = np.arange(1, m + 1)                   # index array
+        theta = 2 * np.pi * k / phi**2            # angle array
+        r = np.sqrt((k - 1) / (m - nbounds - 1))  # radius array
         r[r > 1] = 1
         x = r * np.cos(theta)
         y = r * np.sin(theta)
         return self.r * np.vstack((x, y))
 
     def DPSM_linearsources (self, m):
+        ''' Generate a population of uniformly distributed data points
+            in a line of length r.
+
+            :param m: number of data points
+            :return: 2D matrix of Cartesian (x, y) positions
+        '''
         xs = []
         ys = []
         m = 100
@@ -343,15 +345,39 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
         ysource = np.array(ys)
         return xsource, ysource
 
-    def DPSM_point (self, x, z, u, xsource, ysource, meff):
+    def DPSM_point (self, x, z, u, xsource, ysource, mact):
+        ''' Compute acoustic amplitude in the point (x,z), given the transducer 
+        normal particle velocity and the distribution of point sources used to 
+        approximate the transducer. It follows the Distributed Point Source Method
+        (DPSM) from Yamada 2009.
+        
+            :param x: x coordinate of the point for which compute the acustic amplitude (m)
+            :param z: z coordinate of the point for which compute the acustic amplitude (m)
+            :param u: particle velocity normal to the transducer surface (m/s)
+            :param xsource: x coordinates of the point sources (m)
+            :param ysource: y coordinates of the point sources, y perpendicular to x and parallel to the transducer surface (m)
+            :param meff: number of point sources actually used
+            :return: acoustic amplitude (Pa)
+        '''                
         j = complex(0, 1)  # imaginary number
-        ds = self.r**2 * np.pi / meff
-        deltax = xsource - x * np.ones(meff)
-        distance = np.sqrt(deltax**2 + ysource*ysource + z**2 * np.ones(meff))
-#        return np.abs(- j * self.rho * self.w * ds * u * sum( np.exp(j * self.kf * distance) / distance) / 2 * np.pi)
+        ds = self.r**2 * np.pi / mact
+        deltax = xsource - x * np.ones(mact)
+        distance = np.sqrt(deltax**2 + ysource*ysource + z**2 * np.ones(mact))
         return np.abs(- j * self.rho * self.Fdrive * ds * u * sum( np.exp(j * self.kf * distance) / distance))
 
     def DPSM (self, x, z, u, m, d):
+        ''' Compute acoustic amplitude in the 2D space xz, given the transducer 
+        normal particle velocity and the transducer approximation to use. 
+        It follows the Distributed Point Source Method
+        (DPSM) from Yamada 2009.
+        
+            :param x: axis parallel to a fixed diameter of the transducer (m)
+            :param z: transducer normal axis (m)
+            :param u: particle velocity normal to the transducer surface (m/s)
+            :param m: number of point sources we want to use to approximate the transducer surface
+            :param d: type of point sources distribution used
+            :return: acoustic amplitude matrix (Pa)
+        '''        
         nx = len(x)
         nz = len(z)
         results = np.array ([[0 for x in range(nx)] for y in range(nz)])
@@ -363,10 +389,10 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
             xsource, ysource = self.DPSM_concentricsources(m)
         if d == 'linear':
             xsource, ysource = self.DPSM_linearsources(m)
-        meff = len(xsource)
+        mact = len(xsource)
         for i in range(nx):
             for j in range(nz):
-                results[i][j] = self.DPSM_point (x[i], z[j], u, xsource, ysource, meff)
+                results[i][j] = self.DPSM_point (x[i], z[j], u, xsource, ysource, mact)
         return results
 
     def computeNodesAmps(self, fiber, u):
