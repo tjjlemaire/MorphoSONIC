@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-25 16:04:36
+# @Last Modified time: 2019-11-26 10:48:17
 
 import abc
 import pickle
@@ -657,7 +657,7 @@ def unmyelinatedFiber(fiber_class, pneuron, fiberD, rs=1e2, fiberL=1e-2, maxNode
     return fiber
 
 
-def unmyelinatedFiberConvergence(pneuron, fiberD, rho_a, fiberL, maxNodeL_range, pp, outdir):
+def unmyelinatedFiberConvergence(pneuron, fiberD, rho_a, fiberL, maxNodeL_range, pp, outdir='.'):
     ''' Simulate an unmyelinated fiber model the model upon intracellular current injection
         at the central node, for increasing spatial resolution (i.e. decreasing node length),
         and quantify the model convergence via 3 output metrics:

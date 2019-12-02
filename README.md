@@ -20,10 +20,12 @@ The package also contains several classes defining multi-compartmental  model ex
 At the nanometer scale, an `ExtendedSonicNode` class that simulate the behavior of a **nanoscale spatially-extended SONIC model** with two coupled compartments (i.e. nodes with geometrical extents): an "ultrasound-responsive" sonophore and an "ultrasound-resistant" surrounding membrane. As this model is radially symmetric, some adaptation was needed in order to represent it within the *NEURON* environment (check [this link](NEURON_radial_geometry.md) for more details).
 
 At the morphological scale, several **fiber** classes define spatially-extended fiber models:
-- `SennFiber` defines a generic interface with the implementation of a spatially-extended nonlinear node model.
-- `VextSennFiber` implements the required methods to simulate the model with extracellular potentials resulting from a stimulation current injected at a distant source.
-- `IinjSennFiber` implements the required methods to simulate the model with intracellular currents injected at a given node.
-- `SonicSennFiber` implements a SENN fiber in which each node represents a local instance of the SONIC model. It thus allows to simulate the fiber model for various acoustic pressure distributions, resulting either from local abstract sources or from distant, more realistic physical sources (e.g. transducers).
+- `SennFiber` defines a generic interface with the implementation of a spatially-extended nonlinear node (SENN) model.
+- `IextraFiber` implements the required methods to simulate the model with extracellular potentials resulting from a stimulation current injected at a distant source.
+- `IintraFiber` implements the required methods to simulate the model with intracellular currents injected at a given node.
+- `SonicFiber` implements a SENN fiber in which each node represents a local instance of the SONIC model. It thus allows to simulate the fiber model for various acoustic pressure distributions, resulting either from local abstract sources or from distant, more realistic physical sources (e.g. transducers).
+
+These spatially-extended models are very generic in that they can represent any arrangement of nonlinear nodes connected by internodal resistances. As such, they can be used to model both **myelinated** and **unmyelinated** fibers, depending on assigned geometrical parameters (e.g. zero length internode for unmyelinated fibers). The `myelinatedFiber` and `unmyelinatedFiber` "constructor functions" have been defined to facilitate the instantiation of any `SennFiber` subclass for both fiber types. For the latter type, an appropriate spatial discretization is chosen based on the results of a convergence study.
 
 Moreover, several **source** classes are implemented to compute spatially-distributed inputs from various source types, used to drive the models:
 - `PointSource`, `IntracellularPointSource` and `ExtracellularPointSource` define interfaces to work with generic, intracellular (i.e. at a given node) and extracellular (i.e. at some 2D location) point source objects.
@@ -171,6 +173,7 @@ You can easily run simulations of any implemented point-neuron model under both 
 import logging
 import matplotlib.pyplot as plt
 
+from PySONIC.core import PulsedProtocol
 from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import logger
 from PySONIC.plt import GroupedTimeSeries
@@ -188,6 +191,7 @@ tstim = 250e-3   # s
 toffset = 50e-3  # s
 PRF = 100.       # Hz
 DC = 0.5         # -
+pp = PulsedProtocol(tstim, toffset, PRF, DC)
 
 # Point-neuron model and corresponding Iintra and SONIC node models
 pneuron = getPointNeuron('RS')
@@ -195,11 +199,11 @@ estim_node = IintraNode(pneuron)
 sonic_node = SonicNode(pneuron, a=a, Fdrive=Fdrive)
 
 # Run simulation upon electrical stimulation, and plot results
-data, meta = estim_node.simulate(Astim, tstim, toffset, PRF, DC)
+data, meta = estim_node.simulate(Astim, pp)
 fig1 = GroupedTimeSeries([(data, meta)]).render()
 
 # Run simulation upon ultrasonic stimulation, and plot results
-data, meta = sonic_node.simulate(Adrive, tstim, toffset, PRF, DC)
+data, meta = sonic_node.simulate(Adrive, pp)
 fig2 = GroupedTimeSeries([(data, meta)]).render()
 
 plt.show()
@@ -211,35 +215,35 @@ Similarly, you can run simulations of SENN-type myelinated fiber models under ex
 import logging
 import matplotlib.pyplot as plt
 
+from PySONIC.core import PulsedProtocol
 from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import logger, si_format
-from ExSONIC.core import VextSennFiber, CurrentPointSource
+from ExSONIC.core import myelinatedFiber, IextraFiber, ExtracellularCurrent
 from ExSONIC.plt import SectionCompTimeSeries
 
 logger.setLevel(logging.INFO)
 
 # Fiber model
+pneuron = getPointNeuron('FH')
 fiberD = 20e-6  # m
 nnodes = 11
 rs = 110.0      # Ohm.cm
-pneuron = getPointNeuron('FH')
-fiber = VextSennFiber(pneuron, fiberD, nnodes, rs=rs)
+fiber = myelinatedFiber(IextraFiber, pneuron, fiberD, nnodes, rs=rs)
 
 # Point-source electrode object
 z0 = fiber.interL  # z-position (m): one internodal distance away from fiber
 x0 = 0.            # x-position (m): aligned with fiber's central node
-elec_psource = CurrentPointSource((x0, z0), mode='cathode')
+elec_psource = ExtracellularCurrent((x0, z0), mode='cathode')
 
 # Stimulation Parameters
 tstim = 100e-6  # s
 toffset = 3e-3  # s
-PRF = 100.      # HZ
-DC = 1.         # -
+pp = PulsedProtocol(tstim, toffset)
 
 # Titrate for a specific duration and simulate fiber at threshold current
-Ithr = fiber.titrate(elec_psource, tstim, toffset, PRF, DC)
+Ithr = fiber.titrate(elec_psource, pp)
 logger.info(f'tstim = {si_format(tstim)}s -> Ithr = {si_format(Ithr)}A')
-data, meta = fiber.simulate(elec_psource, Ithr, tstim, toffset, PRF, DC)
+data, meta = fiber.simulate(elec_psource, Ithr, pp)
 
 # Plot membrane potential traces across nodes for stimulation at threshold current
 fig = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
@@ -261,13 +265,17 @@ You can easily run simulations of punctual and spatially-extended models using t
 
 ```python run_node_astim.py -n RS -a 32 -f 500 -A 100 --tstim 150 --method sonic -p Qm```
 
-- Use `run_ext_node_astim.py` for simulations of the **nanometer-scale, spatially-extended SONIC model** of any neuron type upon **ultrasonic stimulation**. For instance, a 32 nm radius bilayer sonophore surrounded by a circular "US-insensitive" patch, within a regular-spiking (RS) neuron membrane with 30% sonophore coverage, sonicated at 500 kHz and 100 kPa for 150 ms:
+- Use `run_ext_sonic_node_astim.py` for simulations of the **nanometer-scale, spatially-extended SONIC model** of any neuron type upon **ultrasonic stimulation**. For instance, a 32 nm radius bilayer sonophore surrounded by a circular "US-insensitive" patch, within a regular-spiking (RS) neuron membrane with 30% sonophore coverage, sonicated at 500 kHz and 100 kPa for 150 ms:
 
 ```python run_ext_sonic_node_astim.py -n RS -a 32 --fs 30 -f 500 -A 100 --tstim 150 --method sonic -p Qm --compare --section all```
 
-- Use `run_senn_estim.py` for simulations of a **SENN-type myelinated fiber model** of any diameter and with any number of nodes upon **extracellular electrical stimulation**. For instance, a 20 um diameter, 11 nodes fiber with Frankenhaeuser-Huxley (FH) nodal membrane dynamics, stimulated at 0.6 mA for 0.1 ms by a cathodal point-source electrode located one internodal distance above the central node:
+- Use `run_senn_myelinated_iextra.py` for simulations of a **SENN-type myelinated fiber model** of any diameter and with any number of nodes upon **extracellular electrical stimulation**. For instance, a 20 um diameter, 11 nodes fiber with Frankenhaeuser-Huxley (FH) nodal membrane dynamics, stimulated at 0.6 mA for 0.1 ms by a cathodal point-source electrode located one internodal distance above the central node:
 
-```python run_senn_estim.py -n FH -d 20 --nnodes 11 -A -0.6 --tstim 0.1 -p Vm --compare --section all```
+```python run_senn_myelinated_iextra.py -n FH -d 20 --nnodes 11 -A -0.6 --tstim 0.1 -p Vm --compare --section all```
+
+- Use `run_senn_myelinated_iintra.py` for simulations of a **SENN-type myelinated fiber model** of any diameter and with any number of nodes upon **intracellular electrical stimulation**. For instance, a 20 um diameter, 11 nodes fiber with Frankenhaeuser-Huxley (FH) nodal membrane dynamics, stimulated at 3 nA for 0.1 ms by a anodic current injected intracellularly at the central node:
+
+```python run_senn_myelinated_iintra.py -n FH -d 20 --nnodes 11 -A 3 --tstim 0.1 -p Vm --compare --section all```
 
 ### Saving and visualizing results
 
