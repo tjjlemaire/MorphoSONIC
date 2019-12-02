@@ -102,3 +102,4 @@ titrate(SonicNode(32.0 nm, CorticalRS, 500 kHz, fs=1.0), PulsedProtocol(100.0ms,
 titrate(SonicNode(32.0 nm, CorticalRS, 500 kHz, fs=1.0), PulsedProtocol(37.0ms, 50.0ms, 100.0Hz, 1.00), xfunc=None)	64443.96972656247
 titrate(SonicNode(32.0 nm, CorticalRS, 500 kHz, fs=1.0), PulsedProtocol(38.0ms, 50.0ms, 100.0Hz, 1.00), xfunc=None)	62878.41796874997
 titrate(SonicNode(32.0 nm, CorticalRS, 500 kHz, fs=1.0), PulsedProtocol(200.0ms, 100.0ms, 10.0Hz, 1.00), xfunc=None)	35137.939453124985
+titrate(SonicNode(32.0 nm, FrankenhaeuserHuxley, 500 kHz, fs=1.0), PulsedProtocol(100.0ms, 50.0ms, 100.0Hz, 1.00), xfunc=None)	86054.6875

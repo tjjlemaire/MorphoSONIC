@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-20 22:37:17
+# @Last Modified time: 2019-12-02 19:02:03
 
 import pickle
 import abc
@@ -15,7 +15,8 @@ from neuron import h
 
 from PySONIC.constants import *
 from PySONIC.core import Model, PointNeuron, NeuronalBilayerSonophore
-from PySONIC.utils import si_format, timer, logger, binarySearch, plural, debug, logCache, filecode, simAndSave
+from PySONIC.utils import si_format, timer, logger, plural, debug, logCache, filecode, simAndSave
+from PySONIC.threshold import threshold
 from PySONIC.postpro import prependDataFrame
 
 from .pyhoc import *
@@ -211,9 +212,11 @@ class Node(metaclass=abc.ABCMeta):
         if xfunc is None:
             xfunc = self.pneuron.titrationFunc
 
-        return binarySearch(
-            lambda x: xfunc(self.simulate(*x)[0]),
-            [pp], 0, self.Arange, self.A_conv_thr)
+        return threshold(
+            lambda x: xfunc(self.simulate(x, pp)[0]),
+            self.Arange, x0=self.A_conv_initial,
+            eps_thr=self.A_conv_thr, rel_eps_thr=self.A_conv_rel_thr,
+            precheck=self.A_conv_precheck)
 
     @property
     @abc.abstractmethod
@@ -235,8 +238,11 @@ class IintraNode(Node):
         'unit': 'A/m2',
         'factor': 1e-3
     }
-    Arange = (0., 2 * AMP_UPPER_BOUND_ESTIM)
-    A_conv_thr = THRESHOLD_CONV_RANGE_ESTIM
+    Arange = (0., ESTIM_AMP_UPPER_BOUND)
+    A_conv_initial = ESTIM_AMP_INITIAL
+    A_conv_rel_thr = ESTIM_REL_CONV_THR
+    A_conv_thr = None
+    A_conv_precheck = False
 
     def setStimAmp(self, Astim):
         ''' Set electrical stimulation amplitude
@@ -269,7 +275,10 @@ class SonicNode(Node):
         'unit': 'Pa',
         'factor': 1e0
     }
-    A_conv_thr = THRESHOLD_CONV_RANGE_ASTIM
+    A_conv_initial = ASTIM_AMP_INITIAL
+    A_conv_rel_thr = 1e0
+    A_conv_thr = ASTIM_ABS_CONV_THR
+    A_conv_precheck = True
 
     def __init__(self, pneuron, *args, **kwargs):
         ''' Initialization.

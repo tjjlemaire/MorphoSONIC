@@ -3,13 +3,14 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-14 22:49:56
+# @Last Modified time: 2019-12-02 20:02:28
 
 import numpy as np
 import pandas as pd
 from neuron import h
 
-from PySONIC.utils import si_format, pow10_format, logger, debug, binarySearch, logCache
+from PySONIC.utils import si_format, pow10_format, logger, debug, logCache
+from PySONIC.threshold import threshold
 from PySONIC.constants import *
 from PySONIC.core import Model, PointNeuron
 from PySONIC.postpro import detectSpikes, prependDataFrame
@@ -186,11 +187,10 @@ class ExtendedSonicNode(SonicNode):
             :param xfunc: function determining whether condition is reached from simulation output
             :return: determined threshold amplitude (Pa)
         '''
-        xfunc = self.isExcited
-        return binarySearch(
-            lambda x: xfunc(self.simulate(*x)[0]),
-            [pp], 0, self.Arange, self.A_conv_thr)
-
+        return threshold(
+            lambda x: self.isExcited(self.simulate(x, pp)[0]),
+            self.Arange, x0=ASTIM_AMP_INITIAL,
+            eps_thr=ASTIM_ABS_CONV_THR, rel_eps_thr=1e0, precheck=True)
 
     def filecodes(self, Adrive, pp):
         # Get parent codes and supress irrelevant entries

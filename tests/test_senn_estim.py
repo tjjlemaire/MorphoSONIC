@@ -3,16 +3,15 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-25 12:10:45
+# @Last Modified time: 2019-12-02 19:35:45
 
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 
 from PySONIC.core import PulsedProtocol
-from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import logger, si_format
-from ExSONIC.core import IextraFiber, IintraFiber, myelinatedFiber, unmyelinatedFiber
-from ExSONIC.core import ExtracellularCurrent, IntracellularCurrent
+from ExSONIC.core import *
 from ExSONIC.test import TestFiber
 from ExSONIC.plt import SectionCompTimeSeries, strengthDurationCurve
 from ExSONIC.utils import chronaxie
@@ -35,17 +34,10 @@ class TestSennEstim(TestFiber):
            of transient electrical stimulation--evaluation with a neuroelectric model.
            IEEE Trans Biomed Eng 32, 1001–1011.
         '''
-        logger.info('Test: SENN model validation against Reilly 1985 data')
+        logger.info('Test: SENN myelinated fiber model validation against Reilly 1985 data')
 
-        # Fiber model parameters
-        pneuron = getPointNeuron('FH')  # FrankenHaeuser-Huxley membrane equations
-        fiberD = 20e-6                  # fiber diameter (m)
-        nnodes = 21                     # number of nodes
-        rho_a = 110.0                   # axoplasm resistivity (Ohm.cm, from McNeal 1976)
-        d_ratio = 0.7                   # axon / fiber diameter ratio (from McNeal 1976)
-        nodeL = 2.5e-6                  # node length (m, from McNeal 1976)
-        fiber = myelinatedFiber(IextraFiber, pneuron, fiberD, nnodes,
-                                rs=rho_a, nodeL=nodeL, d_ratio=d_ratio)
+        # Fiber model (20 um diameter)
+        fiber = myelinatedFiberReilly(IextraFiber, fiberD=20e-6)
 
         # Electrode and stimulation parameters (from Reilly 1985)
         rho_e = 300.0      # resistivity of external medium (Ohm.cm, from McNeal 1976)
@@ -124,17 +116,10 @@ class TestSennEstim(TestFiber):
            to electrocutaneous sensory sensitivity: parameter variation study. IEEE Trans Biomed
            Eng 34, 752–754.
         '''
-        logger.info('Test: SENN model validation against Reilly 1987 data')
+        logger.info('Test: SENN myelinated fiber model validation against Reilly 1987 data')
 
-        # Fiber model parameters
-        pneuron = getPointNeuron('FH')  # FrankenHaeuser-Huxley membrane equations
-        fiberD = 10e-6                  # fiber diameter (m)
-        nnodes = 21
-        rho_a = 110.0                   # axoplasm resistivity (Ohm.cm, from McNeal 1976)
-        d_ratio = 0.7                   # axon / fiber diameter ratio (from McNeal 1976)
-        nodeL = 2.5e-6                  # node length (m, from McNeal 1976)
-        fiber = myelinatedFiber(IextraFiber, pneuron, fiberD, nnodes,
-                                rs=rho_a, nodeL=nodeL, d_ratio=d_ratio)
+        # Fiber model (10 um diameter)
+        fiber = myelinatedFiberReilly(IextraFiber, fiberD=10e-6)
 
         # Electrode and stimulation parameters (from Reilly 1987)
         rho_e = 300.0      # resistivity of external medium (Ohm.cm, from McNeal 1976)
@@ -183,17 +168,10 @@ class TestSennEstim(TestFiber):
             mammalian myelinated nerve for functional neuromuscular stimulation. IEEE 9th
             Annual Conference of the Engineering in Medicine and Biology Society 3, 1577–1578.
         '''
-        logger.info('Test: SENN model validation against Sweeney 1987 data')
+        logger.info('Test: SENN myelinated fiber model validation against Sweeney 1987 data')
 
-        # Fiber model parameters
-        pneuron = getPointNeuron('SW')  # mammalian fiber membrane equations
-        fiberD = 10e-6                  # fiber diameter (m)
-        nnodes = 19
-        rho_a = 54.7                    # axoplasm resistivity (Ohm.cm)
-        d_ratio = 0.6                   # axon / fiber diameter ratio
-        nodeL = 1.5e-6                  # node length (m)
-        fiber = myelinatedFiber(IintraFiber, pneuron, fiberD, nnodes,
-                                rs=rho_a, nodeL=nodeL, d_ratio=d_ratio)
+        # Fiber model (10 um diameter)
+        fiber = myelinatedFiberSweeney(IintraFiber, fiberD=10e-6)
 
         # Intracellular stimulation parameters
         tstim = 10e-6   # s
@@ -226,7 +204,7 @@ class TestSennEstim(TestFiber):
         fiber.reset()
 
         # Compute and plot strength-duration curve for intracellular injection at central node
-        psource = IntracellularCurrent(nnodes // 2, mode='anode')
+        psource = IntracellularCurrent(fiber.nnodes // 2, mode='anode')
         durations = np.array([10, 20, 40, 60, 80, 100, 150, 200, 250, 300, 400, 500], dtype=float) * 1e-6  # s
         Ithrs_ref = np.array([4.4, 2.8, 1.95, 1.6, 1.45, 1.4, 1.30, 1.25, 1.25, 1.25, 1.25, 1.25]) * 1e-9  # A
         Ithrs_sim = np.array([fiber.titrate(psource, PulsedProtocol(x, toffset)) for x in durations])  # A
@@ -259,19 +237,15 @@ class TestSennEstim(TestFiber):
             root ganglia in an unmyelinated sensory neuron: a modeling study.
             Journal of Neurophysiology (2015)
         '''
+        logger.info('Test: SENN unmyelinated fiber model validation against Sundt 2015 data')
 
-        # Unmyelinated fiber model
-        pneuron = getPointNeuron('sundt')  # C-fiber membrane equations
-        fiberD = 0.8e-6                    # peripheral axon diameter, from Sundt 2015 (m)
-        rho_a = 1e2                        # axoplasm resistivity, from Sundt 2015 (Ohm.cm)
-        fiberL = 5e-3                      # axon length (m)
-        maxNodeL = 50e-6                   # maximum node length
-        logger.info('creating model ...')
-        fiber = unmyelinatedFiber(
-            IintraFiber, pneuron, fiberD, rs=rho_a, fiberL=fiberL, maxNodeL=maxNodeL)
+        # Unmyelinated fiber model (0.8 um diameter)
+        fiber = unmyelinatedFiberSundt(IintraFiber, fiberD=0.8e-6)
 
         # Stimulation parameters
-        pp = PulsedProtocol(1e-3, 10e-3)
+        tstim = 1e-3     # s
+        toffset = 10e-3  # s
+        pp = PulsedProtocol(tstim, toffset)
         psource = IntracellularCurrent(fiber.nnodes // 2)
         I = 0.2e-9  # A
 
@@ -290,16 +264,36 @@ class TestSennEstim(TestFiber):
         fig = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
 
         # Compare output metrics to reference
-        ref_metrics = {     # Reference metrics (from Sundt 2015 ModelDB files)
+        pulse_ref_metrics = {     # Reference metrics (from Sundt 2015 ModelDB files)
             'cv': 0.44,     # conduction velocity (m/s)
             'dV': (86, 90)  # spike amplitude (mV)
         }
-        sim_metrics = {
-            'cv': fiber.getConductionVelocity(data),  # m/s
+        pulse_sim_metrics = {
+            'cv': fiber.getConductionVelocity(data, out='median'),  # m/s
             'dV': fiber.getSpikeAmp(data)             # mV
         }
+
+        # Reset fiber model to avoid NEURON integration errors
+        fiber.reset()
+
+        # Compute and plot strength-duration curve for intracellular injection at central node
+        durations = np.logspace(-5, 0, 10)  # s
+        Ithrs_sim = np.array([fiber.titrate(psource, PulsedProtocol(x, toffset)) for x in durations])  # A
+        Qthrs_sim = Ithrs_sim * durations  # C
+
+        # Compute SD curves metrics
+        SDcurve_sim_metrics = {
+            'chr': chronaxie(durations, Ithrs_sim),  # s
+            'tau_e': Qthrs_sim.min() / Ithrs_sim.min()  # s
+        }
+
+        # Plot strength-duration curve
+        fig2 = strengthDurationCurve(fiber, durations, {'sim': Ithrs_sim}, yfactor=1e9, scale='log')
+
         logger.info(f'Comparing metrics for {si_format(pp.tstim)}s intracellular anodic pulse')
-        self.logOutputMetrics(sim_metrics, ref_metrics)
+        self.logOutputMetrics(pulse_sim_metrics, pulse_ref_metrics)
+        logger.info(f'Computing strength-duration curve metrics')
+        self.logOutputMetrics(SDcurve_sim_metrics)
 
 
 if __name__ == '__main__':

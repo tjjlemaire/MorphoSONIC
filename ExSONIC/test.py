@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 11:34:09
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-22 18:50:23
+# @Last Modified time: 2019-11-27 18:20:41
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -15,7 +15,7 @@ from PySONIC.neurons import getNeuronsDict, getPointNeuron
 from PySONIC.plt import GroupedTimeSeries
 from PySONIC.utils import logger, si_format, pow10_format, isIterable
 
-from .core import IintraNode, SonicNode, SeriesConnector, myelinatedFiber, IintraFiber, IntracellularCurrent
+from .core import *
 
 
 class TestComp(TestBase):

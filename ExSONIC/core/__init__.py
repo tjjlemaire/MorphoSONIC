@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-14 23:07:41
+# @Last Modified time: 2019-11-27 18:16:12
 
 from PySONIC.neurons import getPointNeuron
 
@@ -14,6 +14,7 @@ from .connectors import *
 from .pyhoc import *
 from .pymodl import *
 from .psource import *
+from .fibers import *
 
 
 def getModel(meta):
