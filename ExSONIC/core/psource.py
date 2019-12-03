@@ -426,7 +426,6 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
         for i in range(nx):
             for j in range(ny):
                 results[i, j] = self.DPSM_point (x[i], y[j], z, u, xsource, ysource, mact)
-#        results[:, 0] = np.nan
         return results
 
     def computeNodesAmps(self, fiber, u):

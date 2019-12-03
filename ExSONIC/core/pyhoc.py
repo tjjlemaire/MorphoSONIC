@@ -16,7 +16,6 @@ import os
 import platform
 import numpy as np
 from neuron import h
-from neuron import load_mechanisms as load_mechanisms_native
 
 from PySONIC.utils import logger
 
@@ -34,36 +33,41 @@ def load_mechanisms(path, modfile=None):
         :param modfile (optional): name of specific mechanism to check for untracked changes
         in source file.
     '''
-
-    # Get OS
-    OS = platform.system()
-
-    # If Darwin, call native NEURON function and return
-    if OS == 'Darwin':
-        return load_mechanisms_native(path)
-
-    # Otherwise, get platform-dependent path to compiled library file
-    if OS == 'Windows':
-        lib_path = os.path.join(path, 'nrnmech.dll')
-    elif OS == 'Linux':
-        lib_path = os.path.join(path, platform.machine(), '.libs', 'libnrnmech.so')
-    else:
-        raise OSError('Mechanisms loading on "{}" currently not handled.'.format(platform.system()))
-    if not os.path.isfile(lib_path):
-        raise RuntimeError('Compiled library file not found for mechanisms in "{}"'.format(path))
-
     # If mechanisms of input path are already loaded, return silently
     global nrn_dll_loaded
     if path in nrn_dll_loaded:
         return
+    
+    # in case NEURON is assuming a different architecture to Python,
+    # we try multiple possibilities
+    libname = 'libnrnmech.so'
+    libsubdir = '.libs'
+    arch_list = [platform.machine(), 'i686', 'x86_64', 'powerpc', 'umac']
 
-    # If mechanism name is provided, check for untracked changes in source file
+    # windows loads nrnmech.dll
+    if h.unix_mac_pc() == 3:
+        libname = 'nrnmech.dll'
+        libsubdir = ''
+        arch_list = ['']
+        
+    # check for library file existence with every possible architecture
+    lib_path = None
+    for arch in arch_list:
+        candidate_lib_path = os.path.join(path, arch, libsubdir, libname)
+        if os.path.exists(candidate_lib_path):
+            lib_path = candidate_lib_path
+    
+    # if library file does not seem to exist, raise error
+    if lib_path is None:
+        raise RuntimeError(f'Compiled library file not found for mechanisms in "{path}"')
+
+    # If mechanism name is provided, check for uncompiled changes in source file
     if modfile is not None:
         mod_path = os.path.join(path, modfile)
         if not os.path.isfile(mod_path):
-            raise RuntimeError('"{}" not found in "{}"'.format(modfile, path))
+            raise RuntimeError(f'"{modfile}" not found in "{path}"')
         if os.path.getmtime(mod_path) > os.path.getmtime(lib_path):
-            raise UserWarning('"{}" more recent than compiled library'.format(modfile))
+            raise UserWarning(f'"{modfile}" more recent than compiled library')
 
     # Load library file and add directory to list of loaded libraries
     h.nrn_load_dll(lib_path)
