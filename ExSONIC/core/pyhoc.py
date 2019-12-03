@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-22 13:32:28
+# @Last Modified time: 2019-12-03 14:33:04
 # @Author: Theo Lemaire
 # @Date:   2018-08-21 19:48:04
 # @Last Modified by:   Theo Lemaire
@@ -37,7 +37,7 @@ def load_mechanisms(path, modfile=None):
     global nrn_dll_loaded
     if path in nrn_dll_loaded:
         return
-    
+
     # in case NEURON is assuming a different architecture to Python,
     # we try multiple possibilities
     libname = 'libnrnmech.so'
@@ -49,14 +49,14 @@ def load_mechanisms(path, modfile=None):
         libname = 'nrnmech.dll'
         libsubdir = ''
         arch_list = ['']
-        
+
     # check for library file existence with every possible architecture
     lib_path = None
     for arch in arch_list:
         candidate_lib_path = os.path.join(path, arch, libsubdir, libname)
         if os.path.exists(candidate_lib_path):
             lib_path = candidate_lib_path
-    
+
     # if library file does not seem to exist, raise error
     if lib_path is None:
         raise RuntimeError(f'Compiled library file not found for mechanisms in "{path}"')
