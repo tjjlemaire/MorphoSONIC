@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-20 20:51:17
+# @Last Modified time: 2019-12-06 15:56:33
 
 import numpy as np
 import pandas as pd
@@ -182,3 +182,63 @@ def strengthDurationCurve(fiber, durations, thrs, **kwargs):
 def strengthDistanceCurve(fiber, distances, thrs, **kwargs):
     return thresholdCurve(fiber, distances, thrs, xname='distance', xfactor=1e3, xunit='m',
                           plot_chr=False, **kwargs)
+
+
+def plotConvergenceResults(df, inkey, outkeys, rel_eps_thr=0.05):
+    ''' Plot output metrics of convergence study.
+
+        :param df: dataframe with input values (parameter of interest) and output metrics
+        :param inkey: key of the input parameter
+        :param outkeys: keys of the output parameters
+        :param rel_eps_thr: relative error threshold for the output metrics
+        :return: figure handle
+    '''
+    # Initialize dictionaries
+    eps = {}      # relative errors of each output metrics
+    xin_thr = {}  # threshold input values according to each output metrics
+
+    # Extract input range and figure out if it must be reversed
+    xin = df[inkey].values
+    reverse = xin[-1] < xin[0]
+
+    # Create figure backbone
+    fig, axes = plt.subplots(len(outkeys) + 1, 1, figsize=(6, 9))
+    ax = axes[-1]
+    ax.set_xlabel(inkey)
+    ax.set_ylabel('relative errors (%)')
+    ax.axhline(rel_eps_thr * 100, linestyle='dashed', color='k',
+               label=f'{rel_eps_thr * 1e2:.1f} % threshold')
+
+    # For each output
+    for i, k in enumerate(outkeys):
+        xout = df[k].values
+
+        # Plot output evolution
+        axes[i].set_ylabel(k)
+        axes[i].plot(xin, xout, c='k')
+
+        # Compute and plot relative error w.r.t. reference (last) value
+        xref = xout[-1]
+        eps[k] = np.abs((xout - xref) / xref)
+        axes[-1].plot(xin, eps[k] * 100, label=k, c=f'C{i}')
+
+        # Compute and plot input value yielding threshold relative error
+        j = eps[k].size - 1
+        while eps[k][j] <= rel_eps_thr:
+            j -= 1
+        xin_thr[k] = xin[j + 1]
+        axes[-1].axvline(xin_thr[k], linestyle='dashed', color=f'C{i}')
+
+    # Compute minimal required input value to satisfy all relative error threshold on all inputs
+    logger.info(f'Relative error threshold = {rel_eps_thr * 1e2:.1f} %')
+    logger.info(f'Max {inkey} = {min(xin_thr.values()):.2e}')
+
+    # Post-process figure
+    axes[-1].legend(frameon=False)
+    for ax in axes:
+        ax.set_xscale('log')
+        if reverse:
+            ax.invert_xaxis()
+    fig.tight_layout()
+
+    return fig

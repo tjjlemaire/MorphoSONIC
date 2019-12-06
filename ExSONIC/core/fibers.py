@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-11-27 18:03:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-27 18:34:26
+# @Last Modified time: 2019-12-06 15:48:39
 
 ''' Constructor functions for different types of fibers. '''
 
@@ -115,6 +115,8 @@ def unmyelinatedFiberConvergence(pneuron, fiberD, rs, fiberL, maxNodeL_range, pp
     for k in ['nnodes', 'nodeL', 'interD', 'interL', 'psource', 'A', 'nature', 'toffset', 'PRF', 'DC']:
         del filecodes[k]
     filecodes['tstim'] = si_format(pp.tstim, 1, space='') + 's'
+    filecodes['nodeL_range'] = 'nodeL' + '-'.join(
+        [f'{si_format(x, 1, "")}m' for x in [min(maxNodeL_range), max(maxNodeL_range)]])
     fcode = '_'.join(filecodes.values())
 
     # Output file and column names
