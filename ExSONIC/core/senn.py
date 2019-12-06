@@ -522,7 +522,7 @@ class IextraFiber(EStimFiber):
 class IintraFiber(EStimFiber):
 
     simkey = 'senn_Iintra'
-    A_range = (1e-14, 1e-7)  # nA
+    A_range = (1e-12, 1e-7)  # A
 
 
 class SonicFiber(SennFiber):

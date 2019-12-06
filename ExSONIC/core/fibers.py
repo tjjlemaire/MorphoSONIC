@@ -10,9 +10,10 @@
 import os
 import numpy as np
 import pandas as pd
+import csv
 
 from PySONIC.neurons import getPointNeuron
-from PySONIC.utils import logger
+from PySONIC.utils import logger, si_format
 
 from .senn import IintraFiber
 from .psource import IntracellularCurrent
@@ -113,6 +114,7 @@ def unmyelinatedFiberConvergence(pneuron, fiberD, rs, fiberL, maxNodeL_range, pp
     filecodes = fiber.filecodes(IntracellularCurrent(fiber.nnodes // 2), 0.0, pp)
     for k in ['nnodes', 'nodeL', 'interD', 'interL', 'psource', 'A', 'nature', 'toffset', 'PRF', 'DC']:
         del filecodes[k]
+    filecodes['tstim'] = si_format(pp.tstim, 1, space='') + 's'
     fcode = '_'.join(filecodes.values())
 
     # Output file and column names
@@ -216,7 +218,7 @@ def myelinatedFiberSweeney(fiber_class, fiberD=10e-6, **kwargs):
     d_ratio = 0.6                   # axon / fiber diameter ratio
     return myelinatedFiber(fiber_class, pneuron, fiberD, nnodes, rs, nodeL, d_ratio, **kwargs)
 
-def unmyelinatedFiberSundt(fiber_class, fiberD=0.8e-6, **kwargs):
+def unmyelinatedFiberSundt(fiber_class, fiberD=0.8e-6, fiberL = 5e-3, **kwargs):
     ''' Create typical unmyelinated fiber model, using parameters from Sundt 2015.
 
         :param fiber_class: class of fiber to be instanced
@@ -230,6 +232,5 @@ def unmyelinatedFiberSundt(fiber_class, fiberD=0.8e-6, **kwargs):
     '''
     pneuron = getPointNeuron('sundt')  # DRG peripheral axon membrane equations
     rs = 100.                          # axoplasm resistivity, from Sundt 2015 (Ohm.cm)
-    fiberL = 5e-3                      # axon length (m)
-    maxNodeL = 50e-6                   # maximum node length
+    maxNodeL = 5e-6                   # maximum node length
     return unmyelinatedFiber(fiber_class, pneuron, fiberD, rs, fiberL, maxNodeL=maxNodeL, **kwargs)
