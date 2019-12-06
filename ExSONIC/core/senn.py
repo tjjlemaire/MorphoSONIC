@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-12-02 19:40:52
+# @Last Modified time: 2019-12-06 13:39:59
 
 import abc
 import pickle
@@ -390,6 +390,10 @@ class SennFiber(metaclass=abc.ABCMeta):
                 t = df['t'].values  # s
                 Vm = df['Vm'].values  # mV
                 i_zcross = np.where(np.diff(np.sign(Vm)) > 0)[0]  # detect ascending zero-crossings
+                if i_zcross.size > ispikes.size:
+                    # If mismatch, remove irrelevant zero-crossings by taking only the ones preceding
+                    # each detected peak
+                    i_zcross = np.array([i_zcross[(i_zcross - i1) < 0].max() for i1 in ispikes])
                 slopes = (Vm[i_zcross + 1] - Vm[i_zcross]) / (t[i_zcross + 1] - t[i_zcross])  # slopes (mV/s)
                 offsets = Vm[i_zcross] - slopes * t[i_zcross]  # offsets (mV)
                 tzcross = -offsets / slopes  # interpolated times (s)
@@ -399,6 +403,7 @@ class SennFiber(metaclass=abc.ABCMeta):
                 tspikes[id] = tzcross
             else:
                 tspikes[id] = t[ispikes]
+
         return pd.DataFrame(tspikes)
 
     def getConductionVelocity(self, data, ids=None, out='median'):
