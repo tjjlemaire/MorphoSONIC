@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-12-03 14:34:58
+# @Last Modified time: 2019-12-03 18:32:18
 
 import abc
 import numpy as np
