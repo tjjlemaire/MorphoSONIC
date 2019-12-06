@@ -444,8 +444,11 @@ class SennFiber(metaclass=abc.ABCMeta):
             raise AttributeError(f'invalid out option: {out}')
 
     @staticmethod
-    def getSpikeAmp(data, key='Vm', out='range'):
-        amps = np.array([np.ptp(df[key].values) for df in data.values()])
+    def getSpikeAmp(data, ids=None, key='Vm', out='range'):
+        # By default, consider all fiber nodes
+        if ids is None:
+            ids = self.ids.copy()
+        amps = np.array([np.ptp(data[id][key].values) for id in ids])
         if out == 'range':
             return amps.min(), amps.max()
         elif out == 'median':

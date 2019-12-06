@@ -155,8 +155,10 @@ def unmyelinatedFiberConvergence(pneuron, fiberD, rs, fiberL, maxNodeL_range, pp
                 data, meta = fiber.simulate(psource, 1.1 * Ithr, pp)
 
                 # Compute CV and spike amplitude
-                cv = fiber.getConductionVelocity(data, out='median')  # m/s
-                dV = fiber.getSpikeAmp(data, out='median')            # mV
+                ids = fiber.ids.copy()
+                del ids[fiber.nnodes // 2]
+                cv = fiber.getConductionVelocity(data, ids=ids, out='median')  # m/s
+                dV = fiber.getSpikeAmp(data, ids=ids, out='median')            # mV
                 logger.info(f'CV = {cv:.2f} m/s')
                 logger.info(f'dV = {dV:.2f} mV')
             else:
