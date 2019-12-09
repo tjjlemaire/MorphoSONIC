@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-12-06 15:56:33
+# @Last Modified time: 2019-12-09 12:08:46
 
 import numpy as np
 import pandas as pd
@@ -216,6 +216,10 @@ def plotConvergenceResults(df, inkey, outkeys, rel_eps_thr=0.05):
         # Plot output evolution
         axes[i].set_ylabel(k)
         axes[i].plot(xin, xout, c='k')
+        ymin, ymax, yconv = np.nanmin(xout), np.nanmax(xout), xout[-1]
+        yptp, ydelta = ymax - ymin, 0.5 * yconv
+        axes[i].set_ylim(
+            max(yconv - ydelta, ymin - 0.05 * yptp), min(yconv + ydelta, ymax + 0.05 * yptp))
 
         # Compute and plot relative error w.r.t. reference (last) value
         xref = xout[-1]
@@ -234,6 +238,7 @@ def plotConvergenceResults(df, inkey, outkeys, rel_eps_thr=0.05):
     logger.info(f'Max {inkey} = {min(xin_thr.values()):.2e}')
 
     # Post-process figure
+    axes[-1].set_ylim(-5, 30)
     axes[-1].legend(frameon=False)
     for ax in axes:
         ax.set_xscale('log')
