@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-11-27 18:03:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-12-09 08:28:22
+# @Last Modified time: 2019-12-09 09:35:35
 
 ''' Constructor functions for different types of fibers. '''
 
@@ -167,8 +167,8 @@ def unmyelinatedFiberConvergence(pneuron, fiberD, rs, fiberL, maxNodeL_range, pp
                 # Compute CV and spike amplitude
                 # ids = fiber.ids.copy()
                 # del ids[fiber.nnodes // 2]
-                cv = fiber.getConductionVelocity(data, ids=ids, out='median')  # m/s
-                dV = fiber.getSpikeAmp(data, ids=ids, out='median')            # mV
+                cv = fiber.getConductionVelocity(data, out='median')  # m/s
+                dV = fiber.getSpikeAmp(data, out='median')            # mV
                 logger.info(f'CV = {cv:.2f} m/s')
                 logger.info(f'dV = {dV:.2f} mV')
             else:
