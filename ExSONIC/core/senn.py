@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-12-06 13:39:59
+# @Last Modified time: 2019-12-09 09:37:46
 
 import abc
 import pickle
@@ -443,8 +443,7 @@ class SennFiber(metaclass=abc.ABCMeta):
         else:
             raise AttributeError(f'invalid out option: {out}')
 
-    @staticmethod
-    def getSpikeAmp(data, ids=None, key='Vm', out='range'):
+    def getSpikeAmp(self, data, ids=None, key='Vm', out='range'):
         # By default, consider all fiber nodes
         if ids is None:
             ids = self.ids.copy()
