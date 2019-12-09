@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-11-27 18:03:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-12-06 15:48:39
+# @Last Modified time: 2019-12-09 08:28:22
 
 ''' Constructor functions for different types of fibers. '''
 
@@ -14,6 +14,7 @@ import csv
 
 from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import logger, si_format
+from PySONIC.postpro import boundDataFrame
 
 from .senn import IintraFiber
 from .psource import IntracellularCurrent
@@ -125,19 +126,23 @@ def unmyelinatedFiberConvergence(pneuron, fiberD, rs, fiberL, maxNodeL_range, pp
     delimiter = '\t'
     labels = ['maxNodeL (m)', 'nodeL (m)', 'Ithr (A)', 'CV (m/s)', 'dV (mV)']
 
-    # If log file does not exist
+    # Create log file if it does not exist
     if not os.path.isfile(fpath):
-
-        # Create log file
         logger.info(f'creating log file: "{fpath}"')
         with open(fpath, 'w') as csvfile:
             writer = csv.writer(csvfile, delimiter=delimiter)
             writer.writerow(labels)
 
-        # Loop through parameter sweep
-        logger.info('running maxNodeL parameter sweep ({}m - {}m)'.format(
-            *si_format([maxNodeL_range.min(), maxNodeL_range.max()], 2)))
-        for x in maxNodeL_range[::-1]:
+    # Loop through parameter sweep
+    logger.info('running maxNodeL parameter sweep ({}m - {}m)'.format(
+        *si_format([maxNodeL_range.min(), maxNodeL_range.max()], 2)))
+    for x in maxNodeL_range[::-1]:
+
+        # If max node length not already in the log file
+        df = pd.read_csv(fpath, sep=delimiter)
+        entries = df[labels[0]].values
+        is_entry = np.any(np.isclose(x, entries))
+        if not is_entry:
 
             # Initialize fiber with specific max node length
             logger.info(f'creating model with maxNodeL = {x * 1e6:.2f} um ...')
@@ -156,9 +161,12 @@ def unmyelinatedFiberConvergence(pneuron, fiberD, rs, fiberL, maxNodeL_range, pp
                 # Simulate fiber at 1.1 times threshold current
                 data, meta = fiber.simulate(psource, 1.1 * Ithr, pp)
 
+                # Filter out stimulation artefact from dataframe
+                data = {k: boundDataFrame(df, (pp.tstim, pp.tstim + pp.toffset)) for k, df in data.items()}
+
                 # Compute CV and spike amplitude
-                ids = fiber.ids.copy()
-                del ids[fiber.nnodes // 2]
+                # ids = fiber.ids.copy()
+                # del ids[fiber.nnodes // 2]
                 cv = fiber.getConductionVelocity(data, ids=ids, out='median')  # m/s
                 dV = fiber.getSpikeAmp(data, ids=ids, out='median')            # mV
                 logger.info(f'CV = {cv:.2f} m/s')
@@ -176,13 +184,14 @@ def unmyelinatedFiberConvergence(pneuron, fiberD, rs, fiberL, maxNodeL_range, pp
             # Clear fiber sections
             fiber.clear()
 
-        logger.info('parameter sweep successfully completed')
+    logger.info('parameter sweep successfully completed')
 
     # Load results
     logger.info('loading results from log file')
     df = pd.read_csv(fpath, sep=delimiter)
 
     return df
+
 
 def myelinatedFiberReilly(fiber_class, fiberD=20e-6, **kwargs):
     '''  Create typical myelinated fiber model, using parameters from Reilly 1985.
