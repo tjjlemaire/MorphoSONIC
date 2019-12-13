@@ -12,6 +12,8 @@ import os
 import numpy as np
 import pandas as pd
 from inspect import signature
+from scipy import stats
+import scipy.signal
 
 from PySONIC.core import Model, PointNeuron, NeuronalBilayerSonophore
 from PySONIC.utils import si_format, pow10_format, logger, plural, filecode, simAndSave
@@ -359,7 +361,7 @@ class SennFiber(metaclass=abc.ABCMeta):
     def simAndSave(self, *args, **kwargs):
         return simAndSave(self, *args, **kwargs)
 
-    def getSpikesTimings(self, data, zcross=True):
+    def getSpikesTimings(self, data, zcross=True, spikematch='majority'):
         ''' Return an array containing occurence times of spikes detected on a collection of nodes.
 
             :param data: simulation output dataframe
@@ -368,41 +370,45 @@ class SennFiber(metaclass=abc.ABCMeta):
             :return: dictionary of spike occurence times (s) per node.
         '''
         tspikes = {}
-        nspikes = None
-
-        for id, df in data.items():
+        nspikes = np.zeros(len(data.items()))
+        
+        for i, (id, df) in enumerate(data.items()):
 
             # Detect spikes on current trace
             ispikes, *_ = detectSpikes(df, key='Vm', mph=SPIKE_MIN_VAMP, mpt=SPIKE_MIN_DT,
                                        mpp=SPIKE_MIN_VPROM)
+            nspikes[i] = ispikes.size
 
-            # Assert consistency of spikes propagation
-            if nspikes is None:
-                nspikes = ispikes.size
-                if nspikes == 0:
-                    logger.warning('no spikes detected')
-                    return None
-            else:
-                assert ispikes.size == nspikes, 'Inconsistent number of spikes in different nodes'
-
-            if zcross:
-                # Consider spikes as time of zero-crossing preceding each peak
+            if ispikes.size > 0:
+                # Extract time vector
                 t = df['t'].values  # s
-                Vm = df['Vm'].values  # mV
-                i_zcross = np.where(np.diff(np.sign(Vm)) > 0)[0]  # detect ascending zero-crossings
-                if i_zcross.size > ispikes.size:
-                    # If mismatch, remove irrelevant zero-crossings by taking only the ones preceding
-                    # each detected peak
-                    i_zcross = np.array([i_zcross[(i_zcross - i1) < 0].max() for i1 in ispikes])
-                slopes = (Vm[i_zcross + 1] - Vm[i_zcross]) / (t[i_zcross + 1] - t[i_zcross])  # slopes (mV/s)
-                offsets = Vm[i_zcross] - slopes * t[i_zcross]  # offsets (mV)
-                tzcross = -offsets / slopes  # interpolated times (s)
-                errmsg = 'Ascending zero crossing #{} (t = {:.2f} ms) not preceding peak #{} (t = {:.2f} ms)'
-                for ispike, (tzc, tpeak) in enumerate(zip(tzcross, t[ispikes])):
-                    assert tzc < tpeak, errmsg.format(ispike, tzc * 1e3, ispike, tpeak * 1e3)
-                tspikes[id] = tzcross
-            else:
-                tspikes[id] = t[ispikes]
+                if zcross:
+                    # Consider spikes as time of zero-crossing preceding each peak                    
+                    Vm = df['Vm'].values  # mV
+                    i_zcross = np.where(np.diff(np.sign(Vm)) > 0)[0]  # detect ascending zero-crossings
+                    if i_zcross.size > ispikes.size:
+                        # If mismatch, remove irrelevant zero-crossings by taking only the ones preceding
+                        # each detected peak
+                        i_zcross = np.array([i_zcross[(i_zcross - i1) < 0].max() for i1 in ispikes])
+                    slopes = (Vm[i_zcross + 1] - Vm[i_zcross]) / (t[i_zcross + 1] - t[i_zcross])  # slopes (mV/s)
+                    tzcross = t[i_zcross] - (Vm[i_zcross] / slopes)
+                    errmsg = 'Ascending zero crossing #{} (t = {:.2f} ms) not preceding peak #{} (t = {:.2f} ms)'
+                    for ispike, (tzc, tpeak) in enumerate(zip(tzcross, t[ispikes])):
+                        assert tzc < tpeak, errmsg.format(ispike, tzc * 1e3, ispike, tpeak * 1e3)
+                    tspikes[id] = tzcross
+                else:
+                    tspikes[id] = t[ispikes]
+        
+        if spikematch == 'strict':
+            # Assert consistency of spikes propagation
+            assert np.all(nspikes == nspikes[0]), 'Inconsistent number of spikes in different nodes'
+            if nspikes[0] == 0:
+                logger.warning('no spikes detected')
+                return None
+        else:
+            # Use majority voting
+            nfrequent = np.int(stats.mode(nspikes).mode)
+            tspikes = {k: v for k, v in tspikes.items() if len(v) == nfrequent}
 
         return pd.DataFrame(tspikes)
 
@@ -420,20 +426,30 @@ class SennFiber(metaclass=abc.ABCMeta):
         for x in [0, -1]:
             if self.ids[x] in ids:
                 ids.remove(self.ids[x])
+                
+        # Compute spikes timing dataframe (based on nspikes majority voting) and 
+        # update list of relevant sections accordingly
+        tspikes = self.getSpikesTimings({id: data[id] for id in ids})  # (nspikes x nnodes)
+        ids = list(tspikes.columns.values)  # (nnodes)
 
-        # Compute node to node distances
-        indexes = [self.ids.index(id) for id in ids]  # relevant node indexes
-        xcoords = self.getNodeCoords()[indexes]  # corresponding x-coordinates
-        distances = np.diff(xcoords)  # node-to-node distances (m)
+        # Get coordinates of relevant nodes
+        indexes = [self.ids.index(id) for id in ids]  # (nnodes)
+        xcoords = self.getNodeCoords()[indexes]  # (nnodes)
+        
+        # Compute distances across consecutive nodes only, and associated spiking delays for first spike only
+        distances, delays = [], []  # (nnodes - 1)
+        for i in range(len(ids)-1):
+            d = xcoords[i]-xcoords[i-1]
+            if np.isclose(d, (self.nodeL + self.interL)):
+                distances.append(d)
+                dt = np.abs(tspikes.values[0][i]-tspikes.values[0][i-1])
+                delays.append(dt)   # node-to-node delay
 
-        # Compute node-to-node delays
-        tspikes = self.getSpikesTimings({id: data[id] for id in ids})  # relevant spikes timing dataframe
-        delays = np.abs(np.diff(tspikes.values, axis=1))  # node-to-node delays (s)
-
-        # Compute conduction velocities
-        distances = np.tile(distances, (1, delays.shape[0]))
-        velocities = distances / delays  # m/s
-
+        # Compute conduction velocities for each considered node pair
+        # distances = np.tile(distances, (1, delays.shape[0]))   # dimension matching multi-dimensional delay array (nnodes x nspikes)
+        velocities = np.array(distances) / np.array(delays)  # m/s
+        
+        # Return specific output metrics
         if out == 'range':
             return velocities.min(), velocities.max()
         elif out == 'median':

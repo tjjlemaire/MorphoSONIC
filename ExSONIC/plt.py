@@ -184,12 +184,13 @@ def strengthDistanceCurve(fiber, distances, thrs, **kwargs):
                           plot_chr=False, **kwargs)
 
 
-def plotConvergenceResults(df, inkey, outkeys, rel_eps_thr=0.05):
+def plotConvergenceResults(df, inkey, outkeys, rel_eps_thr=0.05, axesdirection='d',):
     ''' Plot output metrics of convergence study.
 
         :param df: dataframe with input values (parameter of interest) and output metrics
         :param inkey: key of the input parameter
         :param outkeys: keys of the output parameters
+        :param direction: diraction of the x axes used also to find the threshold ('a' ascending, 'd' descending)
         :param rel_eps_thr: relative error threshold for the output metrics
         :return: figure handle
     '''
@@ -199,7 +200,7 @@ def plotConvergenceResults(df, inkey, outkeys, rel_eps_thr=0.05):
 
     # Extract input range and figure out if it must be reversed
     xin = df[inkey].values
-    reverse = xin[-1] < xin[0]
+#    reverse = xin[-1] < xin[0]
 
     # Create figure backbone
     fig, axes = plt.subplots(len(outkeys) + 1, 1, figsize=(6, 9))
@@ -217,10 +218,18 @@ def plotConvergenceResults(df, inkey, outkeys, rel_eps_thr=0.05):
         axes[i].set_ylabel(k)
         axes[i].plot(xin, xout, c='k')
         ymin, ymax, yconv = np.nanmin(xout), np.nanmax(xout), xout[-1]
-        yptp, ydelta = ymax - ymin, 0.5 * yconv
-        axes[i].set_ylim(
-            max(yconv - ydelta, ymin - 0.05 * yptp), min(yconv + ydelta, ymax + 0.05 * yptp))
-
+        yptp, ydelta = ymax - ymin, 0.8 * yconv
+        #axes[i].set_ylim(
+        #            max(yconv - ydelta, ymin - 0.05 * yptp), min(yconv + ydelta, ymax + 0.05 * yptp))
+        if ymax - yconv > yconv - ymin:
+            ytopaxis = min(yconv + ydelta, ymax + 0.05 * yptp)
+            axes[i].set_ylim(
+                    ymin - 0.08 * (ytopaxis - ymin), ytopaxis)
+        else:
+            ybottomaxis = max(yconv - ydelta, ymin - 0.05 * yptp)
+            axes[i].set_ylim(
+                    ybottomaxis, ymax + 0.08 * (ymax - ybottomaxis))
+            
         # Compute and plot relative error w.r.t. reference (last) value
         xref = xout[-1]
         eps[k] = np.abs((xout - xref) / xref)
@@ -228,21 +237,24 @@ def plotConvergenceResults(df, inkey, outkeys, rel_eps_thr=0.05):
 
         # Compute and plot input value yielding threshold relative error
         j = eps[k].size - 1
-        while eps[k][j] <= rel_eps_thr:
+        while eps[k][j] <= rel_eps_thr and j>0:
             j -= 1
         xin_thr[k] = xin[j + 1]
         axes[-1].axvline(xin_thr[k], linestyle='dashed', color=f'C{i}')
 
     # Compute minimal required input value to satisfy all relative error threshold on all inputs
     logger.info(f'Relative error threshold = {rel_eps_thr * 1e2:.1f} %')
-    logger.info(f'Max {inkey} = {min(xin_thr.values()):.2e}')
+    if axesdirection == 'd': 
+        logger.info(f'Max {inkey} = {min(xin_thr.values()):.2e}')
+    else:
+        logger.info(f'Min {inkey} = {max(xin_thr.values()):.2e}')
 
     # Post-process figure
     axes[-1].set_ylim(-5, 30)
     axes[-1].legend(frameon=False)
     for ax in axes:
         ax.set_xscale('log')
-        if reverse:
+        if axesdirection == 'd':
             ax.invert_xaxis()
     fig.tight_layout()
 

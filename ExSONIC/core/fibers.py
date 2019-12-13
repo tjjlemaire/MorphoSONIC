@@ -72,6 +72,7 @@ def unmyelinatedFiber(fiber_class, pneuron, fiberD, rs, fiberL, maxNodeL=None, *
     if maxNodeL is None:
         nodelength_lin = fiberD * 12.1 + 15.0e-6  #um
         maxNodeL = min(nodelength_lin, 50e-6)
+        # maxNodeL = 10e-6
     if maxNodeL <= 0. or maxNodeL > fiberL:
         raise ValueError('maximum node length must be in [0, fiberL]')
 
@@ -224,7 +225,7 @@ def unmyelinatedFiberConvergence_fiberL(pneuron, fiberD, rs, fiberL_range, pp, o
     # Loop through parameter sweep
     logger.info('running fiberL parameter sweep ({}m - {}m)'.format(
         *si_format([fiberL_range.min(), fiberL_range.max()], 2)))
-    for x in fiberL_range[::-1]:
+    for x in fiberL_range:
 
         # If fiber length not already in the log file
         df = pd.read_csv(fpath, sep=delimiter)
@@ -250,11 +251,9 @@ def unmyelinatedFiberConvergence_fiberL(pneuron, fiberD, rs, fiberL_range, pp, o
                 data, meta = fiber.simulate(psource, 1.1 * Ithr, pp)
 
                 # Filter out stimulation artefact from dataframe
-                data = {k: boundDataFrame(df, (pp.tstim, pp.tstim + pp.toffset)) for k, df in data.items()}
+#                data = {k: boundDataFrame(df, (pp.tstim, pp.tstim + pp.toffset)) for k, df in data.items()}
 
                 # Compute CV and spike amplitude
-                # ids = fiber.ids.copy()
-                # del ids[fiber.nnodes // 2]
                 cv = fiber.getConductionVelocity(data, out='median')  # m/s
                 dV = fiber.getSpikeAmp(data, out='median')            # mV
                 logger.info(f'CV = {cv:.2f} m/s')
