@@ -184,7 +184,7 @@ def strengthDistanceCurve(fiber, distances, thrs, **kwargs):
                           plot_chr=False, **kwargs)
 
 
-def plotConvergenceResults(df, inkey, outkeys, rel_eps_thr=0.05, axesdirection='d',):
+def plotConvergenceResults(df, inkey, outkeys, rel_eps_thr_Ithr=0.05, rel_eps_thr=0.01, axesdirection='d',):
     ''' Plot output metrics of convergence study.
 
         :param df: dataframe with input values (parameter of interest) and output metrics
@@ -207,8 +207,10 @@ def plotConvergenceResults(df, inkey, outkeys, rel_eps_thr=0.05, axesdirection='
     ax = axes[-1]
     ax.set_xlabel(inkey)
     ax.set_ylabel('relative errors (%)')
-    ax.axhline(rel_eps_thr * 100, linestyle='dashed', color='k',
+    ax.axhline(rel_eps_thr * 100, linestyle=':', color='k',
                label=f'{rel_eps_thr * 1e2:.1f} % threshold')
+    ax.axhline(rel_eps_thr_Ithr * 100, linestyle='-.', color='k',
+               label=f'{rel_eps_thr_Ithr * 1e2:.1f} % threshold')
 
     # For each output
     for i, k in enumerate(outkeys):
@@ -237,17 +239,25 @@ def plotConvergenceResults(df, inkey, outkeys, rel_eps_thr=0.05, axesdirection='
 
         # Compute and plot input value yielding threshold relative error
         j = eps[k].size - 1
-        while eps[k][j] <= rel_eps_thr and j>0:
+        if i is 0:
+            rel_thr = rel_eps_thr_Ithr
+        else:
+            rel_thr = rel_eps_thr
+        while eps[k][j] <= rel_thr and j>0:
             j -= 1
         xin_thr[k] = xin[j + 1]
         axes[-1].axvline(xin_thr[k], linestyle='dashed', color=f'C{i}')
 
     # Compute minimal required input value to satisfy all relative error threshold on all inputs
-    logger.info(f'Relative error threshold = {rel_eps_thr * 1e2:.1f} %')
+    # logger.info(f'Relative error threshold Ithr = {rel_eps_thr_Ithr * 1e2:.1f} %')
+    # logger.info(f'Relative error threshold for CV and dV = {rel_eps_thr * 1e2:.1f} %')
     if axesdirection == 'd': 
-        logger.info(f'Max {inkey} = {min(xin_thr.values()):.2e}')
+        logger.info(f'max {inkey} = {min(xin_thr.values()):.2e}')
     else:
-        logger.info(f'Min {inkey} = {max(xin_thr.values()):.2e}')
+        logger.info(f'To reach convergence {inkey} = {max(xin_thr.values()):.2e}')
+    logger.info(f'Convergence excitation current threshold = {(df.values[-1,2]*1e9):.2f} nA')
+    logger.info(f'Convergence conduction velocity = {df.values[-1,3]:.2f} m/s')
+    logger.info(f'Convergence spike amplitude = {df.values[-1,4]:.2f} mV')
 
     # Post-process figure
     axes[-1].set_ylim(-5, 30)

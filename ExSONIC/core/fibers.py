@@ -68,11 +68,12 @@ def unmyelinatedFiber(fiber_class, pneuron, fiberD, rs, fiberL, maxNodeL=None, *
     if fiberD <= 0:
         raise ValueError('fiber diameter must be positive')
     if fiberL <= 0:
-        raise ValueError('fiber length must be positive')   
+        raise ValueError('fiber length must be positive') 
+    if fiberL <= 3e-3:
+        logger.warning('fiber length is below the convergence threshold')
     if maxNodeL is None:
-        nodelength_lin = fiberD * 12.1 + 15.0e-6  #um
-        maxNodeL = min(nodelength_lin, 50e-6)
-        # maxNodeL = 10e-6
+        nodelength_lin = fiberD * 16.3 + 9.1e-6  #um
+        maxNodeL = min(nodelength_lin, 22e-6)
     if maxNodeL <= 0. or maxNodeL > fiberL:
         raise ValueError('maximum node length must be in [0, fiberL]')
 
