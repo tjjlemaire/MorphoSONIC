@@ -3,7 +3,9 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-27 18:16:12
+# @Last Modified time: 2020-01-14 15:49:47
+
+import sys
 
 from PySONIC.neurons import getPointNeuron
 
@@ -15,26 +17,25 @@ from .pyhoc import *
 from .pymodl import *
 from .psource import *
 from .fibers import *
+from .synapses import *
+from .network import *
 
+def getModelsDict():
+    ''' Construct a dictionary of all model classes, indexed by simulation key. '''
+    current_module = sys.modules[__name__]
+    models_dict = {}
+    for _, obj in inspect.getmembers(current_module):
+        if inspect.isclass(obj) and hasattr(obj, 'simkey') and isinstance(obj.simkey, str):
+            models_dict[obj.simkey] = obj
+    return models_dict
+
+
+models_dict = getModelsDict()
 
 def getModel(meta):
     ''' Return appropriate model object based on a dictionary of meta-information. '''
     simkey = meta['simkey']
-    pneuron = getPointNeuron(meta['neuron'])
-
-    if simkey == 'nano_ext_SONIC':
-        model = ExtendedSonicNode(pneuron, meta['rs'], a=meta['a'], Fdrive=meta['Fdrive'],
-                                  fs=meta['fs'], deff=meta['deff'])
-    elif simkey.startswith('senn'):
-        senn_args = [meta[x] for x in ['nnodes', 'rs', 'nodeD', 'nodeL', 'interD', 'interL']]
-        if simkey == 'senn_Iextra':
-            model = IextraFiber(pneuron, *senn_args)
-        elif simkey == 'senn_Iintra':
-            model = IintraFiber(pneuron, *senn_args)
-        elif simkey == 'senn_SONIC':
-            model = SonicFiber(pneuron, *senn_args, a=meta['a'], Fdrive=meta['Fdrive'], fs=meta['fs'])
-        else:
-            raise ValueError(f'Unknown SENN model type:{simkey}')
-    else:
+    try:
+        return models_dict[simkey].initFromMeta(meta)
+    except KeyError:
         raise ValueError(f'Unknown model type:{simkey}')
-    return model

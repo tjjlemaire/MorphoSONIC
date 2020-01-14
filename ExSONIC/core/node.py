@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-12-02 19:02:03
+# @Last Modified time: 2020-01-13 21:24:59
 
 import pickle
 import abc
@@ -134,6 +134,10 @@ class Node(metaclass=abc.ABCMeta):
         '''
         setattr(self.section, 'stimon_{}'.format(self.mechname), value)
         return value
+
+    def initToSteadyState(self):
+        ''' Initialize model variables to pre-stimulus resting state values. '''
+        h.finitialize(self.pneuron.Qm0() * 1e5)  # nC/cm2
 
     def toggleStim(self):
         return toggleStim(self)
