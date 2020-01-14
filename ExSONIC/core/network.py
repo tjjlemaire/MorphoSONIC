@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-01-13 20:15:35
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-01-14 17:06:24
+# @Last Modified time: 2020-01-14 17:36:05
 
 import pandas as pd
 from neuron import h
@@ -110,8 +110,9 @@ class Network:
             self.nodes[source_id].section(0.5)._ref_v,
             syn,
             sec=self.nodes[source_id].section)
-        nc.delay = delay       # synaptic delay (ms)
-        nc.weight[0] = weight  # weight (uS)
+        nc.threshold = synapse.Vthr  # pre-synaptic voltage threshold (mV)
+        nc.delay = synapse.delay     # synaptic delay (ms)
+        nc.weight[0] = weight        # synaptic weight (uS)
         self.connections.append(nc)
         self.synobjs.append(syn)
 
