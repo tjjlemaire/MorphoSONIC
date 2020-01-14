@@ -3,12 +3,14 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-01-14 15:49:25
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-01-14 17:38:45
+# @Last Modified time: 2020-01-14 17:44:50
 
+import abc
 from neuron import h
 
 
-class Synapse:
+class Synapse(metaclass=abc.ABCMeta):
+    '''Generic synapse model. '''
 
     def __init__(self, Vthr=0., delay=0.):
         ''' Constructor.
@@ -18,6 +20,16 @@ class Synapse:
         '''
         self.Vthr = Vthr
         self.delay = delay
+
+    @property
+    @abc.abstractmethod
+    def assign(self, node):
+        ''' Assign synapse model to a specific target node.
+
+            :param node: target node
+            :return: synapse object
+        '''
+        return NotImplementedError
 
 
 class Exp2Synapse(Synapse):
@@ -36,11 +48,6 @@ class Exp2Synapse(Synapse):
         super().__init__(*args, **kwargs)
 
     def assign(self, node):
-        ''' Assign synapse model to a specific target node.
-
-            :param node: target node
-            :return: synapse object
-        '''
         syn = h.Exp2Syn(node.section(0.5))
         syn.tau1 = self.tau1
         syn.tau2 = self.tau2
