@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-01-13 21:24:59
+# @Last Modified time: 2020-01-14 20:58:49
 
 import pickle
 import abc
@@ -342,3 +342,33 @@ class SonicNode(Node):
     def titrate(self, pp, xfunc=None):
         return super().titrate(pp, xfunc=xfunc)
 
+
+class DrivenSonicNode(SonicNode):
+
+    def __init__(self, pneuron, Idrive, *args, **kwargs):
+        self.Idrive = Idrive
+        SonicNode.__init__(self, pneuron, *args, **kwargs)
+        self.setDrive()
+        Qrange = self.pylkp.refs['Q']
+
+    def setDrive(self):
+        logger.debug(f'setting {self.Idrive:.2f} mA/m2 driving current')
+        self.Iinj = self.Idrive * self.section(0.5).area() * 1e-6  # nA
+        logger.debug(f'Equivalent injected current: {self.Iinj:.1f} nA')
+        self.iclamp = h.IClamp(self.section(0.5))
+        self.iclamp.delay = 0  # we want to exert control over amp starting at 0 ms
+        self.iclamp.dur = 1e9  # dur must be long enough to span all our changes
+        self.iclamp.amp = self.Iinj
+
+    def __repr__(self):
+        return super().__repr__()[:-1] + f', Idrive = {self.Idrive:.2f} mA/m2)'
+
+    def filecodes(self, *args):
+        codes = SonicNode.filecodes(self, *args)
+        codes['Idrive'] = f'Idrive{self.Idrive:.1f}mAm2'
+        return codes
+
+    def meta(self, A, pp):
+        meta = self.nbls.meta(self.Fdrive, A, pp, self.fs, 'NEURON', None)
+        meta['Idrive'] = self.Idrive
+        return meta
