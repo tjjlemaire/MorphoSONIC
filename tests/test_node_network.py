@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-01-13 19:51:33
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-01-14 17:24:17
+# @Last Modified time: 2020-01-17 18:22:45
 
 import logging
 import numpy as np
@@ -12,67 +12,119 @@ from neuron import h
 
 from PySONIC.core import PulsedProtocol
 from PySONIC.neurons import getPointNeuron
+from PySONIC.test import TestBase
 from PySONIC.utils import logger
 
-from ExSONIC.plt import SectionCompTimeSeries
-from ExSONIC.core import IintraNode, Network, Exp2Synapse
+from ExSONIC.plt import SectionCompTimeSeries, SectionGroupedTimeSeries
+from ExSONIC.core.node import IintraNode, SonicNode, DrivenSonicNode
+from ExSONIC.core.synapses import Exp2Synapse, FExp2Synapse, FDExp2Synapse
+from ExSONIC.core.network import NodeCollection, NodeNetwork
+from ExSONIC.parsers import TestNodeNetworkParser
 
 ''' Create and simulate a small network of nodes. '''
 
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
-# Nodes
-pneurons = {k: getPointNeuron(k) for k in ['RS', 'FS', 'LTS']}
-nodes = {k: IintraNode(v) for k, v in pneurons.items()}
 
-# Synapse models
-synapses = {
-    'RS': Exp2Synapse(0.1, 3.0, 0.0),
-    'FS': Exp2Synapse(0.5, 8.0, -85.0),
-    'LTS': Exp2Synapse(0.5, 50.0, -85.0)
-}
+class TestNodeNetwork(TestBase):
 
-# Synaptic weights (uS)
-weights = {
-    'RS': {
-        'RS': 0.002,
-        'FS': 0.04,
-        'LTS': 0.09
-    },
-    'FS': {
-        'RS': 0.015,
-        'FS': 0.135,
-        'LTS': 0.86
-    },
-    'LTS': {
-        'RS': 0.135,
-        'FS': 0.02
-    }
-}
+    parser_class = TestNodeNetworkParser
 
-# Construct node network
-network = Network(nodes, synapses, weights)
+    def runTests(self, testsets, args):
+        ''' Run appropriate tests. '''
+        for s in args['subset']:
+            testsets[s](args['connect'])
 
-# Connect network nodes
-for source, targets in weights.items():
-    syn_model = synapses[source]
-    for target, weight in targets.items():
-        network.connect(source, target, syn_model, weight)
+    def __init__(self):
+        ''' Initialize network components. '''
 
-# Stimulation parameters
-pp = PulsedProtocol(1., 1.)
-I_Th_RS = 0.17  # nA
-thalamic_drives = {  # drive currents (nA)
-    'RS': I_Th_RS,
-    'FS': 1.4 * I_Th_RS,
-    'LTS': 0.0}
-amps = {  # drive current density (mA/m2)
-    k: (Idrive * 1e-6) / pneurons[k].area for k, Idrive in thalamic_drives.items()}
+        # Point-neuron models
+        self.pneurons = {k: getPointNeuron(k) for k in ['RS', 'FS', 'LTS']}
 
-# Simulation
-data, meta = network.simulate(amps, pp)
+        # Synapse models
+        RS_syn_base = Exp2Synapse(tau1=0.1, tau2=3.0, E=0.0)
+        RS_LTS_syn = FExp2Synapse(
+            tau1=RS_syn_base.tau1, tau2=RS_syn_base.tau2, E=RS_syn_base.E, f=0.2, tauF=200.0)
+        RS_FS_syn = FDExp2Synapse(
+            tau1=RS_syn_base.tau1, tau2=RS_syn_base.tau2, E=RS_syn_base.E, f=0.5, tauF=94.0,
+            d1=0.46, tauD1=380.0, d2=0.975, tauD2=9200.0)
+        FS_syn = Exp2Synapse(tau1=0.5, tau2=8.0, E=-85.0)
+        LTS_syn = Exp2Synapse(tau1=0.5, tau2=50.0, E=-85.0)
 
-# Plot membrane potential traces for specific duration at threshold current
-fig1 = SectionCompTimeSeries([(data, meta)], 'Vm', network.ids).render()
+        # Synaptic connections
+        self.connections = {
+            'RS': {
+                'RS': (0.002, RS_syn_base),
+                'FS': (0.04, RS_FS_syn),
+                'LTS': (0.09, RS_LTS_syn)
+            },
+            'FS': {
+                'RS': (0.015, FS_syn),
+                'FS': (0.135, FS_syn),
+                'LTS': (0.86, FS_syn)
+            },
+            'LTS': {
+                'RS': (0.135, LTS_syn),
+                'FS': (0.02, LTS_syn)
+            }
+        }
 
-plt.show()
+        # Driving currents
+        I_Th_RS = 0.17  # nA
+        Idrives = {  # nA
+            'RS': I_Th_RS,
+            'FS': 1.4 * I_Th_RS,
+            'LTS': 0.0}
+        self.idrives = {k: (v * 1e-6) / self.pneurons[k].area for k, v in Idrives.items()}  # mA/m2
+
+        # Pulsing parameters
+        tstim = 2.0    # s
+        toffset = 1.0  # s
+        PRF = 100.0    # Hz
+        DC = 0.50      # (-)
+        self.pp = PulsedProtocol(tstim, toffset, PRF, DC)
+
+        # US stimulation parameters
+        self.Fdrive = 500e3  # Hz
+        self.Adrive = 100e3  # Pa
+
+    def simulate(self, nodes, amps, connect):
+        # Create appropriate system
+        if connect:
+            system = NodeNetwork(nodes, self.connections)
+        else:
+            system = NodeCollection(nodes)
+
+        # Simulate system
+        data, meta = system.simulate(amps, self.pp)
+
+        # Plot membrane potential traces and comparative firing rate profiles
+        for id in system.ids:
+            SectionGroupedTimeSeries(id, [(data, meta)], pltscheme={'Q_m': ['Qm']}).render()
+        # SectionCompTimeSeries([(data, meta)], 'FR', system.ids).render()
+
+    def test_nostim(self, connect):
+        nodes = {k: IintraNode(v)
+                 for k, v in self.pneurons.items()}
+        amps = self.idrives
+        self.simulate(nodes, amps, connect)
+
+    def test_nodrive(self, connect):
+        nodes = {k: SonicNode(v, Fdrive=self.Fdrive)
+                 for k, v in self.pneurons.items()}
+        amps = {k: self.Adrive for k in self.pneurons.keys()}
+        self.simulate(nodes, amps, connect)
+
+    def test_full(self, connect):
+        nodes = {k: DrivenSonicNode(v, self.idrives[k], Fdrive=self.Fdrive)
+                 for k, v in self.pneurons.items()}
+        amps = {k: self.Adrive for k in self.pneurons.keys()}
+        self.simulate(nodes, amps, connect)
+
+
+
+if __name__ == '__main__':
+
+    tester = TestNodeNetwork()
+    tester.main()
+

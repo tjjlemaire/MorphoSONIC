@@ -3,67 +3,52 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-01-13 20:15:35
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-01-14 17:36:05
+# @Last Modified time: 2020-01-17 18:28:53
 
 import pandas as pd
 from neuron import h
 
 from PySONIC.neurons import getPointNeuron
-from PySONIC.core import Model
+from PySONIC.core import Model, getModel
 from PySONIC.utils import si_prefixes, filecode, simAndSave
 from PySONIC.postpro import prependDataFrame
 
 from .pyhoc import *
-from .node import IintraNode
+from .node import IintraNode, SonicNode, DrivenSonicNode
+from .synapses import *
+
 
 prefix_map = {v: k for k, v in si_prefixes.items()}
 
 
-class Network:
+class NodeCollection:
 
-    simkey = 'network'
+    simkey = 'node_collection'
     tscale = 'ms'  # relevant temporal scale of the model
     titration_var = None
 
-    def __init__(self, nodes, synapses, weights):
-        ''' Construct network.
+    node_constructor_dict = {
+        'ESTIM': (IintraNode, [] , []),
+        'ASTIM': (SonicNode, [], ['a', 'Fdrive', 'fs']),
+        'DASTIM': (DrivenSonicNode, ['Idrive'], ['a', 'Fdrive', 'fs']),
+    }
+
+    def __init__(self, nodes):
+        ''' Constructor.
 
             :param nodes: dictionary of node objects
-            :param synapses: dictionary of synapse models
-            :param weights: 2D {source:target} dictionary of synaptic weights
         '''
         # Assert consistency of inputs
         ids = list(nodes.keys())
         assert len(ids) == len(set(ids)), 'duplicate node IDs'
-        for k, v in synapses.items():
-            assert k in ids, f'invalid synapse ID: "{k}"'
-        for source, targets in weights.items():
-            assert source in ids, f'invalid source ID: "{source}"'
-            assert source in synapses, f'no synapse for source ID: "{source}"'
-            for target in targets.keys():
-                assert target in ids, f'invalid target ID: "{target}"'
 
         # Assign attributes
         self.nodes = nodes
         self.ids = ids
-        self.synapses = synapses
-        self.weights = weights
         self.refnode = self.nodes[self.ids[0]]
-        self.nodekey = self.refnode.pneuron.simkey
         self.pneuron = self.refnode.pneuron
         unit, factor = [self.refnode.modality[k] for k in ['unit', 'factor']]
         self.unit = f'{prefix_map[factor]}{unit}'
-
-        # Connect nodes
-        self.synobjs = []
-        self.connections = []
-        for source, targets in self.weights.items():
-            syn_model = self.synapses[source]
-            for target, weight in targets.items():
-                A0 = self.nodes[target].section(0.5).area() * 1e-12  # section area (m2)
-                A = self.nodes[target].pneuron.area  # neuron membrane area (m2)
-                norm_weight = weight * A0 / A
-                self.connect(source, target, syn_model, norm_weight)
 
     def strNodes(self):
         return f"[{', '.join([repr(x.pneuron) for x in self.nodes.values()])}]"
@@ -84,37 +69,26 @@ class Network:
     def __setitem__(self, key, value):
         self.nodes[key] = value
 
+    def clear(self):
+        for node in self.nodes.values():
+            node.clear()
+
+    @classmethod
+    def getNodesFromMeta(cls, meta):
+        nodes = {}
+        for k, v in meta['nodes'].items():
+            node_class, node_args, node_kwargs = cls.node_constructor_dict[v['simkey']]
+            node_args = [getPointNeuron(v['neuron'])] + [v[x] for x in node_args]
+            node_kwargs = {x: v[x] for x in node_kwargs}
+            nodes[k] = node_class(*node_args, **node_kwargs)
+        return nodes
+
     @classmethod
     def initFromMeta(cls, meta):
-        pneurons = {k: getPointNeuron(k) for k in meta['neurons']}
-        nodes = {k: IintraNode(v) for k, v in pneurons.items()}
-        return cls(nodes, meta['synapses'], meta['weights'])
+        return cls(cls.getNodesFromMeta(meta))
 
     def inputs(self):
         return self.refnode.pneuron.inputs()
-
-    def connect(self, source_id, target_id, synapse, weight, delay=0.0):
-        ''' Connect a source node to a target node with a specific synapse model
-            and synaptic weight.
-
-            :param source_id: ID of the source node
-            :param target_id: ID of the target node
-            :param synapse: synapse model
-            :param weight: synaptic weight (uS)
-            :param delay: synaptic delay (ms)
-        '''
-        for id in [source_id, target_id]:
-            assert id in self.ids, f'"{id}" not found in network IDs'
-        syn = synapse.assign(self.nodes[target_id])
-        nc = h.NetCon(
-            self.nodes[source_id].section(0.5)._ref_v,
-            syn,
-            sec=self.nodes[source_id].section)
-        nc.threshold = synapse.Vthr  # pre-synaptic voltage threshold (mV)
-        nc.delay = synapse.delay     # synaptic delay (ms)
-        nc.weight[0] = weight        # synaptic weight (uS)
-        self.connections.append(nc)
-        self.synobjs.append(syn)
 
     def setStimON(self, value):
         ''' Set stimulation ON or OFF.
@@ -191,15 +165,13 @@ class Network:
 
     def modelMeta(self):
         return {
-            'simkey': self.simkey,
-            'nodekey': self.nodekey,
-            'neurons': [x.pneuron.name for x in self.nodes.values()],
-            'synapses': self.synapses,
-            'weights': self.weights
+            'simkey': self.simkey
         }
 
     def meta(self, amps, pp):
-        return {**self.modelMeta(), **{
+        return {
+            **self.modelMeta(), **{
+            'nodes': {k: v.meta(amps[k], pp) for k, v in self.nodes.items()},
             'amps': amps,
             'pp': pp
         }}
@@ -210,7 +182,6 @@ class Network:
     def modelCodes(self):
         return {
             'simkey': self.simkey,
-            'nodekey': self.nodekey,
             'neurons': '_'.join([x.pneuron.name for x in self.nodes.values()])
         }
 
@@ -245,5 +216,77 @@ class Network:
         return simAndSave(self, *args, **kwargs)
 
 
+class NodeNetwork( NodeCollection):
 
+    simkey = 'node_network'
 
+    def __init__(self, nodes, connections, presyn_var='Qm'):
+        ''' Construct network.
+
+            :param nodes: dictionary of node objects
+            :param connections: {presyn_node: postsyn_node} dictionary of (syn_weight, syn_model)
+            :param presyn_var: reference variable for presynaptic threshold detection (Vm or Qm)
+        '''
+        # Construct node collection
+        super().__init__(nodes)
+
+        # Assert consistency of inputs
+        for presyn_node_id, targets in connections.items():
+            assert presyn_node_id in self.ids, f'invalid pre-synaptic node ID: "{presyn_node_id}"'
+            for postsyn_node_id, (syn_weight, syn_model) in targets.items():
+                assert postsyn_node_id in self.ids, f'invalid post-synaptic node ID: "{postsyn_node_id}"'
+                assert isinstance(syn_model, Synapse), f'invalid synapse model: {syn_model}'
+
+        # Assign attributes
+        self.connections = connections
+        self.presyn_var = presyn_var
+
+        # Connect nodes
+        self.syn_objs = []
+        self.netcon_objs = []
+        for presyn_node_id, targets in self.connections.items():
+            for postsyn_node_id, (syn_weight, syn_model) in targets.items():
+                self.connect(presyn_node_id, postsyn_node_id, syn_model, syn_weight)
+
+    @classmethod
+    def initFromMeta(cls, meta):
+        return cls(cls.getNodesFromMeta(meta), meta['connections'], meta['presyn_var'])
+
+    def connect(self, source_id, target_id, syn_model, syn_weight, delay=0.0):
+        ''' Connect a source node to a target node with a specific synapse model
+            and synaptic weight.
+
+            :param source_id: ID of the pre-synaptic node
+            :param target_id: ID of the post-synaptic node
+            :param syn_model: synapse model
+            :param weight: synaptic weight (uS)
+            :param delay: synaptic delay (ms)
+        '''
+        for id in [source_id, target_id]:
+            assert id in self.ids, f'invalid node ID: "{id}"'
+        syn = syn_model.attach(self.nodes[target_id])
+        if self.presyn_var == 'Vm':
+            hoc_var = f'Vm_{self.nodes[source_id].mechname}'
+        else:
+            hoc_var = 'v'
+        nc = h.NetCon(
+            getattr(self.nodes[source_id].section(0.5), f'_ref_{hoc_var}'),
+            syn,
+            sec=self.nodes[source_id].section)
+
+        # Normalize synaptic weight
+        syn_weight *= self.nodes[target_id].getAreaNormalizationFactor()
+
+        # Assign netcon attributes
+        nc.threshold = syn_model.Vthr  # pre-synaptic voltage threshold (mV)
+        nc.delay = syn_model.delay     # synaptic delay (ms)
+        nc.weight[0] = syn_weight          # synaptic weight (uS)
+
+        self.syn_objs.append(syn)
+        self.netcon_objs.append(nc)
+
+    def modelMeta(self):
+        return {**super().modelMeta(), **{
+            'connections': self.connections,
+            'presyn_var': self.presyn_var
+        }}

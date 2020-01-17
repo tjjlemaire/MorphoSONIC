@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-01-14 20:58:49
+# @Last Modified time: 2020-01-16 19:24:58
 
 import pickle
 import abc
@@ -14,7 +14,8 @@ import pandas as pd
 from neuron import h
 
 from PySONIC.constants import *
-from PySONIC.core import Model, PointNeuron, NeuronalBilayerSonophore
+from PySONIC.core import Model, PointNeuron, NeuronalBilayerSonophore, DrivenNeuronalBilayerSonophore
+from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import si_format, timer, logger, plural, debug, logCache, filecode, simAndSave
 from PySONIC.threshold import threshold
 from PySONIC.postpro import prependDataFrame
@@ -72,6 +73,12 @@ class Node(metaclass=abc.ABCMeta):
 
     def clear(self):
         del self.section
+
+    def getAreaNormalizationFactor(self):
+        ''' Return area normalization factor '''
+        A0 = self.section(0.5).area() * 1e-12  # section area (m2)
+        A = self.pneuron.area                  # neuron membrane area (m2)
+        return A0 / A
 
     def getPyLookup(self):
         pylkp = self.pneuron.getLookup()
@@ -248,6 +255,11 @@ class IintraNode(Node):
     A_conv_thr = None
     A_conv_precheck = False
 
+    def clear(self):
+        super().clear()
+        if hasattr(self, 'iclamp'):
+            del self.iclamp
+
     def setStimAmp(self, Astim):
         ''' Set electrical stimulation amplitude
 
@@ -369,6 +381,6 @@ class DrivenSonicNode(SonicNode):
         return codes
 
     def meta(self, A, pp):
-        meta = self.nbls.meta(self.Fdrive, A, pp, self.fs, 'NEURON', None)
+        meta = super().meta(A, pp)
         meta['Idrive'] = self.Idrive
         return meta
