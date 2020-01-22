@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-01-13 19:51:33
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-01-17 18:22:45
+# @Last Modified time: 2020-01-17 18:37:55
 
 import logging
 import numpy as np
@@ -81,12 +81,12 @@ class TestNodeNetwork(TestBase):
         tstim = 2.0    # s
         toffset = 1.0  # s
         PRF = 100.0    # Hz
-        DC = 0.50      # (-)
+        DC = 1.0       # (-)
         self.pp = PulsedProtocol(tstim, toffset, PRF, DC)
 
         # US stimulation parameters
         self.Fdrive = 500e3  # Hz
-        self.Adrive = 100e3  # Pa
+        self.Adrive = 30e3  # Pa
 
     def simulate(self, nodes, amps, connect):
         # Create appropriate system

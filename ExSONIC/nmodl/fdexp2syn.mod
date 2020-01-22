@@ -70,8 +70,8 @@ NET_RECEIVE(weight (umho), F, D1, D2, tsyn (ms)) {
         tsyn = t
 	}
     F = 1 + (F - 1) * exp(-(t - tsyn) / tauF)
-    D1 = 1 - (1 - D1) * exp(-(t - tsyn) / tauD1)
-    D2 = 1 - (1 - D2) * exp(-(t - tsyn) / tauD2)
+    D1 = 1 + (D1 - 1) * exp(-(t - tsyn) / tauD1)
+    D2 = 1 + (D2 - 1) * exp(-(t - tsyn) / tauD2)
     tsyn = t
 	A = A + weight * factor * F * D1 * D2
 	B = B + weight * factor * F * D1 * D2
