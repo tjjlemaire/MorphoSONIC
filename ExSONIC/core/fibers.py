@@ -15,9 +15,10 @@ import csv
 from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import logger, si_format
 from PySONIC.postpro import boundDataFrame
+from PySONIC.core import PulsedProtocol
 
-from .senn import IintraFiber
-from .psource import IntracellularCurrent
+from .senn import IintraFiber, IextraFiber, SonicFiber
+from .psource import IntracellularCurrent, ExtracellularCurrent, NodeAcousticSource, PlanarDiskTransducerSource
 
 
 def myelinatedFiber(fiber_class, pneuron, fiberD, nnodes, rs, nodeL, d_ratio, inter_ratio=100., **kwargs):
@@ -53,7 +54,7 @@ def myelinatedFiber(fiber_class, pneuron, fiberD, nnodes, rs, nodeL, d_ratio, in
     return fiber_class(pneuron, nnodes, rs, nodeD, nodeL, interD, interL, **kwargs)
 
 
-def unmyelinatedFiber(fiber_class, pneuron, fiberD, rs, fiberL, maxNodeL=None, **kwargs):
+def unmyelinatedFiber(fiber_class, pneuron, fiberD, rs, fiberL=5e-3, maxNodeL=None, **kwargs):
     ''' Create a single-cable unmyelinated fiber model.
 
         :param fiber_class: class of fiber to be instanced
@@ -332,5 +333,152 @@ def unmyelinatedFiberSundt(fiber_class, fiberD=0.8e-6, fiberL = 5e-3, **kwargs):
     '''
     pneuron = getPointNeuron('sundt')  # DRG peripheral axon membrane equations
     rs = 100.                          # axoplasm resistivity, from Sundt 2015 (Ohm.cm)
-#    maxNodeL = 5e-6                   # maximum node length
-    return unmyelinatedFiber(fiber_class, pneuron, fiberD, rs, fiberL, maxNodeL=maxNodeL, **kwargs)
+    return unmyelinatedFiber(fiber_class, pneuron, fiberD, rs, fiberL, **kwargs)
+
+def strengthDuration(fiberType, fiberClass, fiberD, tstim_range, toffset=20e-3, outdir='.', zdistance=1e-3, Fdrive=500e3, a=32e-9, fs=1.):
+    
+    logger.info(f'creating model with fiberD = {fiberD * 1e6:.2f} um ...')
+    if fiberClass == 'intracellular_electrical_stim':
+        fiber_class = IintraFiber
+        if fiberType =='sundt':
+            fiber = unmyelinatedFiberSundt(fiber_class, fiberD)
+        elif fiberType =='reilly':
+            fiber = myelinatedFiberReilly(fiber_class, fiberD)
+        else:
+            raise ValueError('fiber type unknown') 
+        psource = IntracellularCurrent(fiber.nnodes // 2)
+    elif fiberClass == 'extracellular_electrical_stim':
+        fiber_class = IextraFiber
+        if fiberType =='sundt':
+            fiber = unmyelinatedFiberSundt(fiber_class, fiberD)
+        elif fiberType =='reilly':
+            fiber = myelinatedFiberReilly(fiber_class, fiberD)
+        else:
+            raise ValueError('fiber type unknown') 
+        psource = ExtracellularCurrent((0, zdistance), mode='cathode')
+    elif fiberClass == 'acoustic_single_node':
+        fiber_class = SonicFiber
+        if fiberType =='sundt':
+            fiber = unmyelinatedFiberSundt(fiber_class, fiberD, a=a, Fdrive=Fdrive)
+        elif fiberType =='reilly':
+            fiber = myelinatedFiberReilly(fiber_class, fiberD, a=a, Fdrive=Fdrive)
+        else:
+            raise ValueError('fiber type unknown') 
+        psource = NodeAcousticSource(inode=fiber.nnodes//2, Fdrive=Fdrive)
+    elif fiberClass == 'acoustic_planar_transducer':
+        fiber_class = SonicFiber
+        if fiberType =='sundt':
+            fiber = unmyelinatedFiberSundt(fiber_class, fiberD, a=a, Fdrive=Fdrive, fs=fs)
+        elif fiberType =='reilly':
+            fiber = myelinatedFiberReilly(fiber_class, fiberD, a=a, Fdrive=Fdrive, fs=fs)
+        else:
+            raise ValueError('fiber type unknown') 
+        psource = PlanarDiskTransducerSource(0, 0, zdistance, Fdrive)
+    else:
+        raise ValueError('fiber class unknown') 
+        
+    # Get filecode
+    filecodes = fiber.filecodes(psource, 1, PulsedProtocol(toffset/100, toffset))
+    for k in ['nnodes', 'nodeD', 'rs', 'nodeL', 'interD', 'interL', 'psource', 'A', 'nature', 'tstim', 'toffset', 'PRF', 'DC']:
+        del filecodes[k]
+    filecodes['fiberD'] = f'fiberD{(fiberD * 1e6):.2f}um'
+    if fiberClass == 'extracellular_electrical_stim' or fiberClass == 'acoustic_planar_transducer':
+        filecodes['zsource'] = f'zsource{(zdistance * 1e3):.2f}mm'
+    if fiberClass == 'acoustic_single_node' or fiberClass == 'acoustic_planar_transducer':
+        del filecodes['f']
+    filecodes['tstim_range'] = 'tstim' + '-'.join(
+        [f'{si_format(x, 1, "")}m' for x in [min(tstim_range), max(tstim_range)]])
+    print(filecodes)
+    fcode = '_'.join(filecodes.values())
+    
+    # Output file and column names
+    fname = f'{fcode}_strengthduration_results.csv'
+    fpath = os.path.join(outdir, fname)
+    delimiter = '\t'
+    labels = ['t stim (m)', 'Ithr (A)']
+
+    # Create log file if it does not exist
+    if not os.path.isfile(fpath):
+        logger.info(f'creating log file: "{fpath}"')
+        with open(fpath, 'w') as csvfile:
+            writer = csv.writer(csvfile, delimiter=delimiter)
+            writer.writerow(labels)
+            
+    # Loop through parameter sweep
+    logger.info('running tstim parameter sweep ({}s - {}s)'.format(
+        *si_format([tstim_range.min(), tstim_range.max()], 2)))
+    for x in tstim_range:
+
+        # If fiber length not already in the log file
+        df = pd.read_csv(fpath, sep=delimiter)
+        entries = df[labels[0]].values.astype(float)
+        is_entry = np.any(np.isclose(x, entries))
+        if not is_entry:      
+            
+            # Perform titration to find threshold current
+            pp = PulsedProtocol(x, toffset)
+            Ithr = fiber.titrate(psource, pp)  # A
+
+            # Log input-output pair into file
+            logger.info('saving result to log file')
+            with open(fpath, 'a', newline='') as csvfile:
+                writer = csv.writer(csvfile, delimiter=delimiter)
+                writer.writerow([x, Ithr])
+            
+    logger.info('parameter sweep successfully completed')
+    fiber.clear()
+    
+    # Load results
+    logger.info('loading results from log file')
+    df = pd.read_csv(fpath, sep=delimiter)
+
+    return df
+
+
+def currentDistance(fiberType, fiberD, tstim, n_cur, cur_min, cur_max, n_z, z_min, z_max, outdir='.'):
+    
+    fiber_class = IextraFiber
+    if fiberType =='sundt':
+        fiber = unmyelinatedFiberSundt(fiber_class, fiberD)
+    elif fiberType =='reilly':
+        fiber = myelinatedFiberReilly(fiber_class, fiberD)
+    else:
+        raise ValueError('fiber type unknown') 
+    psource = ExtracellularCurrent((0, z_min), mode='cathode')
+    toffset = 20e-3 
+    pp = PulsedProtocol(tstim, toffset)
+
+    # Get filecode
+    filecodes = fiber.filecodes(psource, 1, pp)
+    for k in ['nnodes', 'nodeD', 'rs', 'nodeL', 'interD', 'interL', 'psource', 'A', 'nature', 'toffset', 'PRF', 'DC']:
+        del filecodes[k]
+    filecodes['fiberD'] = f'fiberD{(fiberD * 1e6):.2f}um'
+    filecodes['cur'] = f'cur{(n_cur):.0f}_{(cur_min*1e3):.2f}mA-{(cur_max*1e3):.2f}mA'
+    filecodes['z'] = f'z{(n_z):.0f}_{(z_min*1e3):.2f}mm-{(z_max*1e3):.2f}mm'
+    fcode = '_'.join(filecodes.values())
+
+    # Output file
+    fname = f'{fcode}_strengthduration_results.txt'
+    fpath = os.path.join(outdir, fname)
+
+    # Computation of the current distance matrix if the file does not exist
+    if not os.path.isfile(fpath):
+        currents = np.linspace(cur_min, cur_max, n_cur)
+        zdistances = np.linspace(z_min, z_max, n_z)
+        ExcitationMatrix = [[0 for i in range(n_cur)] for j in range(n_z)] 
+        for i, I in enumerate(currents): 
+            for j, z in enumerate(zdistances): 
+                if I > 0:
+                    psource = ExtracellularCurrent((0, z), mode='anode')
+                elif I < 0:
+                    psource = ExtracellularCurrent((0, z), mode='cathode')
+                data, meta= fiber.simulate(psource, I, pp)
+                ExcitationMatrix[j][i] = fiber.isExcited(data)  
+        # Save results
+        np.savetxt(fpath, ExcitationMatrix)
+        
+    # Load results
+    ExcitationMatrix = np.loadtxt(fpath)
+
+    return ExcitationMatrix
+

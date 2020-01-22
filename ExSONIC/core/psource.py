@@ -205,11 +205,14 @@ class NodeAcousticSource(IntracellularPointSource, AcousticPointSource):
         return f'{IntracellularPointSource.__repr__(self)[:-1]}, {self.Fdrive * 1e-3:.0f} kHz)'
 
     def computeNodesAmps(self, fiber, A):
+        assert self.Fdrive == fiber.Fdrive, 'US frequency mismatch'
         return IntracellularPointSource.computeNodesAmps(self, fiber, A)
 
     def filecodes(self, A):
         return {**{'psource': f'ps(node{self.inode})'}, **super().filecodes(A)}
 
+    def computeMaxNodeAmp(self, fiber, A):
+        return A    
 
 class PlanarDiskTransducerSource(ExtracellularPointSource):
     ''' Acoustic source coming from a distant disk planar transducer.
@@ -237,6 +240,7 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
         self.rho = rho
         self.c = c
         self.r = r
+        self.theta = theta
         for k in ['rho', 'c', 'theta']:
             self.attrkeys.append(k)
 
@@ -443,13 +447,17 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
         '''
         # Get fiber nodes coordinates
         node_coords = np.array([fiber.getNodeCoords(), np.zeros(fiber.nnodes)])
+        node_xcoords = np.array(fiber.getNodeCoords())
 
         # Rotate around source incident angle
         node_coords = rotAroundPoint2D(node_coords, self.theta, self.x)
 
-        # Compute amplitudes assuming radial symmetry (i.e. as if every point was along the normal axis)
-        distances = np.array([self.distance(item) for item in node_coords.T])  # m
-        return self.normalAxisAmp(distances, u)  # Pa
+        # Compute amplitudes 
+        node_amps = self.DPSM2d(node_xcoords, np.array([0]), u)
+        return node_amps.ravel() # Pa
+
+    def computeMaxNodeAmp(self, fiber, u):
+        return max(self.computeNodesAmps(fiber, u)) # Pa
 
     def computeSourceAmp(self, fiber, A):
         ''' Compute transducer particle velocity amplitude from target acoustic amplitude
@@ -463,13 +471,17 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
         # Compute the particle velocity needed to generate the acoustic amplitude value at this node
         return A / self.relNormalAxisAmp(self.getMinNodeDistance(fiber))  # m/s
 
-    def filecodes(self, u):
-        pos_mm = ','.join(['{:.1f}'.format(x * 1e3) for x in self.x])
+    def filecodes(self, A):
+        pos_mm = ','.join(['{:.1f}'.format(x * 1e3) for x in [self.x, self.y, self.z]])
         return {
             'psource': f'ps({pos_mm})mm',
             'f': f'{self.Fdrive * 1e-3:.0f}kHz',
-            'u': f'{si_format(u, 2)}m/s'
+            'A': f'{si_format(A*1e-3, 2)}kPa'
         }
+        
+    def strPos(self):
+        pos_mm = ['{:.1f}'.format(x * 1e3) for x in [self.x, self.y, self.z]]
+        return '({})mm'.format(','.join(pos_mm))
 
 
 class PointSourceArray:

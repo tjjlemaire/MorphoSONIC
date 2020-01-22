@@ -525,7 +525,7 @@ class EStimFiber(SennFiber):
 class IextraFiber(EStimFiber):
 
     simkey = 'senn_Iextra'
-    A_range = (1e0, 1e4)  # mV
+    A_range = (1e0, 1e6)  # mV
 
     def preProcessAmps(self, Ve):
         ''' Convert array of extracellular potentials into equivalent intracellular injected currents.
@@ -551,7 +551,7 @@ class IintraFiber(EStimFiber):
 class SonicFiber(SennFiber):
 
     simkey = 'senn_SONIC'
-    A_range = (1e0, 6e5)  # Pa
+    A_range = (1e0, 1e6)  # Pa
 
     def __init__(self, *args, a=32e-9, Fdrive=500e3, fs=1., **kwargs):
         # Retrieve point neuron object
@@ -609,7 +609,7 @@ class SonicFiber(SennFiber):
             **self.modelCodes(),
             'a': '{:.0f}nm'.format(self.a * 1e9),
             'Fdrive': '{:.0f}kHz'.format(self.Fdrive * 1e-3),
-            'fs': 'fs{:.0f}%'.format(self.fs * 1e2) if self.fs < 1 else None,
+            'fs': 'fs{:.0f}%'.format(self.fs * 1e2) if self.fs <= 1 else None,
             **psource.filecodes(A),
             'nature': 'CW' if pp.isCW() else 'PW',
             **pp.filecodes()
@@ -625,6 +625,6 @@ class SonicFiber(SennFiber):
         '''
         Amin, Amax = self.getArange(psource)
         A_conv_thr = np.abs(Amax - Amin) / 1e4
-        return threshold(
+        return psource.computeMaxNodeAmp(self, threshold(
             lambda x: self.titrationFunc(psource, x, pp),
-            (Amin, Amax), eps_thr=A_conv_thr, rel_eps_thr=1e-2, precheck=True)
+            (Amin, Amax), eps_thr=A_conv_thr, rel_eps_thr=1e-2, precheck=True))
