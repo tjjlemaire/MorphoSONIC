@@ -34,9 +34,9 @@ def getNmodlDir():
 
 def chronaxie(durations, Ithrs):
     ''' Return chronaxie, i.e. stimulus duration for which threshold current is twice the rheobase. '''
-    if np.all(Ithrs < 0.):
+    if np.all(Ithrs[np.logical_not(np.isnan(Ithrs))] < 0.):
         Ithrs = -Ithrs
-    Irh = 2 * Ithrs.min()  # rheobase current
+    Irh = 2 * np.nanmin(Ithrs)   # rheobase current
     return np.interp(Irh, Ithrs[::-1], durations[::-1])  # s
 
 

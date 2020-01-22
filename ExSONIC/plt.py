@@ -140,44 +140,77 @@ class SectionCompTimeSeries(CompTimeSeries):
             super().addLegend(fig, ax, handles, labels, fs, color=None, ls=None)
 
 
-def thresholdCurve(fiber, x, thrs,
+def thresholdCurve(fiber, x, thrs, thrs2=None,
                    xname='duration', xfactor=1e6, xunit='s',
                    yname='current', yfactor=1, yunit='A',
-                   scale='log', plot_chr=True, fs=12):
+                   y2name='charge', y2factor=1, y2unit='C',
+                   scale='log', plot_chr=True, fs=12, colors=None, limits=None):
 
     fig, ax = plt.subplots()
     prefix = si_format(1 / yfactor, space='')[1:]
-    ax.set_title(f'{fiber} - strength-{xname} curve', fontsize=fs)
+    ax.set_title(f'{fiber}', fontsize=fs)
     ax.set_xlabel(f'{xname} ({si_format(1 / xfactor, space="")[1:]}{xunit})', fontsize=fs)
     ax.set_ylabel(f'threshold {yname} ({prefix}{yunit})', fontsize=fs)
     if scale == 'log':
         ax.set_xscale('log')
         ax.set_yscale('log')
-    if np.all(thrs[list(thrs.keys())[0]] < 0.):
+    testvalues = thrs[list(thrs.keys())[0]]
+    if np.all(testvalues[np.logical_not(np.isnan(testvalues))] < 0.):
         thrs = {k: -v for k, v in thrs.items()}
-    for i, k in enumerate(thrs.keys()):
-        ax.plot(x * xfactor, thrs[k] * yfactor, color=f'C{i}', label=k)
-        if plot_chr:
-            ax.axvline(chronaxie(x, thrs[k]) * xfactor, linestyle='--', color=f'C{i}')
+        if thrs2 != None:
+            thrs2 = {k: -v for k, v in thrs2.items()}
+    if colors == None:
+        for i, k in enumerate(thrs.keys()):
+            ax.plot(x * xfactor, thrs[k] * yfactor, label=k)
+            if plot_chr:
+                ax.axvline(chronaxie(x, thrs[k]) * xfactor, linestyle='-.')
+    else:
+        for i, k in enumerate(thrs.keys()):
+            ax.plot(x * xfactor, thrs[k] * yfactor, label=k, color=colors[i])
+            if plot_chr:
+                ax.axvline(chronaxie(x, thrs[k]) * xfactor, linestyle='-.', color=colors[i])
     if scale != 'log':
         ax.set_xlim(0., x.max() * xfactor)
         ax.set_ylim(0., ax.get_ylim()[1])
     else:
         ax.set_xlim(x.min() * xfactor, x.max() * xfactor)
-        ymin = min([np.nanmin(v) for v in thrs.values()])
-        ymax = max([np.nanmax(v) for v in thrs.values()])
-        ymin = getPow10(ymin * yfactor ,'down')
-        ymax = getPow10(ymax * yfactor ,'up')
+        if limits == None:
+            ymin = np.nanmin([np.nanmin(v) for v in thrs.values()])
+            ymax = np.nanmax([np.nanmax(v) for v in thrs.values()])
+            ymin = getPow10(ymin * yfactor ,'down')
+            ymax = getPow10(ymax * yfactor ,'up')
+        else:
+            ymin = limits[0] * yfactor
+            ymax = limits[1] * yfactor
         ax.set_ylim(ymin, ymax)
     for item in ax.get_xticklabels() + ax.get_yticklabels():
         item.set_fontsize(fs)
-    ax.legend(fontsize=fs, frameon=False)
+    ax.legend(fontsize=fs/1.8, frameon=False, loc='upper left', ncol=2)
+    
+    if thrs2 != None:
+        ax2 = ax.twinx()
+        prefix = si_format(1 / y2factor, space='')[1:]
+        ax2.set_ylabel(f'threshold {y2name} ({prefix}{y2unit})', fontsize=fs)
+        if scale == 'log':
+           ax2.set_yscale('log')
+        for i, k in enumerate(thrs2.keys()):
+            if colors == None:
+                ax2.plot(x * xfactor, thrs2[k] * y2factor, linestyle='--')
+            else: 
+                ax2.plot(x * xfactor, thrs2[k] * y2factor, linestyle='--', color=colors[i])
+        if scale != 'log':
+            ax2.set_ylim(0., ax2.get_ylim()[1])
+        else:
+            ymin2 = min([np.nanmin(v) for v in thrs2.values()])
+            ymax2 = max([np.nanmax(v) for v in thrs2.values()])
+            ymin2 = getPow10(ymin2 * y2factor ,'down')
+            ymax2 = getPow10(ymax2 * y2factor ,'up')
+            ax2.set_ylim(ymin2, ymax2)
     return fig
 
 
 def strengthDurationCurve(fiber, durations, thrs, **kwargs):
     return thresholdCurve(fiber, durations, thrs, xname='duration', xfactor=1e6, xunit='s', **kwargs)
-
 
 def strengthDistanceCurve(fiber, distances, thrs, **kwargs):
     return thresholdCurve(fiber, distances, thrs, xname='distance', xfactor=1e3, xunit='m',
@@ -190,7 +223,7 @@ def plotConvergenceResults(df, inkey, outkeys, rel_eps_thr_Ithr=0.05, rel_eps_th
         :param df: dataframe with input values (parameter of interest) and output metrics
         :param inkey: key of the input parameter
         :param outkeys: keys of the output parameters
-        :param direction: diraction of the x axes used also to find the threshold ('a' ascending, 'd' descending)
+        :param direction: direction of the x axes used also to find the threshold ('a' ascending, 'd' descending)
         :param rel_eps_thr: relative error threshold for the output metrics
         :return: figure handle
     '''
