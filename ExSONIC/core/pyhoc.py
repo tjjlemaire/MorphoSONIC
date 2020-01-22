@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-12-03 14:33:04
+# @Last Modified time: 2020-01-16 19:24:42
 # @Author: Theo Lemaire
 # @Date:   2018-08-21 19:48:04
 # @Last Modified by:   Theo Lemaire
@@ -240,7 +240,7 @@ def integrate(model, pp, dt, atol):
 
     # Initialize
     model.stimon = model.setStimON(0)
-    h.finitialize(model.pneuron.Qm0() * 1e5)  # nC/cm2
+    model.initToSteadyState()
     model.stimon = model.setStimON(1)
     model.cvode.event(model.Ton, model.toggleStim)
 

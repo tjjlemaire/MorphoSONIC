@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-12-02 19:02:03
+# @Last Modified time: 2020-01-16 19:24:58
 
 import pickle
 import abc
@@ -14,7 +14,8 @@ import pandas as pd
 from neuron import h
 
 from PySONIC.constants import *
-from PySONIC.core import Model, PointNeuron, NeuronalBilayerSonophore
+from PySONIC.core import Model, PointNeuron, NeuronalBilayerSonophore, DrivenNeuronalBilayerSonophore
+from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import si_format, timer, logger, plural, debug, logCache, filecode, simAndSave
 from PySONIC.threshold import threshold
 from PySONIC.postpro import prependDataFrame
@@ -72,6 +73,12 @@ class Node(metaclass=abc.ABCMeta):
 
     def clear(self):
         del self.section
+
+    def getAreaNormalizationFactor(self):
+        ''' Return area normalization factor '''
+        A0 = self.section(0.5).area() * 1e-12  # section area (m2)
+        A = self.pneuron.area                  # neuron membrane area (m2)
+        return A0 / A
 
     def getPyLookup(self):
         pylkp = self.pneuron.getLookup()
@@ -134,6 +141,10 @@ class Node(metaclass=abc.ABCMeta):
         '''
         setattr(self.section, 'stimon_{}'.format(self.mechname), value)
         return value
+
+    def initToSteadyState(self):
+        ''' Initialize model variables to pre-stimulus resting state values. '''
+        h.finitialize(self.pneuron.Qm0() * 1e5)  # nC/cm2
 
     def toggleStim(self):
         return toggleStim(self)
@@ -244,6 +255,11 @@ class IintraNode(Node):
     A_conv_thr = None
     A_conv_precheck = False
 
+    def clear(self):
+        super().clear()
+        if hasattr(self, 'iclamp'):
+            del self.iclamp
+
     def setStimAmp(self, Astim):
         ''' Set electrical stimulation amplitude
 
@@ -338,3 +354,33 @@ class SonicNode(Node):
     def titrate(self, pp, xfunc=None):
         return super().titrate(pp, xfunc=xfunc)
 
+
+class DrivenSonicNode(SonicNode):
+
+    def __init__(self, pneuron, Idrive, *args, **kwargs):
+        self.Idrive = Idrive
+        SonicNode.__init__(self, pneuron, *args, **kwargs)
+        self.setDrive()
+        Qrange = self.pylkp.refs['Q']
+
+    def setDrive(self):
+        logger.debug(f'setting {self.Idrive:.2f} mA/m2 driving current')
+        self.Iinj = self.Idrive * self.section(0.5).area() * 1e-6  # nA
+        logger.debug(f'Equivalent injected current: {self.Iinj:.1f} nA')
+        self.iclamp = h.IClamp(self.section(0.5))
+        self.iclamp.delay = 0  # we want to exert control over amp starting at 0 ms
+        self.iclamp.dur = 1e9  # dur must be long enough to span all our changes
+        self.iclamp.amp = self.Iinj
+
+    def __repr__(self):
+        return super().__repr__()[:-1] + f', Idrive = {self.Idrive:.2f} mA/m2)'
+
+    def filecodes(self, *args):
+        codes = SonicNode.filecodes(self, *args)
+        codes['Idrive'] = f'Idrive{self.Idrive:.1f}mAm2'
+        return codes
+
+    def meta(self, A, pp):
+        meta = super().meta(A, pp)
+        meta['Idrive'] = self.Idrive
+        return meta

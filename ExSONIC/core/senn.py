@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-12-09 09:37:46
+# @Last Modified time: 2020-01-14 12:15:47
 
 import abc
 import pickle
@@ -15,6 +15,7 @@ from inspect import signature
 from scipy import stats
 import scipy.signal
 
+from PySONIC.neurons import getPointNeuron
 from PySONIC.core import Model, PointNeuron, NeuronalBilayerSonophore
 from PySONIC.utils import si_format, pow10_format, logger, plural, filecode, simAndSave
 from PySONIC.threshold import threshold
@@ -75,6 +76,14 @@ class SennFiber(metaclass=abc.ABCMeta):
 
         # Construct model
         self.construct()
+
+    @staticmethod
+    def getSennArgs(meta):
+        return [meta[x] for x in ['nnodes', 'rs', 'nodeD', 'nodeL', 'interD', 'interL']]
+
+    @classmethod
+    def initFromMeta(cls, meta):
+        return cls(getPointNeuron(meta['neuron']), *cls.getSennArgs(meta))
 
     def construct(self):
         ''' Create and connect node sections with assigned membrane dynamics. '''
@@ -228,6 +237,10 @@ class SennFiber(metaclass=abc.ABCMeta):
     def setStimON(self, value):
         return setStimON(self, value)
 
+    def initToSteadyState(self):
+        ''' Initialize model variables to pre-stimulus resting state values. '''
+        h.finitialize(self.pneuron.Qm0() * 1e5)  # nC/cm2
+
     def toggleStim(self):
         return toggleStim(self)
 
@@ -371,7 +384,7 @@ class SennFiber(metaclass=abc.ABCMeta):
         '''
         tspikes = {}
         nspikes = np.zeros(len(data.items()))
-        
+
         for i, (id, df) in enumerate(data.items()):
 
             # Detect spikes on current trace
@@ -383,7 +396,7 @@ class SennFiber(metaclass=abc.ABCMeta):
                 # Extract time vector
                 t = df['t'].values  # s
                 if zcross:
-                    # Consider spikes as time of zero-crossing preceding each peak                    
+                    # Consider spikes as time of zero-crossing preceding each peak
                     Vm = df['Vm'].values  # mV
                     i_zcross = np.where(np.diff(np.sign(Vm)) > 0)[0]  # detect ascending zero-crossings
                     if i_zcross.size > ispikes.size:
@@ -398,7 +411,7 @@ class SennFiber(metaclass=abc.ABCMeta):
                     tspikes[id] = tzcross
                 else:
                     tspikes[id] = t[ispikes]
-        
+
         if spikematch == 'strict':
             # Assert consistency of spikes propagation
             assert np.all(nspikes == nspikes[0]), 'Inconsistent number of spikes in different nodes'
@@ -426,8 +439,8 @@ class SennFiber(metaclass=abc.ABCMeta):
         for x in [0, -1]:
             if self.ids[x] in ids:
                 ids.remove(self.ids[x])
-                
-        # Compute spikes timing dataframe (based on nspikes majority voting) and 
+
+        # Compute spikes timing dataframe (based on nspikes majority voting) and
         # update list of relevant sections accordingly
         tspikes = self.getSpikesTimings({id: data[id] for id in ids})  # (nspikes x nnodes)
         ids = list(tspikes.columns.values)  # (nnodes)
@@ -435,7 +448,7 @@ class SennFiber(metaclass=abc.ABCMeta):
         # Get coordinates of relevant nodes
         indexes = [self.ids.index(id) for id in ids]  # (nnodes)
         xcoords = self.getNodeCoords()[indexes]  # (nnodes)
-        
+
         # Compute distances across consecutive nodes only, and associated spiking delays for first spike only
         distances, delays = [], []  # (nnodes - 1)
         for i in range(len(ids)-1):
@@ -448,7 +461,7 @@ class SennFiber(metaclass=abc.ABCMeta):
         # Compute conduction velocities for each considered node pair
         # distances = np.tile(distances, (1, delays.shape[0]))   # dimension matching multi-dimensional delay array (nnodes x nspikes)
         velocities = np.array(distances) / np.array(delays)  # m/s
-        
+
         # Return specific output metrics
         if out == 'range':
             return velocities.min(), velocities.max()
@@ -569,6 +582,11 @@ class SonicFiber(SennFiber):
         self.nbls = NeuronalBilayerSonophore(self.a, self.pneuron, self.Fdrive)
 
         super().__init__(*args, **kwargs)
+
+    @classmethod
+    def initFromMeta(cls, meta):
+        return cls(getPointNeuron(meta['neuron']), *cls.getSennArgs(meta),
+                   a=meta['a'], Fdrive=meta['Fdrive'], fs=meta['fs'])
 
     def str_biophysics(self):
         return f'{super().str_biophysics()}, a = {self.a * 1e9:.1f} nm'

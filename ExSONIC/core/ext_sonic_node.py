@@ -3,12 +3,13 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-12-02 20:02:28
+# @Last Modified time: 2020-01-14 12:07:51
 
 import numpy as np
 import pandas as pd
 from neuron import h
 
+from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import si_format, pow10_format, logger, debug, logCache
 from PySONIC.threshold import threshold
 from PySONIC.constants import *
@@ -49,6 +50,11 @@ class ExtendedSonicNode(SonicNode):
         ''' Explicit naming of the model instance. '''
         return '{}({}, fs={}, deff={:.0f} nm)'.format(
             self.__class__.__name__, self.pneuron, self.fs, self.deff * 1e9)
+
+    @classmethod
+    def initFromMeta(cls, meta):
+        return cls(getPointNeuron(meta['neuron']), meta['rs'], a=meta['a'],
+                   Fdrive=meta['Fdrive'], fs=meta['fs'], deff=meta['deff'])
 
     def getLookup(self):
         ''' Get lookups computing with fs = 1. '''
