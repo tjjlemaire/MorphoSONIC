@@ -144,7 +144,7 @@ def thresholdCurve(fiber, x, thrs, thrs2=None,
                    xname='duration', xfactor=1e6, xunit='s',
                    yname='current', yfactor=1, yunit='A',
                    y2name='charge', y2factor=1, y2unit='C',
-                   scale='log', plot_chr=True, fs=12, colors=None, limits=None):
+                   scale='log', plot_chr=True, fs=12, colors=None, limits=None, xlimits=None):
 
     fig, ax = plt.subplots()
     prefix = si_format(1 / yfactor, space='')[1:]
@@ -170,8 +170,11 @@ def thresholdCurve(fiber, x, thrs, thrs2=None,
             if plot_chr:
                 ax.axvline(chronaxie(x, thrs[k]) * xfactor, linestyle='-.', color=colors[i])
     if scale != 'log':
-        ax.set_xlim(0., x.max() * xfactor)
-        ax.set_ylim(0., ax.get_ylim()[1])
+        if xlimits == None:
+            ax.set_xlim(0., x.max() * xfactor)
+            ax.set_ylim(0., ax.get_ylim()[1])
+        else:
+            ax.set_xlim(xlimits[0]*xfactor, xlimits[1]*xfactor)
     else:
         ax.set_xlim(x.min() * xfactor, x.max() * xfactor)
         if limits == None:

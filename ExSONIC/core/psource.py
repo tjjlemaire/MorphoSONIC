@@ -223,8 +223,9 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
     modality = {'name': 'u', 'unit': 'm/s'}
     conv_factor = 1e0
     source_density = 217e6  # points/m2
+    min_focus = 1e-4    # m
 
-    def __init__(self, x, y, z, Fdrive, rho=1204.1, c=1515.0, r=2e-3, theta=0):
+    def __init__(self, x, y, z, Fdrive, rho=10e3, c=1500., r=2e-3, theta=0):
         ''' Initialization.
 
             :param rho: medium density (kg/m3)
@@ -235,10 +236,9 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
         super().__init__(x)
         self.x = x   # m
         self.y = y   # m
-        self.z = z   # m
         self.Fdrive = Fdrive  # Hz
-        self.rho = rho
-        self.c = c
+        self.rho = rho   #defaul value from Kyriakou 2015
+        self.c = c       #defaul value from Kyriakou 2015
         self.r = r
         self.theta = theta
         for k in ['rho', 'c', 'theta']:
@@ -246,7 +246,14 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
 
         # Angular wave number
         self.kf = 2 * np.pi * self.Fdrive / self.c
-
+        
+        if z == 'focus':
+            z = self.getFocus()
+        self.z = z   # m
+    
+    def getFocus(self):
+        return max(self.Fdrive * self.r**2 / self.c - self.c / (4 * self.Fdrive), self.min_focus)
+        
     def area(self):
         return np.pi * self.r**2
 
@@ -407,7 +414,7 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
                 results[i, k] = self.DPSM_point(x[i], 0, z[k], u, xsource, ysource, mact)
         return results
 
-    def DPSMxy(self, x, y, z, u, m, d):
+    def DPSMxy(self, x, y, z, u, m=None, d='concentric'):
         ''' Compute acoustic amplitude in the 2D space xz, given the transducer normal particle
         velocity and the transducer approximation to use.
         It follows the Distributed Point Source Method (DPSM) from Yamada 2009 (eq. 15).
@@ -420,6 +427,10 @@ class PlanarDiskTransducerSource(ExtracellularPointSource):
             :param d: type of point sources distribution used
             :return: acoustic amplitude matrix (Pa)
         '''
+        
+        if m is None:
+            m = int(np.ceil(self.source_density * self.area()))
+            
         nx = len(x)
         ny = len(y)
         results = np.zeros((nx, ny))
