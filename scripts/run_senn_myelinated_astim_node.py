@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-09-27 14:28:52
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-15 00:42:18
+# @Last Modified time: 2020-01-26 23:54:08
 
 ''' Run simulations of an SENN SONIC fiber model with a specific point-neuron mechanism
     upon ultrasound stimulation at one onde. '''
@@ -37,7 +37,7 @@ def main():
                                     for Fdrive in args['freq']:
                                         for fs in args['fs']:
                                             fiber = myelinatedFiber(SonicFiber, pneuron, fiberD, nnodes,
-                                                rs=rs, nodeL=nodeL, d_ratio=d_ratio, a=a, Fdrive=Fdrive)
+                                                rs=rs, nodeL=nodeL, d_ratio=d_ratio, a=a, Fdrive=Fdrive, fs=fs)
                                             for inode in args['inode']:
                                                 if inode is None:
                                                     inode = nnodes // 2

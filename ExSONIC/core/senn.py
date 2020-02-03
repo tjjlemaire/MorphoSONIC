@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-01-14 12:15:47
+# @Last Modified time: 2020-01-27 00:01:07
 
 import abc
 import pickle
@@ -29,9 +29,9 @@ from .connectors import SeriesConnector
 
 
 class SennFiber(metaclass=abc.ABCMeta):
-    ''' Generic interface to the SENN fiber model. '''
+    ''' Generic single-cable, Spatially Extended Nonlinear Node (SENN) fiber model. '''
 
-    tscale = 'ms'  # relevant temporal scale of the model
+    tscale = 'ms'        # relevant temporal scale of the model
     titration_var = 'A'  # name of the titration parameter
 
     @property
@@ -239,7 +239,7 @@ class SennFiber(metaclass=abc.ABCMeta):
 
     def initToSteadyState(self):
         ''' Initialize model variables to pre-stimulus resting state values. '''
-        h.finitialize(self.pneuron.Qm0() * 1e5)  # nC/cm2
+        h.finitialize(self.pneuron.Qm0 * 1e5)  # nC/cm2
 
     def toggleStim(self):
         return toggleStim(self)

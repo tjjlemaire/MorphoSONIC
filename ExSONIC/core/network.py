@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-01-13 20:15:35
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-01-17 18:28:53
+# @Last Modified time: 2020-01-26 09:27:24
 
 import pandas as pd
 from neuron import h
@@ -112,7 +112,7 @@ class NodeCollection:
     def initToSteadyState(self):
         ''' Initialize model variables to pre-stimulus resting state values. '''
         for id, node in self.nodes.items():
-            node.section.v = node.pneuron.Qm0() * 1e5
+            node.section.v = node.pneuron.Qm0 * 1e5
         h.finitialize()
         if self.cvode.active():
             self.cvode.re_init()

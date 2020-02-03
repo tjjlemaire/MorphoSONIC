@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 11:34:09
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-27 18:20:41
+# @Last Modified time: 2020-01-26 09:10:13
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -100,7 +100,7 @@ class TestCompNode(TestComp):
 
         # Plot charge density and membrane potential profiles
         ax = axes[0]
-        ax.set_ylim(pneuron.Qbounds() * 1e5)
+        ax.set_ylim(pneuron.Qbounds * 1e5)
         ax.set_ylabel('Qm (nC/cm2)', fontsize=10)
         ax.set_title('membrane charge density', fontsize=12)
         ax = axes[1]
