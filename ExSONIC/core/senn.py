@@ -564,7 +564,7 @@ class IintraFiber(EStimFiber):
 class SonicFiber(SennFiber):
 
     simkey = 'senn_SONIC'
-    A_range = (1e0, 1e6)  # Pa
+    A_range = (1e0, 6e5)  # Pa
 
     def __init__(self, *args, a=32e-9, Fdrive=500e3, fs=1., **kwargs):
         # Retrieve point neuron object

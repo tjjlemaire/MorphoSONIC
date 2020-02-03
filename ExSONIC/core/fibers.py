@@ -335,7 +335,7 @@ def unmyelinatedFiberSundt(fiber_class, fiberD=0.8e-6, fiberL = 5e-3, **kwargs):
     rs = 100.                          # axoplasm resistivity, from Sundt 2015 (Ohm.cm)
     return unmyelinatedFiber(fiber_class, pneuron, fiberD, rs, fiberL, **kwargs)
 
-def strengthDuration(fiberType, fiberClass, fiberD, tstim_range, toffset=20e-3, outdir='.', zdistance=1e-3, Fdrive=500e3, a=32e-9, fs=1.):
+def strengthDuration(fiberType, fiberClass, fiberD, tstim_range, toffset=20e-3, outdir='.', zdistance=1e-3, Fdrive=500e3, a=32e-9, fs=1., r=2e-3):
     
     logger.info(f'creating model with fiberD = {fiberD * 1e6:.2f} um ...')
     if fiberClass == 'intracellular_electrical_stim':
@@ -373,7 +373,7 @@ def strengthDuration(fiberType, fiberClass, fiberD, tstim_range, toffset=20e-3, 
             fiber = myelinatedFiberReilly(fiber_class, fiberD, a=a, Fdrive=Fdrive, fs=fs)
         else:
             raise ValueError('fiber type unknown') 
-        psource = PlanarDiskTransducerSource(0, 0, zdistance, Fdrive)
+        psource = PlanarDiskTransducerSource(0, 0, zdistance, Fdrive, r=r)
     else:
         raise ValueError('fiber class unknown') 
         
@@ -383,11 +383,11 @@ def strengthDuration(fiberType, fiberClass, fiberD, tstim_range, toffset=20e-3, 
         del filecodes[k]
     filecodes['fiberD'] = f'fiberD{(fiberD * 1e6):.2f}um'
     if fiberClass == 'extracellular_electrical_stim' or fiberClass == 'acoustic_planar_transducer':
-        filecodes['zsource'] = f'zsource{(zdistance * 1e3):.2f}mm'
+        filecodes['zsource'] = f'zsource{(psource.z * 1e3):.2f}mm'
     if fiberClass == 'acoustic_single_node' or fiberClass == 'acoustic_planar_transducer':
         del filecodes['f']
     filecodes['tstim_range'] = 'tstim' + '-'.join(
-        [f'{si_format(x, 1, "")}m' for x in [min(tstim_range), max(tstim_range)]])
+        [f'{si_format(x, 1, "")}s' for x in [min(tstim_range), max(tstim_range)]])
     print(filecodes)
     fcode = '_'.join(filecodes.values())
     
