@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-01-26 09:27:34
+# @Last Modified time: 2020-02-04 20:36:59
 
 import pickle
 import abc
@@ -14,7 +14,7 @@ import pandas as pd
 from neuron import h
 
 from PySONIC.constants import *
-from PySONIC.core import Model, PointNeuron, NeuronalBilayerSonophore, DrivenNeuronalBilayerSonophore
+from PySONIC.core import Model, PointNeuron, NeuronalBilayerSonophore, AcousticDrive
 from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import si_format, timer, logger, plural, debug, logCache, filecode, simAndSave
 from PySONIC.threshold import threshold
@@ -29,13 +29,6 @@ class Node(metaclass=abc.ABCMeta):
     ''' Generic node interface. '''
 
     tscale = 'ms'  # relevant temporal scale of the model
-    titration_var = 'A'  # name of the titration parameter
-
-    @property
-    @abc.abstractmethod
-    def modality(self):
-        ''' Keyword used to characterize stimulation modality. '''
-        raise NotImplementedError
 
     def __init__(self, pneuron, id=None, cell=None, pylkp=None):
         ''' Initialization.
@@ -55,11 +48,10 @@ class Node(metaclass=abc.ABCMeta):
         if cell == self:
             logger.debug('Creating {} model'.format(self))
 
-        # Load mechanisms and set function tables of appropriate membrane mechanism
+        # Load mechanisms and set appropriate membrane mechanism
         self.modfile = f'{self.pneuron.name}.mod'
         self.mechname = f'{self.pneuron.name}auto'
         load_mechanisms(getNmodlDir(), self.modfile)
-        self.setFuncTables()
 
         # Create section and set membrane mechanism
         self.section = h.Section(name=id, cell=self.cell)
@@ -80,57 +72,19 @@ class Node(metaclass=abc.ABCMeta):
         A = self.pneuron.area                  # neuron membrane area (m2)
         return A0 / A
 
-    def getPyLookup(self):
-        pylkp = self.pneuron.getLookup()
-        pylkp.refs['A'] = np.array([0.])
-        for k, v in pylkp.items():
-            pylkp[k] = np.array([v])
-        return pylkp
+    def setFuncTables(self, *args, **kwargs):
+        return setFuncTables(self, *args, **kwargs)
 
-    def getModLookup(self):
-        # Get Lookup
-        if self.pylkp is None:
-            self.pylkp = self.getPyLookup()
+    def setModLookup(self, *args, **kwargs):
+        return setModLookup(self, *args, **kwargs)
 
-        # Convert lookups independent variables to hoc vectors
-        self.Aref = h.Vector(self.pylkp.refs['A'] * 1e-3)  # kPa
-        self.Qref = h.Vector(self.pylkp.refs['Q'] * 1e5)   # nC/cm2
-
-        # Convert lookup tables to hoc matrices
-        # !!! hoc lookup dictionary must be a member of the class,
-        # otherwise the assignment below does not work properly !!!
-        self.lkp = {'V': array_to_matrix(self.pylkp['V'])}  # mV
-        for ratex in self.pneuron.alphax_list.union(self.pneuron.betax_list):
-            self.lkp[ratex] = array_to_matrix(self.pylkp[ratex] * 1e-3)  # ms-1
-        for taux in self.pneuron.taux_list:
-            self.lkp[taux] = array_to_matrix(self.pylkp[taux] * 1e3)  # ms
-        for xinf in self.pneuron.xinf_list:
-            self.lkp[xinf] = array_to_matrix(self.pylkp[xinf])  # (-)
-
-    def setFuncTables(self):
-        ''' Set neuron-specific interpolation tables along the charge dimension,
-            and link them to FUNCTION_TABLEs in the MOD file of the corresponding
-            membrane mechanism.
-        '''
-        if self.cell == self:
-            logger.debug('loading %s membrane dynamics lookup tables', self.mechname)
-
-        # Get Lookup
-        self.getModLookup()
-
-        # Assign hoc matrices to 2D interpolation tables in membrane mechanism
-        for k, v in self.lkp.items():
-            setFuncTable(self.mechname, k, v, self.Aref, self.Qref)
-
-    def printStimAmp(self, value):
-        logger.debug('Stimulus amplitude: {} = {}{}'.format(
-            self.modality['name'],
-            si_format(value * self.modality['factor'], space=' ', precision=2),
-            self.modality['unit']))
+    @abc.abstractmethod
+    def setPyLookup(self, *args, **kwargs):
+        raise NotImplementedError
 
     @property
     @abc.abstractmethod
-    def setStimAmp(self, value):
+    def setDrive(self, value):
         raise NotImplementedError
 
     def setStimON(self, value):
@@ -168,24 +122,24 @@ class Node(metaclass=abc.ABCMeta):
     @Model.logNSpikes
     @Model.checkTitrate
     @Model.addMeta
-    def simulate(self, A, pp, dt=None, atol=None):
+    def simulate(self, drive, pp, dt=None, atol=None):
         ''' Set appropriate recording vectors, integrate and return output variables.
 
-            :param A: stimulus amplitude (in modality units)
+            :param drive: drive object
             :param pp: pulse protocol object
             :param dt: integration time step for fixed time step method (s)
             :param atol: absolute error tolerance for adaptive time step method (default = 1e-3)
             :return: output dataframe
         '''
-        logger.info(self.desc(self.meta(A, pp)))
+        logger.info(self.desc(self.meta(drive, pp)))
 
         # Set recording vectors
         t = setTimeProbe()
         stim = setStimProbe(self.section, self.mechname)
         probes = self.setProbesDict(self.section)
 
-        # Set stimulus amplitude and integrate model
-        self.setStimAmp(A)
+        # Set drive and integrate model
+        self.setDrive(drive)
         integrate(self, pp, dt, atol)
 
         # Store output in dataframe
@@ -202,19 +156,17 @@ class Node(metaclass=abc.ABCMeta):
 
         return data
 
-    def meta(self, A, pp):
-        meta = self.pneuron.meta(A, pp)
-        return meta
+    def meta(self, drive, pp):
+        return self.pneuron.meta(drive, pp)
 
     def desc(self, meta):
-        m = self.modality
-        Astr = f'{m["name"]} = {si_format(meta[m["name"]] * m["factor"], 2)}{m["unit"]}'
-        return f'{self}: simulation @ {Astr}, {meta["pp"].pprint()}'
+        return f'{self}: simulation @ {meta["drive"].desc}, {meta["pp"].desc}'
 
-    def titrate(self, pp, xfunc=None):
+    def titrate(self, drive, pp, xfunc=None):
         ''' Use a binary search to determine the threshold amplitude needed to obtain
             neural excitation for a given pulsing protocol.
 
+            :param drive: unresolved drive object
             :param pp: pulsed protocol object
             :param xfunc: function determining whether condition is reached from simulation output
             :return: determined threshold amplitude (Pa)
@@ -224,7 +176,7 @@ class Node(metaclass=abc.ABCMeta):
             xfunc = self.pneuron.titrationFunc
 
         return threshold(
-            lambda x: xfunc(self.simulate(x, pp)[0]),
+            lambda x: xfunc(self.simulate(drive.updatedX(x), pp)[0]),
             self.Arange, x0=self.A_conv_initial,
             eps_thr=self.A_conv_thr, rel_eps_thr=self.A_conv_rel_thr,
             precheck=self.A_conv_precheck)
@@ -244,29 +196,38 @@ class Node(metaclass=abc.ABCMeta):
 class IintraNode(Node):
     ''' Node used for simulations with intracellular current. '''
 
-    modality = {
-        'name': 'Astim',
-        'unit': 'A/m2',
-        'factor': 1e-3
-    }
-    Arange = (0., ESTIM_AMP_UPPER_BOUND)
     A_conv_initial = ESTIM_AMP_INITIAL
     A_conv_rel_thr = ESTIM_REL_CONV_THR
     A_conv_thr = None
     A_conv_precheck = False
+
+    @property
+    def Arange(self):
+        return self.pneuron.Arange
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Set invariant function tables
+        self.setFuncTables()
 
     def clear(self):
         super().clear()
         if hasattr(self, 'iclamp'):
             del self.iclamp
 
-    def setStimAmp(self, Astim):
+    def setPyLookup(self):
+        self.pylkp = self.pneuron.getLookup()
+        self.pylkp.refs['A'] = np.array([0.])
+        for k, v in self.pylkp.items():
+            self.pylkp[k] = np.array([v])
+
+    def setDrive(self, drive):
         ''' Set electrical stimulation amplitude
 
-            :param Astim: injected current density (mA/m2).
+            :param drive: electric drive object.
         '''
-        self.printStimAmp(Astim)
-        self.Iinj = Astim * self.section(0.5).area() * 1e-6  # nA
+        logger.debug(f'Stimulus: {drive}')
+        self.Iinj = drive.A * self.section(0.5).area() * 1e-6  # nA
         logger.debug(f'Equivalent injected current: {self.Iinj:.1f} nA')
         self.iclamp = h.IClamp(self.section(0.5))
         self.iclamp.delay = 0  # we want to exert control over amp starting at 0 ms
@@ -286,11 +247,6 @@ class IintraNode(Node):
 class SonicNode(Node):
     ''' Node used for simulations with US stimulus. '''
 
-    modality = {
-        'name': 'Adrive',
-        'unit': 'Pa',
-        'factor': 1e0
-    }
     A_conv_initial = ASTIM_AMP_INITIAL
     A_conv_rel_thr = 1e0
     A_conv_thr = ASTIM_ABS_CONV_THR
@@ -301,58 +257,59 @@ class SonicNode(Node):
 
             :param pneuron: point-neuron model
             :param a: sonophore diameter (m)
-            :param Fdrive: ultrasound frequency (Hz)
             :param fs: sonophore membrane coverage fraction (-)
         '''
         self.a = kwargs.pop('a', 32e-9)  # m
-        self.Fdrive = kwargs.pop('Fdrive', 500e3)  # Hz
-        self.fs = kwargs.pop('fs', 1.)  # -
+        self.fs = kwargs.pop('fs', 1.)   # -
         if self.fs > 1. or self.fs < 0.:
             raise ValueError('fs ({}) must be within [0-1]'.format(self.fs))
         if 'nbls' in kwargs:
             self.nbls = kwargs.pop('nbls')
         else:
-            self.nbls = NeuronalBilayerSonophore(self.a, pneuron, self.Fdrive)
+            self.nbls = NeuronalBilayerSonophore(self.a, pneuron)
+        self.fref = None
+        self.pylkp = None
         super().__init__(pneuron, *args, **kwargs)
-        self.Arange = (0., self.pylkp.refs['A'].max())
 
     def __repr__(self):
-        return '{}({:.1f} nm, {}, {:.0f} kHz, fs={})'.format(
-            self.__class__.__name__, self.a * 1e9, self.pneuron, self.Fdrive * 1e-3, self.fs)
+        return f'{self.__class__.__name__}({self.a * 1e9:.1f} nm, {self.pneuron}, fs={self.fs})'
 
     def str_biophysics(self):
-        return super().str_biophysics() + ', a = {}m{}, f = {}Hz'.format(
-            si_format(self.a, space=' '),
-            ', fs = {:.0f}%'.format(self.fs * 1e2) if self.fs is not None else '',
-            si_format(self.Fdrive, space=' '))
+        fs_str = f', fs = {self.fs * 1e2:.0f}%' if self.fs is not None else ''
+        return f'{super().str_biophysics()}, a = {si_format(self.a)}m{fs_str}'
 
-    def getPyLookup(self):
-        return self.nbls.getLookup2D(self.Fdrive, self.fs)
+    @property
+    def Arange(self):
+        return (0., self.pylkp.refs['A'].max())
 
-    def setStimAmp(self, Adrive):
-        ''' Set US stimulation amplitude.
+    def setPyLookup(self, f):
+        if self.pylkp is None or f != self.fref:
+            self.pylkp = self.nbls.getLookup2D(f, self.fs)
+            self.fref = f
 
-            :param Adrive: acoustic pressure amplitude (Pa)
-        '''
-        self.printStimAmp(Adrive)
-        setattr(self.section, 'Adrive_{}'.format(self.mechname), Adrive * 1e-3)
+    def setDrive(self, drive):
+        ''' Set US drive. '''
+        logger.debug(f'Stimulus: {drive}')
+        self.setFuncTables(drive.f)
+        setattr(self.section, 'Adrive_{}'.format(self.mechname), drive.A * 1e-3)
 
     def filecodes(self, *args):
-        return self.nbls.filecodes(self.Fdrive, *args, self.fs, 'NEURON', None)
+        return self.nbls.filecodes(*args, self.fs, 'NEURON', None)
 
-    def meta(self, A, pp):
-        meta = self.nbls.meta(self.Fdrive, A, pp, self.fs, 'NEURON', None)
-        return meta
+    def meta(self, drive, pp):
+        return self.nbls.meta(drive, pp, self.fs, 'NEURON', None)
 
     def getPltVars(self, *args, **kwargs):
         return self.nbls.getPltVars(*args, **kwargs)
 
-    def getPltScheme(self, *args, **kwargs):
-        return self.nbls.getPltScheme(*args, **kwargs)
+    @property
+    def pltScheme(self):
+        return self.nbls.pltScheme
 
     @logCache(os.path.join(os.path.split(__file__)[0], 'sonicnode_titrations.log'))
-    def titrate(self, pp, xfunc=None):
-        return super().titrate(pp, xfunc=xfunc)
+    def titrate(self, drive, pp, xfunc=None):
+        self.setFuncTables(drive.f)  # pre-loading lookups to have a defined Arange
+        return super().titrate(drive, pp, xfunc=xfunc)
 
 
 class DrivenSonicNode(SonicNode):

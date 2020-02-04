@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-01-14 12:07:51
+# @Last Modified time: 2020-02-03 23:16:21
 
 import numpy as np
 import pandas as pd
@@ -25,9 +25,8 @@ from ..constants import *
 class ExtendedSonicNode(SonicNode):
 
     simkey = 'nano_ext_SONIC'
-    titration_var = 'Adrive'  # name of the titration parameter
 
-    def __init__(self, pneuron, rs, a=32e-9, Fdrive=500e3, fs=0.5, deff=100e-9):
+    def __init__(self, pneuron, rs, a=32e-9, fs=0.5, deff=100e-9):
 
         # Assign attributes
         self.rs = rs  # Ohm.cm
@@ -35,7 +34,7 @@ class ExtendedSonicNode(SonicNode):
         assert fs < 1., 'fs must be lower than 1'
 
         # Initialize parent class and delete nominal section
-        super().__init__(pneuron, id=None, a=a, Fdrive=Fdrive, fs=1.)
+        super().__init__(pneuron, id=None, a=a, fs=1.)
         self.fs = fs
         del self.section
 
@@ -48,17 +47,18 @@ class ExtendedSonicNode(SonicNode):
 
     def __repr__(self):
         ''' Explicit naming of the model instance. '''
-        return '{}({}, fs={}, deff={:.0f} nm)'.format(
-            self.__class__.__name__, self.pneuron, self.fs, self.deff * 1e9)
+        return f'{super().__repr__()[:-1]}, rs={self.rs:.2e} Ohm.cm, deff={self.deff * 1e9:.0f} nm)'
 
     @classmethod
     def initFromMeta(cls, meta):
         return cls(getPointNeuron(meta['neuron']), meta['rs'], a=meta['a'],
-                   Fdrive=meta['Fdrive'], fs=meta['fs'], deff=meta['deff'])
+                   fs=meta['fs'], deff=meta['deff'])
 
-    def getLookup(self):
-        ''' Get lookups computing with fs = 1. '''
-        return self.nbls.getLookup2D(self.Fdrive, 1.)
+    def setPyLookup(self, f):
+        ''' Set lookups computing with fs = 1. '''
+        if self.fref is None or f != self.fref:
+            self.pylkp = self.nbls.getLookup2D(f, 1.)
+            self.fref = f
 
     def createSections(self):
         ''' Create morphological sections. '''
@@ -114,12 +114,11 @@ class ExtendedSonicNode(SonicNode):
         list(map(self.connector.attach, self.sections.values()))
         self.connector.connect(self.sections['sonophore'], self.sections['surroundings'])
 
-    def setStimAmp(self, Adrive):
-        ''' Set US stimulation amplitude.
-
-            :param Adrive: acoustic pressure amplitude (Pa)
-        '''
-        setattr(self.sections['sonophore'], 'Adrive_{}'.format(self.mechname), Adrive * 1e-3)
+    def setDrive(self, drive):
+        ''' Set US drive. '''
+        logger.debug(f'Stimulus: {drive}')
+        self.setFuncTables(drive.f)
+        setattr(self.sections['sonophore'], 'Adrive_{}'.format(self.mechname), drive.A * 1e-3)
         setattr(self.sections['surroundings'], 'Adrive_{}'.format(self.mechname), 0.)
 
     def setStimON(self, value):
@@ -128,16 +127,14 @@ class ExtendedSonicNode(SonicNode):
     @Model.logNSpikes
     @Model.checkTitrate
     @Model.addMeta
-    def simulate(self, Adrive, pp, dt=None, atol=None):
+    def simulate(self, drive, pp, dt=None, atol=None):
         ''' Set appropriate recording vectors, integrate and return output variables.
 
-            :param A: acoustic pressure amplitude (Pa)
+            :param drive: acoustic drive object
             :param pp: pulse protocol object
             :param dt: integration time step (s)
         '''
-        m = self.modality
-        Astr = f'{m["name"]} = {si_format(Adrive * m["factor"], 2)}{m["unit"]}'
-        logger.info(f'{self}: simulation @ {Astr}, {pp.pprint()}')
+        logger.info(f'{self}: simulation @ {drive.desc}, {pp.desc}')
 
         # Set recording vectors
         t = setTimeProbe()
@@ -145,7 +142,7 @@ class ExtendedSonicNode(SonicNode):
         probes = {k: self.setProbesDict(v) for k, v in self.sections.items()}
 
         # Set stimulus amplitude and integrate model
-        self.setStimAmp(Adrive)
+        self.setDrive(drive)
         integrate(self, pp, dt, atol)
 
         # Store output in dataframes
@@ -184,7 +181,7 @@ class ExtendedSonicNode(SonicNode):
         return nspikes_start > 0 and nspikes_end > 0
 
     @logCache(os.path.join(os.path.split(__file__)[0], 'nanoextsonic_titrations.log'))
-    def titrate(self, pp):
+    def titrate(self, drive, pp):
         ''' Use a binary search to determine the threshold amplitude needed to obtain
             neural excitation for a given pulsing protocol.
 
@@ -193,14 +190,15 @@ class ExtendedSonicNode(SonicNode):
             :param xfunc: function determining whether condition is reached from simulation output
             :return: determined threshold amplitude (Pa)
         '''
+        self.setFuncTables(drive.f)  # pre-loading lookups to have a defined Arange
         return threshold(
-            lambda x: self.isExcited(self.simulate(x, pp)[0]),
+            lambda x: self.isExcited(self.simulate(drive.updatedX(x), pp)[0]),
             self.Arange, x0=ASTIM_AMP_INITIAL,
             eps_thr=ASTIM_ABS_CONV_THR, rel_eps_thr=1e0, precheck=True)
 
-    def filecodes(self, Adrive, pp):
+    def filecodes(self, drive, pp):
         # Get parent codes and supress irrelevant entries
-        codes = self.nbls.filecodes(self.Fdrive, Adrive, pp, self.fs, 'NEURON', None)
+        codes = self.nbls.filecodes(drive, pp, self.fs, 'NEURON', None)
         del codes['method']
         codes.update({
             'rs': f'rs{self.rs:.1e}Ohm.cm',
@@ -208,8 +206,8 @@ class ExtendedSonicNode(SonicNode):
         })
         return codes
 
-    def meta(self, Adrive, pp):
-        meta = super().meta(Adrive, pp)
+    def meta(self, drive, pp):
+        meta = super().meta(drive, pp)
         meta['fs'] = self.fs
         meta['rs'] = self.rs
         meta['deff'] = self.deff

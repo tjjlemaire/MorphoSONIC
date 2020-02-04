@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-01-13 20:15:35
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-01-26 09:27:24
+# @Last Modified time: 2020-02-03 16:25:17
 
 import pandas as pd
 from neuron import h
@@ -177,7 +177,7 @@ class NodeCollection:
         }}
 
     def desc(self, meta):
-        return f'{self}: simulation @ {self.strAmps(meta["amps"])}, {meta["pp"].pprint()}'
+        return f'{self}: simulation @ {self.strAmps(meta["amps"])}, {meta["pp"].desc}'
 
     def modelCodes(self):
         return {

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-01-16 19:41:08
+# @Last Modified time: 2020-02-04 21:24:30
 
 import sys
 
@@ -15,7 +15,8 @@ from .senn import *
 from .connectors import *
 from .pyhoc import *
 from .pymodl import *
-from .psource import *
+from .grids import *
+from .sources import *
 from .fibers import *
 from .synapses import *
 from .network import *

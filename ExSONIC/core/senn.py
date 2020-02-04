@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-01-27 00:01:07
+# @Last Modified time: 2020-02-04 21:19:05
 
 import abc
 import pickle
@@ -66,6 +66,7 @@ class SennFiber(metaclass=abc.ABCMeta):
         self.interD = interD  # m
         self.interL = interL  # m
         self.mechname = self.pneuron.name + 'auto'
+        self.cell = self
 
         # Compute nodal and internodal axial resistance ()
         self.R_node = self.resistance(self.nodeD, self.nodeL)  # Ohm
@@ -76,6 +77,66 @@ class SennFiber(metaclass=abc.ABCMeta):
 
         # Construct model
         self.construct()
+
+    @property
+    def rs(self):
+        return self._rs
+
+    @rs.setter
+    def rs(self, value):
+        if value <= 0:
+            raise ValueError('axoplasmic resistivity must be positive')
+        self._rs = value
+
+    @property
+    def nnodes(self):
+        return self._nnodes
+
+    @nnodes.setter
+    def nnodes(self, value):
+        if value % 2 == 0:
+            raise ValueError('number of nodes must be odd')
+        self._nnodes = value
+
+    @property
+    def nodeD(self):
+        return self._nodeD
+
+    @nodeD.setter
+    def nodeD(self, value):
+        if value <= 0:
+            raise ValueError('node diameter must be positive')
+        self._nodeD = value
+
+    @property
+    def nodeL(self):
+        return self._nodeL
+
+    @nodeL.setter
+    def nodeL(self, value):
+        if value <= 0:
+            raise ValueError('node length must be positive')
+        self._nodeL = value
+
+    @property
+    def interD(self):
+        return self._interD
+
+    @interD.setter
+    def interD(self, value):
+        if value <= 0:
+            raise ValueError('internode diameter must be positive')
+        self._interD = value
+
+    @property
+    def interL(self):
+        return self._interL
+
+    @interL.setter
+    def interL(self, value):
+        if value < 0:
+            raise ValueError('internode diameter must be positive or null')
+        self._interL = value
 
     @staticmethod
     def getSennArgs(meta):
@@ -220,17 +281,23 @@ class SennFiber(metaclass=abc.ABCMeta):
             for sec1, sec2 in zip(sec_list[:-1], sec_list[1:]):
                 self.connector.connect(sec1, sec2)
 
-    def preProcessAmps(self, A):
-        ''' Convert stimulus intensities to a model-friendly unit
+    def setFuncTables(self, *args, **kwargs):
+        return setFuncTables(self, *args, **kwargs)
 
-            :param A: model-sized vector of stimulus intensities
-            :return: model-sized vector of converted stimulus intensities
-        '''
-        return A
+    def setModLookup(self, *args, **kwargs):
+        return setModLookup(self, *args, **kwargs)
 
-    @property
     @abc.abstractmethod
-    def setStimAmps(self, amps, config):
+    def preProcessAmps(self, drives):
+        ''' Convert stimulus to a model-friendly unit
+
+            :param drives: model-sized vector of stimulus drives
+            :return: model-sized vector of converted stimulus drives
+        '''
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def setDrives(self, source):
         ''' Set distributed stimulus amplitudes. '''
         return NotImplementedError
 
@@ -246,25 +313,24 @@ class SennFiber(metaclass=abc.ABCMeta):
 
     @Model.checkTitrate
     @Model.addMeta
-    def simulate(self, psource, A, pp, dt=None, atol=None):
+    def simulate(self, source, pp, dt=None, atol=None):
         ''' Set appropriate recording vectors, integrate and return output variables.
 
-            :param psource: point source object
-            :param A: stimulus amplitude (A)
+            :param source: source object
             :param pp: pulsed protocol object
             :param dt: integration time step for fixed time step method (s)
             :param atol: absolute error tolerance for adaptive time step method (default = 1e-3)
             :return: output dataframe
         '''
-        logger.info(self.desc(self.meta(psource, A, pp)))
+        logger.info(self.desc(self.meta(source, pp)))
 
         # Set recording vectors
         t = setTimeProbe()
         stim = setStimProbe(self.sections[self.ids[0]], self.mechname)
         probes = {k: self.nodes[k].setProbesDict(v) for k, v in self.sections.items()}
 
-        # Set distributed stimulus amplitudes
-        self.setStimAmps(psource.computeNodesAmps(self, A))
+        # Set distributed drives
+        self.setDrives(source)
 
         # Integrate model
         integrate(self, pp, dt, atol)
@@ -297,16 +363,14 @@ class SennFiber(metaclass=abc.ABCMeta):
             'interL': self.interL,
         }
 
-    def meta(self, psource, A, pp):
+    def meta(self, source, pp):
         return {**self.modelMeta(), **{
-            'psource': psource,
-            'A': A,
+            'source': source,
             'pp': pp
         }}
 
     def desc(self, meta):
-        psource = meta["psource"]
-        return f'{self}: simulation @ {repr(psource)}, {psource.strAmp(meta["A"])}, {meta["pp"].pprint()}'
+        return f'{self}: simulation @ {meta["source"]}, {meta["pp"].desc}'
 
     def isExcited(self, data):
         ''' Determine if neuron is excited from simulation output.
@@ -318,37 +382,36 @@ class SennFiber(metaclass=abc.ABCMeta):
         nspikes_end = detectSpikes(data[self.ids[-1]])[0].size
         return nspikes_start > 0 and nspikes_end > 0
 
-    def getArange(self, psource):
-        return [psource.computeSourceAmp(self, x) for x in self.A_range]
+    def getArange(self, source):
+        return [source.computeSourceAmp(self, x) for x in self.A_range]
 
-    def getAstart(self, psource):
-        return psource.computeSourceAmp(self, self.A_start)
+    def getAstart(self, source):
+        return source.computeSourceAmp(self, self.A_start)
 
     def titrationFunc(self, *args):
-        psource, A, *args = args
-        data, _ = self.simulate(psource, A, *args)
+        data, _ = self.simulate(*args)
         return self.isExcited(data)
 
-    def titrate(self, psource, pp):
+    @abc.abstractmethod
+    def titrate(self, source, pp):
         ''' Use a binary search to determine the threshold amplitude needed to obtain
             neural excitation for a given pulsing protocol.
 
-            :param psource: point source object
+            :param source: source object
             :param pp: pulsed protocol object
             :return: determined threshold amplitude
         '''
-        Arange = self.getArange(psource)
-        return threshold(
-            lambda x: self.titrationFunc(psource, x, pp),
-            Arange, rel_eps_thr=1e-2, precheck=False)
+        raise NotImplementedError
 
     def getPltVars(self, *args, **kwargs):
         return self.pneuron.getPltVars(*args, **kwargs)
 
-    def getPltScheme(self, *args, **kwargs):
-        return self.pneuron.getPltScheme(*args, **kwargs)
+    @property
+    def pltScheme(self):
+        return self.pneuron.pltScheme
 
-    def modelCodes(self):
+    @property
+    def modelcodes(self):
         return {
             'simkey': self.simkey,
             'neuron': self.pneuron.name,
@@ -360,12 +423,12 @@ class SennFiber(metaclass=abc.ABCMeta):
             'interL': f'interL{(self.interL * 1e6):.1f}um'
         }
 
-    def filecodes(self, psource, A, pp):
+    def filecodes(self, source, pp):
         return {
-            **self.modelCodes(),
-            **psource.filecodes(A),
-            'nature': 'CW' if pp.isCW() else 'PW',
-            **pp.filecodes()
+            **self.modelcodes,
+            **source.filecodes(),
+            'nature': pp.nature,
+            **pp.filecodes
         }
 
     def filecode(self, *args):
@@ -498,11 +561,9 @@ class EStimFiber(SennFiber):
         self.nodes = {id: IintraNode(self.pneuron, id, cell=self) for id in ids}
         self.sections = {id: node.section for id, node in self.nodes.items()}
 
-    def setStimAmps(self, amps):
-        ''' Set distributed stimulation amplitudes.
-
-            :param amps: model-sized vector of stimulus amplitudes
-        '''
+    def setDrives(self, source):
+        ''' Set distributed stimulation drives. '''
+        amps = source.computeNodesAmps(self)
         self.Iinj = self.preProcessAmps(amps)
         logger.debug('injected intracellular currents: Iinj = [{}] nA'.format(
             ', '.join([f'{I:.2f}' for I in self.Iinj])))
@@ -521,16 +582,11 @@ class EStimFiber(SennFiber):
             iclamp.amp = value * Iinj
         return value
 
-    def titrationFunc(self, *args):
-        psource, A, *args = args
-        if psource.is_cathodal:
-            A = -A
-        data, _ = self.simulate(psource, A, *args)
-        return self.isExcited(data)
-
-    def titrate(self, psource, *args, **kwargs):
-        Ithr = super().titrate(psource, *args, **kwargs)
-        if psource.is_cathodal:
+    def titrate(self, source, pp):
+        Ithr = threshold(
+            lambda x: self.titrationFunc(source.updatedX(-x if source.is_cathodal else x), pp),
+            self.getArange(source), rel_eps_thr=1e-2, precheck=False)
+        if source.is_cathodal:
             Ithr = -Ithr
         return Ithr
 
@@ -538,7 +594,7 @@ class EStimFiber(SennFiber):
 class IextraFiber(EStimFiber):
 
     simkey = 'senn_Iextra'
-    A_range = (1e0, 1e6)  # mV
+    A_range = (1e0, 1e5)  # mV
 
     def preProcessAmps(self, Ve):
         ''' Convert array of extracellular potentials into equivalent intracellular injected currents.
@@ -560,13 +616,16 @@ class IintraFiber(EStimFiber):
     simkey = 'senn_Iintra'
     A_range = (1e-12, 1e-7)  # A
 
+    def preProcessAmps(self, I):
+        return I
+
 
 class SonicFiber(SennFiber):
 
     simkey = 'senn_SONIC'
     A_range = (1e0, 6e5)  # Pa
 
-    def __init__(self, *args, a=32e-9, Fdrive=500e3, fs=1., **kwargs):
+    def __init__(self, *args, a=32e-9, fs=1., **kwargs):
         # Retrieve point neuron object
         pneuron = args[0]
 
@@ -574,75 +633,70 @@ class SonicFiber(SennFiber):
         self.pneuron = pneuron
         self.mechname = self.pneuron.name + 'auto'
         self.a = a            # m
-        self.Fdrive = Fdrive  # Hz
         self.fs = fs          # (-)
 
         # Initialize connector NBLS objects
         self.connector = SeriesConnector(vref=f'Vm_{self.mechname}', rmin=None)
-        self.nbls = NeuronalBilayerSonophore(self.a, self.pneuron, self.Fdrive)
+        self.nbls = NeuronalBilayerSonophore(self.a, self.pneuron)
 
+        self.fref = None
+        self.pylkp = None
         super().__init__(*args, **kwargs)
 
     @classmethod
     def initFromMeta(cls, meta):
-        return cls(getPointNeuron(meta['neuron']), *cls.getSennArgs(meta),
-                   a=meta['a'], Fdrive=meta['Fdrive'], fs=meta['fs'])
+        return cls(getPointNeuron(meta['neuron']), *cls.getSennArgs(meta), a=meta['a'], fs=meta['fs'])
 
     def str_biophysics(self):
         return f'{super().str_biophysics()}, a = {self.a * 1e9:.1f} nm'
 
     def createSections(self, ids):
         ''' Create morphological sections. '''
-        pylkp = self.nbls.getLookup2D(self.Fdrive, self.fs)
         self.nodes = {
-            id: SonicNode(
-                self.pneuron, id, cell=self, a=self.a, Fdrive=self.Fdrive, fs=self.fs,
-                nbls=self.nbls, pylkp=pylkp)
-            for id in ids
-        }
+            id: SonicNode(self.pneuron, id, cell=self, a=self.a, fs=self.fs, nbls=self.nbls)
+            for id in ids}
         self.sections = {id: node.section for id, node in self.nodes.items()}
 
-    def setStimAmps(self, amps):
-        ''' Set US stimulation amplitudes.
+    def setPyLookup(self, f):
+        if self.pylkp is None or f != self.fref:
+            self.pylkp = self.nbls.getLookup2D(f, self.fs)
+            self.fref = f
 
-            :param amps: model-sized vector of stimulus pressure amplitudes (Pa)
-        '''
+    def preProcessAmps(self, A):
+        return A
+
+    def setDrives(self, source):
+        ''' Set distributed stimulation drives. '''
+        self.setFuncTables(source.f)
+        amps = source.computeNodesAmps(self)
         self.amps = self.preProcessAmps(amps)
         logger.debug('Acoustic pressures: A = [{}] kPa'.format(
             ', '.join([f'{A * 1e-3:.2f}' for A in self.amps])))
         for i, sec in enumerate(self.sections.values()):
             setattr(sec, 'Adrive_{}'.format(self.mechname), self.amps[i] * 1e-3)
 
-    def meta(self, psource, A, pp):
-        meta = super().meta(psource, A, pp)
+    def meta(self, source, pp):
+        meta = super().meta(source, pp)
         meta.update({
             'a': self.a,
-            'Fdrive': self.Fdrive,
             'fs': self.fs
         })
         return meta
 
-    def filecodes(self, psource, A, pp):
+    def filecodes(self, source, pp):
         return {
-            **self.modelCodes(),
-            'a': '{:.0f}nm'.format(self.a * 1e9),
-            'Fdrive': '{:.0f}kHz'.format(self.Fdrive * 1e-3),
-            'fs': 'fs{:.0f}%'.format(self.fs * 1e2) if self.fs <= 1 else None,
-            **psource.filecodes(A),
-            'nature': 'CW' if pp.isCW() else 'PW',
-            **pp.filecodes()
+            **self.modelcodes,
+            'a': f'{self.a * 1e9:.0f}nm',
+            'fs': f'fs{self.fs * 1e2:.0f}%' if self.fs <= 1 else None,
+            **source.filecodes(),
+            'nature': pp.nature,
+            **pp.filecodes
         }
 
-    def titrate(self, psource, pp):
-        ''' Use a binary search to determine the threshold amplitude needed to obtain
-            neural excitation for a given pulsing protocol.
-
-            :param psource: point source object
-            :param pp: pulsed protocol object
-            :return: determined threshold amplitude
-        '''
-        Amin, Amax = self.getArange(psource)
+    def titrate(self, source, pp):
+        Amin, Amax = self.getArange(source)
         A_conv_thr = np.abs(Amax - Amin) / 1e4
-        return psource.computeMaxNodeAmp(self, threshold(
-            lambda x: self.titrationFunc(psource, x, pp),
-            (Amin, Amax), eps_thr=A_conv_thr, rel_eps_thr=1e-2, precheck=True))
+        Athr = threshold(
+            lambda x: self.titrationFunc(source.updatedX(x), pp),
+            (Amin, Amax), eps_thr=A_conv_thr, rel_eps_thr=1e-2, precheck=True)
+        return source.updatedX(Athr).computeMaxNodeAmp(self)

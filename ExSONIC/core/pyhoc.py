@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-01-16 19:24:42
+# @Last Modified time: 2020-02-04 20:35:47
 # @Author: Theo Lemaire
 # @Date:   2018-08-21 19:48:04
 # @Last Modified by:   Theo Lemaire
@@ -283,3 +283,40 @@ def setStimON(model, value):
     for sec in model.sections.values():
         setattr(sec, f'stimon_{model.mechname}', value)
     return value
+
+
+def setModLookup(model, *args, **kwargs):
+    ''' Get the appropriate model 2D lookup and translate it to Hoc. '''
+    # Set Lookup
+    model.setPyLookup(*args, **kwargs)
+
+    # Convert lookups independent variables to hoc vectors
+    model.Aref = h.Vector(model.pylkp.refs['A'] * 1e-3)  # kPa
+    model.Qref = h.Vector(model.pylkp.refs['Q'] * 1e5)   # nC/cm2
+
+    # Convert lookup tables to hoc matrices
+    # !!! hoc lookup dictionary must be a member of the class,
+    # otherwise the assignment below does not work properly !!!
+    model.lkp = {'V': array_to_matrix(model.pylkp['V'])}  # mV
+    for ratex in model.pneuron.alphax_list.union(model.pneuron.betax_list):
+        model.lkp[ratex] = array_to_matrix(model.pylkp[ratex] * 1e-3)  # ms-1
+    for taux in model.pneuron.taux_list:
+        model.lkp[taux] = array_to_matrix(model.pylkp[taux] * 1e3)  # ms
+    for xinf in model.pneuron.xinf_list:
+        model.lkp[xinf] = array_to_matrix(model.pylkp[xinf])  # (-)
+
+
+def setFuncTables(model, *args, **kwargs):
+    ''' Set neuron-specific interpolation tables along the charge dimension,
+        and link them to FUNCTION_TABLEs in the MOD file of the corresponding
+        membrane mechanism.
+    '''
+    if model.cell == model:
+        logger.debug('loading %s membrane dynamics lookup tables', model.mechname)
+
+    # Set Lookup
+    model.setModLookup(*args, **kwargs)
+
+    # Assign hoc matrices to 2D interpolation tables in membrane mechanism
+    for k, v in model.lkp.items():
+        setFuncTable(model.mechname, k, v, model.Aref, model.Qref)

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-12-02 19:35:45
+# @Last Modified time: 2020-02-04 19:41:18
 
 import os
 import numpy as np
@@ -54,7 +54,7 @@ class TestSennEstim(TestFiber):
         # Titrate for a specific duration and simulate fiber at threshold current
         logger.info(f'Running titration for {si_format(tstim)}s pulse')
         Ithr = fiber.titrate(psource, pp)  # A
-        data, meta = fiber.simulate(psource, Ithr, pp)
+        data, meta = fiber.simulate(psource.updatedX(Ithr), pp)
 
         # Compare output metrics to reference
         pulse_sim_metrics = {  # Output metrics
@@ -184,7 +184,7 @@ class TestSennEstim(TestFiber):
         # Titrate for a specific duration and simulate fiber at threshold current
         logger.info(f'Running titration for {si_format(tstim)}s pulse')
         Ithr = fiber.titrate(psource, pp)  # A
-        data, meta = fiber.simulate(psource, 1.2 * Ithr, pp)
+        data, meta = fiber.simulate(psource.updatedX(1.2 * Ithr), pp)
 
         # Compare output metrics to reference
         pulse_sim_metrics = {  # Output metrics
@@ -250,7 +250,7 @@ class TestSennEstim(TestFiber):
         I = 0.2e-9  # A
 
         # Simulate fiber
-        data, meta = fiber.simulate(psource, I, pp)
+        data, meta = fiber.simulate(psource.updatedX(I), pp)
 
         # Discard data from end nodes
         npad = 2

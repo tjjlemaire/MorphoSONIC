@@ -3,13 +3,13 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 11:34:09
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-01-26 09:10:13
+# @Last Modified time: 2020-02-03 23:31:09
 
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
-from PySONIC.core import NeuronalBilayerSonophore, PulsedProtocol
+from PySONIC.core import NeuronalBilayerSonophore, PulsedProtocol, AcousticDrive, ElectricDrive
 from PySONIC.test import TestBase
 from PySONIC.neurons import getNeuronsDict, getPointNeuron
 from PySONIC.plt import GroupedTimeSeries
@@ -24,7 +24,7 @@ class TestComp(TestBase):
         computation times. '''
 
     @staticmethod
-    def runSims(pneuron, A, pp, a, Fdrive, dt, atol):
+    def runSims(pneuron, drive, pp, a, Fdrive, dt, atol):
         return NotImplementedError
 
     @staticmethod
@@ -67,7 +67,7 @@ class TestComp(TestBase):
                     horizontalalignment='center')
 
     @classmethod
-    def compare(cls, pneuron, A, pp, a=None, Fdrive=None, dt=None, atol=None):
+    def compare(cls, pneuron, drive, pp, a=None, dt=None, atol=None):
         return NotImplementedError
 
 
@@ -82,10 +82,10 @@ class TestCompNode(TestComp):
         return pneurons
 
     @classmethod
-    def compare(cls, pneuron, A, pp, a=None, Fdrive=None, dt=None, atol=None):
+    def compare(cls, pneuron, drive, pp, a=None, dt=None, atol=None):
 
         # Run simulations
-        data, meta, tcomp, comp_title = cls.runSims(pneuron, A, pp, a, Fdrive, dt, atol)
+        data, meta, tcomp, comp_title = cls.runSims(pneuron, drive, pp, a, dt, atol)
 
         # Extract ref time and stim state
         ref_t = data[cls.def_key]['t'].values
@@ -134,19 +134,23 @@ class TestCompNode(TestComp):
                 Astim = 20.0  # mA/m2
                 tstim = 100e-3   # s
                 toffset = 50e-3  # s
-            fig = self.compare(pneuron, Astim, PulsedProtocol(tstim, toffset))
+            ELdrive = ElectricDrive(Astim)
+            pp = PulsedProtocol(tstim, toffset)
+            fig = self.compare(pneuron, ELdrive, pp)
 
     def test_ASTIM(self, is_profiled=False):
         a = 32e-9        # nm
         Fdrive = 500e3   # kHz
         tstim = 100e-3   # s
         toffset = 50e-3  # s
+        pp = PulsedProtocol(tstim, toffset)
         for name, pneuron in self.getNeurons().items():
             if pneuron.name == 'FH':
                 Adrive = 300e3  # kPa
             else:
                 Adrive = 100e3  # kPa
-            fig = self.compare(pneuron, Adrive, PulsedProtocol(tstim, toffset), a=a, Fdrive=Fdrive)
+            USdrive = AcousticDrive(Fdrive, Adrive)
+            fig = self.compare(pneuron, USdrive, pp, a=a)
 
 
 class TestNodePythonVsNeuron(TestCompNode):
@@ -157,30 +161,25 @@ class TestNodePythonVsNeuron(TestCompNode):
     def_key = 'Python'
 
     @staticmethod
-    def runSims(pneuron, A, pp, a, Fdrive, dt, atol):
+    def runSims(pneuron, drive, pp, a, dt, atol):
 
         # Initialize Python and NEURON models
         if a is not None:
-            nrn_model = SonicNode(pneuron, a=a, Fdrive=Fdrive)
-            py_model = NeuronalBilayerSonophore(a, pneuron, Fdrive=Fdrive)
-            py_args = [Fdrive, A, pp]
+            nrn_model = SonicNode(pneuron, a=a)
+            py_model = NeuronalBilayerSonophore(a, pneuron)
         else:
             nrn_model = IintraNode(pneuron)
             py_model = pneuron
-            py_args = [A, pp]
 
         # Run NEURON and Python simulations
         data, meta = {}, {}
-        data['NEURON'], meta['NEURON'] = nrn_model.simulate(A, pp, dt, atol)
-        data['Python'], meta['Python'] = py_model.simulate(*py_args)
+        data['NEURON'], meta['NEURON'] = nrn_model.simulate(drive, pp, dt, atol)
+        data['Python'], meta['Python'] = py_model.simulate(drive, pp)
         tcomp = {k: v['tcomp'] for k, v in meta.items()}
 
-        comp_title = '{}, A = {}{}, {}s'.format(
-            nrn_model.str_biophysics(),
-            si_format(A * nrn_model.modality['factor'], space=' '), nrn_model.modality['unit'],
-            si_format(pp.tstim, space=' '),
-            'adaptive time step' if dt is None else 'dt = ${}$ ms'.format(pow10_format(dt * 1e3))
-        )
+        comp_title = (
+            f'{nrn_model.str_biophysics()}, {drive.desc}, {pp.desc}',
+            'adaptive time step' if dt is None else f'dt = ${pow10_format(dt * 1e3)}$ ms')
 
         return data, meta, tcomp, comp_title
 
