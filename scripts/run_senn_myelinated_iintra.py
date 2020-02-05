@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-09-06 16:12:33
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-04 11:04:46
+# @Last Modified time: 2020-02-05 19:01:09
 
 ''' Run simulations of an SENN fiber model with a specific point-neuron mechanism
     upon intracellular electrical stimulation. '''
@@ -38,13 +38,19 @@ def main():
                                 for inode in args['inode']:
                                     if inode is None:
                                         inode = nnodes // 2
-                                    psource = IntracellularCurrent(inode, args['mode'])
+                                    psource = IntracellularCurrent(inode, mode=args['mode'])
                                     if args['save']:
-                                        simqueue = [([psource, *item[0]], item[1]) for item in queue]
+                                        simqueue = [(
+                                            [psource.updatedX(item[0][0].I), *item[0][1:]],
+                                            item[1]
+                                        ) for item in queue]
+                                        func = fiber.simAndSave
                                     else:
-                                        simqueue = [[psource, *item] for item in queue]
-                                    batch = Batch(
-                                        fiber.simAndSave if args['save'] else fiber.simulate, simqueue)
+                                        simqueue = [
+                                            [psource.updatedX(item[0].I), *item[1:]]
+                                            for item in queue]
+                                        func = fiber.simulate
+                                    batch = Batch(func, simqueue)
                                     output += batch(loglevel=args['loglevel'])
 
     # Plot resulting profiles

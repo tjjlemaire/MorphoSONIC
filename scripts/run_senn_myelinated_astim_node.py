@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-09-27 14:28:52
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-03 23:45:33
+# @Last Modified time: 2020-02-05 19:15:28
 
 ''' Run simulations of an SENN SONIC fiber model with a specific point-neuron mechanism
     upon ultrasound stimulation at one onde. '''
@@ -28,6 +28,8 @@ def main():
     logger.info('Starting SENN fiber Iext-STIM simulation batch')
     queue = [item[:2] for item in NeuronalBilayerSonophore.simQueue(
         *AStimParser.parseSimInputs(args), outputdir=args['outputdir'])]
+    if args['save']:
+        queue = [(item[0][:2], item[1]) for item in queue]
     output = []
     for pneuron in args['neuron']:
         for fiberD in args['fiberD']:
@@ -42,14 +44,21 @@ def main():
                                         for inode in args['inode']:
                                             if inode is None:
                                                 inode = nnodes // 2
-                                            psource = NodeAcousticSource(inode, Fdrive)
+                                            # psource = NodeAcousticSource(inode, Fdrive)
                                             if args['save']:
-                                                simqueue = [([psource, *item[0]], item[1]) for item in queue]
-                                                method = fiber.simAndSave
+                                                simqueue = [(
+                                                    [NodeAcousticSource(inode, item[0][0].f, item[0][0].A), *item[0][1:]],
+                                                    item[1]
+                                                ) for item in queue]
+                                                func = fiber.simAndSave
                                             else:
-                                                simqueue = [[psource, *item] for item in queue]
-                                                method = fiber.simulate
-                                            batch = Batch(method, simqueue)
+                                                simqueue = [
+                                                    [NodeAcousticSource(inode, item[0].f, item[0].A), *item[1:]]
+                                                    for item in queue]
+                                                print(simqueue)
+                                                # simqueue = [[psource, *item] for item in queue]
+                                                func = fiber.simulate
+                                            batch = Batch(func, simqueue)
                                             output += batch(loglevel=args['loglevel'])
 
     # Plot resulting profiles

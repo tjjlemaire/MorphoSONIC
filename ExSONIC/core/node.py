@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-04 20:36:59
+# @Last Modified time: 2020-02-05 18:18:29
 
 import pickle
 import abc
@@ -184,7 +184,7 @@ class Node(metaclass=abc.ABCMeta):
     @property
     @abc.abstractmethod
     def filecodes(self, *args):
-        return NotImplementedError
+        raise NotImplementedError
 
     def filecode(self, *args):
         return filecode(self, *args)
@@ -227,7 +227,7 @@ class IintraNode(Node):
             :param drive: electric drive object.
         '''
         logger.debug(f'Stimulus: {drive}')
-        self.Iinj = drive.A * self.section(0.5).area() * 1e-6  # nA
+        self.Iinj = drive.I * self.section(0.5).area() * 1e-6  # nA
         logger.debug(f'Equivalent injected current: {self.Iinj:.1f} nA')
         self.iclamp = h.IClamp(self.section(0.5))
         self.iclamp.delay = 0  # we want to exert control over amp starting at 0 ms
