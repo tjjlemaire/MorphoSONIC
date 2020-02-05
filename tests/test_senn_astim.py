@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-04 22:40:16
+# @Last Modified time: 2020-02-05 16:55:30
 
 import numpy as np
 
@@ -51,7 +51,7 @@ class TestSennAstim(TestFiber):
         fig2 = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
 
         # Comparative SD curve
-        durations = np.logspace(-5, 0, 10)  # s
+        durations = np.logspace(-5, -3, 20)  # s
         toffset = 10e-3                     # s
         pps = [PulsedProtocol(t, toffset) for t in durations]
         Athrs = np.array([fiber.titrate(psource, pp) for pp in pps])
@@ -72,20 +72,16 @@ class TestSennAstim(TestFiber):
         fiber = myelinatedFiberReilly(SonicFiber, a=self.a, fs=self.fs)
 
         # US stimulation parameters
-        pp = PulsedProtocol(3e-3, 3e-3)
-
-        # Transducer parameters
-        z0 = fiber.interL  # default transducer z-location, m
-        x0 = 0             # transducer initial x-location, m
-        y0 = 0             # transducer initial y-location, m
+        pp = PulsedProtocol(3e-3, 3e-3)  # pulsing protocol
+        x = (0., 0., -fiber.interL)      # transducer coordinates (m)
 
         # Create ultrasound source
-        psource = PlanarDiskTransducerSource(x0, y0, z0, self.Fdrive)
+        psource = PlanarDiskTransducerSource(x, self.Fdrive)
 
         # Titrate for a specific duration and simulate fiber at threshold particle velocity
         logger.info(f'Running titration for {si_format(pp.tstim)}s pulse')
         uthr = fiber.titrate(psource, pp)  # m/s
-        data, meta = fiber.simulate(psource, 1.2 * uthr, pp)
+        data, meta = fiber.simulate(psource.updatedX(1.2 * uthr), pp)
 
         # Compute conduction velocity and spike amplitude from resulting data
         sim_metrics = {
@@ -94,12 +90,23 @@ class TestSennAstim(TestFiber):
             'dV': fiber.getSpikeAmp(data)             # mV
         }
 
-        # Log output metrics
-        self.logOutputMetrics(sim_metrics)
-
         # Plot membrane potential traces for specific duration at threshold current
         fig1 = SectionCompTimeSeries([(data, meta)], 'Qm', fiber.ids).render()
         fig2 = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
+
+        # Comparative SD curve
+        durations = np.logspace(-5, -3, 20)  # s
+        toffset = 10e-3                     # s
+        pps = [PulsedProtocol(t, toffset) for t in durations]
+        uthrs = np.array([fiber.titrate(psource, pp) for pp in pps])
+
+        # Plot strength-duration curve
+        fig3 = strengthDurationCurve(
+            fiber, durations, {'myelinated': uthrs}, scale='log',
+            yname='particle velocity', yfactor=1e3, yunit='m/s', plot_chr=False)
+
+        # Log output metrics
+        self.logOutputMetrics(sim_metrics)
 
 
 if __name__ == '__main__':

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-04 22:42:34
+# @Last Modified time: 2020-02-05 16:47:05
 
 import abc
 import numpy as np
@@ -66,6 +66,10 @@ class XSource(Source):
 class IntracellularSource(XSource):
 
     def __init__(self, inode):
+        ''' Constructor.
+
+            :param inode: node index
+        '''
         self.inode = inode
 
     @property
@@ -106,6 +110,10 @@ class IntracellularSource(XSource):
 class ExtracellularSource(XSource):
 
     def __init__(self, x):
+        ''' Constructor.
+
+            :param x: n-dimensional position vector.
+        '''
         self.x = x
 
     @property
@@ -157,6 +165,11 @@ class CurrentSource(XSource):
     polarities = ('anode', 'cathode')
 
     def __init__(self, I, mode=None):
+        ''' Constructor.
+
+            :param I: current amplitude (A)
+            :param mode: polarity mode ("cathode" or "anode")
+        '''
         self.mode = mode
         self.I = I
 
@@ -200,6 +213,11 @@ class CurrentSource(XSource):
                 'unit': 'A',
                 'factor': 1e0,
                 'precision': 1
+            },
+            'mode': {
+                'desc': 'polarity mode',
+                'label': 'mode',
+                'unit': '',
             }
         }
 
@@ -382,6 +400,10 @@ class AcousticSource(XSource):
 class NodeAcousticSource(IntracellularSource, AcousticSource):
 
     def __init__(self, inode, f, A=None):
+        ''' Constructor.
+
+            :param A: Acoustic amplitude (Pa)
+        '''
         IntracellularSource.__init__(self, inode)
         AcousticSource.__init__(self, f)
         self.A = A
@@ -458,40 +480,112 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
         The rest of the field is computed assuming radial symmetry.
     '''
 
-    modality = {'name': 'u', 'unit': 'm/s'}
     conv_factor = 1e0
     source_density = 217e6  # points/m2
     min_focus = 1e-4    # m
 
-    def __init__(self, x, y, z, f, u=None, rho=10e3, c=1500., r=2e-3, theta=0):
+    def __init__(self, x, f, u=None, rho=10e3, c=1500., r=2e-3, theta=0):
         ''' Initialization.
 
             :param u: particle velocity normal to the transducer surface (m/s)
             :param rho: medium density (kg/m3)
             :param c: medium speed of sound (m/s)
-            :param theta: transducer angle of incidence (radians)
             :param r: transducer radius (m)
+            :param theta: transducer angle of incidence (radians)
         '''
-        ExtracellularSource.__init__(self, (x, z))
-        AcousticSource.__init__(self, f)
-
-        self.rho = rho   # default value from Kyriakou 2015
-        self.c = c       # default value from Kyriakou 2015
+        self.rho = rho  # default value from Kyriakou 2015
+        self.c = c      # default value from Kyriakou 2015
         self.r = r
         self.theta = theta
-        self.x = x   # m
-        self.y = y   # m
-        self.u = u   # m/s
+        self.u = u
+        ExtracellularSource.__init__(self, x)
+        AcousticSource.__init__(self, f)
 
-        # Angular wave number
-        self.kf = 2 * np.pi * self.f / self.c
+    def __repr__(self):
+        s = f'{ExtracellularSource.__repr__(self)[:-1]}, {si_format(self.f, 1, space="")}Hz'
+        if self.u is not None:
+            s = f'{s}, {si_format(self.u, 1, space="")}m/s'
+        return f'{s})'
 
-        if z == 'focus':
-            z = self.getFocus()
-        self.z = z   # m
+    @property
+    def x(self):
+        return self._x
+
+    @x.setter
+    def x(self, value):
+        if value[-1] == 'focus':
+            value[-1] = self.getFocalDistance()
+        value = tuple([self.checkFloat('x', v) for v in value])
+        self._x = value
+
+    @property
+    def y(self):
+        return self._x[1]
+
+    @property
+    def z(self):
+        return self._x[-1]
+
+    @property
+    def xz(self):
+        return (self._x[0], self._x[-1])
+
+    @property
+    def r(self):
+        return self._r
+
+    @r.setter
+    def r(self, value):
+        value = self.checkFloat('r', value)
+        self.checkStrictlyPositive('r', value)
+        self._r = value
+
+    @property
+    def theta(self):
+        return self._theta
+
+    @theta.setter
+    def theta(self, value):
+        value = self.checkFloat('theta', value)
+        self._theta = value
+
+    @property
+    def rho(self):
+        return self._rho
+
+    @rho.setter
+    def rho(self, value):
+        value = self.checkFloat('rho', value)
+        self.checkStrictlyPositive('rho', value)
+        self._rho = value
+
+    @property
+    def c(self):
+        return self._c
+
+    @c.setter
+    def c(self, value):
+        value = self.checkFloat('c', value)
+        self._c = value
+
+    @property
+    def u(self):
+        return self._u
+
+    @u.setter
+    def u(self, value):
+        if value is not None:
+            value = self.checkFloat('u', value)
+            self.checkPositiveOrNull('u', value)
+        self._u = value
+
+    @property
+    def kf(self):
+        ''' Angular wave number. '''
+        return 2 * np.pi * self.f / self.c
 
     def copy(self):
-        return self.__class__(self.x, self.y, self.z, self.f, u, rho=self.rho, c=self.c,
+        return self.__class__(self.x, self.f, self.u, rho=self.rho, c=self.c,
                               r=self.r, theta=self.theta)
 
     def __eq__(self, other):
@@ -502,6 +596,60 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
                 return False
         return True
 
+    @staticmethod
+    def inputs():
+        return {
+            **ExtracellularSource.inputs(),
+            'r': {
+                'desc': 'transducer radius',
+                'label': 'r',
+                'unit': 'm',
+                'factor': 1e0,
+                'precision': 1
+            },
+            'theta': {
+                'desc': 'transducer angle of incidence',
+                'label': 'theta',
+                'unit': 'rad',
+                'factor': 1e0,
+                'precision': 2
+            },
+            'rho': {
+                'desc': 'medium density',
+                'label': 'rho',
+                'unit': 'kg/m3',
+                'factor': 1e0,
+                'precision': 1
+            },
+            'c': {
+                'desc': 'medium speed of sound',
+                'label': 'c',
+                'unit': 'm/s',
+                'factor': 1e0,
+                'precision': 1
+            },
+            **AcousticSource.inputs(),
+            'u': {
+                'desc': 'particle velocity normal to the transducer surface',
+                'label': 'u',
+                'unit': 'm/s',
+                'factor': 1e0,
+                'precision': 1
+            }
+        }
+
+    def filecodes(self):
+        d = {
+            **ExtracellularSource.filecodes(self),
+            'r': f'{self.r:.0f}{self.inputs()["r"]["unit"]}',
+            'theta': f'{self.theta:.0f}{self.inputs()["theta"]["unit"]}',
+            'rho': f'{self.rho:.0f}{self.inputs()["rho"]["unit"]}',
+            'c': f'{self.c:.0f}{self.inputs()["c"]["unit"]}',
+            **AcousticSource.filecodes(self)}
+        if self.u is not None:
+            d['u'] = f'{self.u:.0f}{self.inputs()["u"]["unit"]}'
+        return d
+
     @property
     def xvar(self):
         return self.u
@@ -510,27 +658,34 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
     def xvar(self, value):
         self.u = value
 
-    def getFocus(self):
-        return max(self.f * self.r**2 / self.c - self.c / (4 * self.f), self.min_focus)
+    def distance(self, x):
+        return np.linalg.norm(np.asarray(x) - np.asarray(self.xz))
+
+    def getFocalDistance(self):
+        ''' Get transducer focal distance. '''
+        d = self.f * self.r**2 / self.c - self.c / (4 * self.f)
+        return max(d, self.min_focus)
 
     def area(self):
+        ''' Transducer surface area. '''
         return np.pi * self.r**2
 
     def relNormalAxisAmp(self, z):
-        ''' Compute the relative acoustic amplitude at a given distance along the transducer normal axis.
+        ''' Compute the relative acoustic amplitude at a given coordinate along the transducer normal axis.
 
-            :param z: distance from transducer (m)
+            :param z: coordinate on transducer normal axis (m)
             :return: acoustic amplitude per particle velocity (Pa.s/m)
         '''
+        deltaz = z - self.z
         j = complex(0, 1)  # imaginary number
-        ez = np.exp(j * self.kf * z)
-        ezr = np.exp(j * self.kf * np.sqrt(z**2 + self.r**2))
+        ez = np.exp(j * self.kf * deltaz)
+        ezr = np.exp(j * self.kf * np.sqrt(deltaz**2 + self.r**2))
         return np.abs(self.rho * self.c * (ez - ezr))
 
     def normalAxisAmp(self, z):
-        ''' Compute the acoustic amplitude at a given distance along the transducer normal axis.
+        ''' Compute the acoustic amplitude at a given coordinate along the transducer normal axis.
 
-            :param z: distance from transducer (m)
+            :param z: coordinate on transducer normal axis (m)
             :return: acoustic amplitude (Pa)
         '''
         return self.u * self.relNormalAxisAmp(z)
@@ -544,15 +699,10 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
     def DPSM_sunflowersources(self, m, alpha=1):
         return getCircle2DGrid(r, m, 'sunflower')
 
-    def DPSM_linearsources(self, m):
-        x = np.linspace(-self.r, self.r, m)
-        y = np.zeros(x.size)
-        return x, y
-
     def DPSM_point(self, x, y, z, xsource, ysource, mact):
         ''' Compute acoustic amplitude in the point (x,z), given the transducer normal particle
-        velocity and the distribution of point sources used to approximate the transducer.
-        It follows the Distributed Point Source Method (DPSM) from Yamada 2009 (eq. 15).
+            velocity and the distribution of point sources used to approximate the transducer.
+            It follows the Distributed Point Source Method (DPSM) from Yamada 2009 (eq. 15).
 
             :param x: x coordinate of the point for which compute the acustic amplitude (m)
             :param z: z coordinate of the point for which compute the acustic amplitude (m)
@@ -563,7 +713,7 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
         '''
         j = complex(0, 1)                          # imaginary number
         ds = self.area() / mact              # surface associated at each point source
-        deltax = xsource + self.x * np.ones(mact) - x * np.ones(mact)
+        deltax = xsource + self.x[0] * np.ones(mact) - x * np.ones(mact)
         deltay = ysource + self.y * np.ones(mact) - y * np.ones(mact)
         deltaz = (self.z - z) * np.ones(mact)
         distance = np.sqrt(deltax**2 + deltay**2 + deltaz**2)      # distances of the point (x,z) to the point sources on the transducer surface
@@ -571,8 +721,8 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
 
     def DPSM2d(self, x, z, m=None, d='concentric'):
         ''' Compute acoustic amplitude in the 2D space xz, given the transducer normal particle
-        velocity and the transducer approximation to use.
-        It follows the Distributed Point Source Method (DPSM) from Yamada 2009 (eq. 15).
+            velocity and the transducer approximation to use.
+            It follows the Distributed Point Source Method (DPSM) from Yamada 2009 (eq. 15).
 
             :param x: axis parallel to a fixed diameter of the transducer (m)
             :param z: transducer normal axis (m)
@@ -582,16 +732,13 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
         '''
         if m is None:
             m = int(np.ceil(self.source_density * self.area()))
-        # ref_dict[d][m][tuple(x.tolist())][tuple(z.tolist())]
-
         nx = len(x)
         nz = len(z)
         results = np.zeros((nx, nz))
         DPSM_method = {
             'sunflower': self.DPSM_sunflowersources,
             'squared': self.DPSM_squaredsources,
-            'concentric': self.DPSM_concentricsources,
-            'linear': self.DPSM_linearsources
+            'concentric': self.DPSM_concentricsources
         }[d]
         xsource, ysource = DPSM_method(m)
         mact = len(xsource)
@@ -602,8 +749,8 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
 
     def DPSMxy(self, x, y, z, m=None, d='concentric'):
         ''' Compute acoustic amplitude in the 2D space xz, given the transducer normal particle
-        velocity and the transducer approximation to use.
-        It follows the Distributed Point Source Method (DPSM) from Yamada 2009 (eq. 15).
+            velocity and the transducer approximation to use.
+            It follows the Distributed Point Source Method (DPSM) from Yamada 2009 (eq. 15).
 
             :param x: axis parallel to a fixed diameter of the transducer (m)
             :param y: axis parallel to the transducer and perpendiculr to x (m)
@@ -624,8 +771,6 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
             xsource, ysource = self.DPSM_squaredsources(m)
         if d == 'concentric':
             xsource, ysource = self.DPSM_concentricsources(m)
-        if d == 'linear':
-            xsource, ysource = self.DPSM_linearsources(m)
         mact = len(xsource)
         for i in range(nx):
             for j in range(ny):
@@ -640,11 +785,11 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
             :return: vector of acoustic amplitude at the nodes (Pa)
         '''
         # Get fiber nodes coordinates
-        node_coords = np.array([fiber.getNodeCoords(), np.zeros(fiber.nnodes)])
-        node_xcoords = np.array(fiber.getNodeCoords())
+        node_xcoords = fiber.getNodeCoords()
+        node_coords = np.array([node_xcoords, np.zeros(fiber.nnodes)])
 
         # Rotate around source incident angle
-        node_coords = rotAroundPoint2D(node_coords, self.theta, self.x)
+        node_coords = rotAroundPoint2D(node_coords, self.theta, self.xz)
 
         # Compute amplitudes
         node_amps = self.DPSM2d(node_xcoords, np.array([0]))
@@ -664,18 +809,6 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
 
         # Compute the particle velocity needed to generate the acoustic amplitude value at this node
         return A / self.relNormalAxisAmp(self.getMinNodeDistance(fiber))  # m/s
-
-    def filecodes(self, A):
-        pos_mm = ','.join(['{:.1f}'.format(x * 1e3) for x in [self.x, self.y, self.z]])
-        return {
-            'psource': f'ps({pos_mm})mm',
-            'f': f'{self.f * 1e-3:.0f}kHz',
-            'A': f'{si_format(A*1e-3, 2)}kPa'
-        }
-
-    def strPos(self):
-        pos_mm = ['{:.1f}'.format(x * 1e3) for x in [self.x, self.y, self.z]]
-        return '({})mm'.format(','.join(pos_mm))
 
 
 class SourceArray:

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-04 21:19:05
+# @Last Modified time: 2020-02-05 16:52:08
 
 import abc
 import pickle
@@ -694,9 +694,8 @@ class SonicFiber(SennFiber):
         }
 
     def titrate(self, source, pp):
-        Amin, Amax = self.getArange(source)
-        A_conv_thr = np.abs(Amax - Amin) / 1e4
-        Athr = threshold(
+        Arange = self.getArange(source)
+        A_conv_thr = np.abs(Arange[1] - Arange[0]) / 1e4
+        return threshold(
             lambda x: self.titrationFunc(source.updatedX(x), pp),
-            (Amin, Amax), eps_thr=A_conv_thr, rel_eps_thr=1e-2, precheck=True)
-        return source.updatedX(Athr).computeMaxNodeAmp(self)
+            Arange, eps_thr=A_conv_thr, rel_eps_thr=1e-2, precheck=True)

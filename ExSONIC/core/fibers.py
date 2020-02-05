@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-11-27 18:03:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-04 23:05:59
+# @Last Modified time: 2020-02-05 16:29:46
 
 ''' Constructor functions for different types of fibers. '''
 
@@ -119,7 +119,7 @@ def unmyelinatedFiberConvergence(pneuron, fiberD, rs, fiberL, maxNodeL_range, pp
     # Get filecode
     fiber = unmyelinatedFiber(IintraFiber, pneuron, fiberD, rs, fiberL, maxNodeL=fiberL / 3)
     filecodes = fiber.filecodes(IntracellularCurrent(fiber.nnodes // 2, 0.0), pp)
-    for k in ['nnodes', 'nodeL', 'interD', 'interL', 'inode', 'A', 'nature', 'toffset', 'PRF', 'DC']:
+    for k in ['nnodes', 'nodeL', 'interD', 'interL', 'inode', 'I', 'nature', 'toffset', 'PRF', 'DC']:
         del filecodes[k]
     filecodes['tstim'] = si_format(pp.tstim, 1, space='') + 's'
     filecodes['nodeL_range'] = 'nodeL' + '-'.join(
@@ -203,7 +203,7 @@ def unmyelinatedFiberConvergence_fiberL(pneuron, fiberD, rs, fiberL_range, pp, o
     # Get filecode
     fiber = unmyelinatedFiber(IintraFiber, pneuron, fiberD, rs, 5e-3)
     filecodes = fiber.filecodes(IntracellularCurrent(fiber.nnodes // 2, 0.0), pp)
-    for k in ['nnodes', 'nodeL', 'interD', 'interL', 'inode', 'A', 'nature', 'toffset', 'PRF', 'DC']:
+    for k in ['nnodes', 'nodeL', 'interD', 'interL', 'inode', 'I', 'nature', 'toffset', 'PRF', 'DC']:
         del filecodes[k]
     filecodes['tstim'] = si_format(pp.tstim, 1, space='') + 's'
     filecodes['fiberL_range'] = 'fiberL' + '-'.join(
@@ -365,7 +365,7 @@ def strengthDuration(fiberType, fiberClass, fiberD, tstim_range, toffset=20e-3, 
             fiber = myelinatedFiberReilly(fiber_class, fiberD, a=a)
         else:
             raise ValueError('fiber type unknown')
-        psource = NodeAcousticSource(inode=fiber.nnodes//2, f)
+        psource = NodeAcousticSource(fiber.nnodes//2, f)
     elif fiberClass == 'acoustic_planar_transducer':
         fiber_class = SonicFiber
         if fiberType =='sundt':
@@ -380,7 +380,7 @@ def strengthDuration(fiberType, fiberClass, fiberD, tstim_range, toffset=20e-3, 
 
     # Get filecode
     filecodes = fiber.filecodes(psource.updatedX(1), PulsedProtocol(toffset/100, toffset))
-    for k in ['nnodes', 'nodeD', 'rs', 'nodeL', 'interD', 'interL', 'I', 'A', , 'inode', 'nature', 'tstim', 'toffset', 'PRF', 'DC']:
+    for k in ['nnodes', 'nodeD', 'rs', 'nodeL', 'interD', 'interL', 'I', 'inode', 'nature', 'tstim', 'toffset', 'PRF', 'DC']:
         if k in filecodes:
             del filecodes[k]
     filecodes['fiberD'] = f'fiberD{(fiberD * 1e6):.2f}um'
