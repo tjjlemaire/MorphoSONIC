@@ -484,7 +484,7 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
     source_density = 217e6  # points/m2
     min_focus = 1e-4    # m
 
-    def __init__(self, x, f, u=None, rho=10e3, c=1500., r=2e-3, theta=0):
+    def __init__(self, x, f, u=None, rho=1e3, c=1500., r=2e-3, theta=0):
         ''' Initialization.
 
             :param u: particle velocity normal to the transducer surface (m/s)
@@ -498,8 +498,8 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
         self.r = r
         self.theta = theta
         self.u = u
-        ExtracellularSource.__init__(self, x)
         AcousticSource.__init__(self, f)
+        ExtracellularSource.__init__(self, x)
 
     def __repr__(self):
         s = f'{ExtracellularSource.__repr__(self)[:-1]}, {si_format(self.f, 1, space="")}Hz'
@@ -513,6 +513,7 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
 
     @x.setter
     def x(self, value):
+        value = list(value)
         if value[-1] == 'focus':
             value[-1] = self.getFocalDistance()
         value = tuple([self.checkFloat('x', v) for v in value])
@@ -603,8 +604,8 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
             'r': {
                 'desc': 'transducer radius',
                 'label': 'r',
-                'unit': 'm',
-                'factor': 1e0,
+                'unit': 'mm',
+                'factor': 1e3,
                 'precision': 1
             },
             'theta': {
@@ -641,7 +642,7 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
     def filecodes(self):
         d = {
             **ExtracellularSource.filecodes(self),
-            'r': f'{self.r:.0f}{self.inputs()["r"]["unit"]}',
+            'r': f'{self.r*(self.inputs()["r"]["factor"]):.2f}{self.inputs()["r"]["unit"]}',
             'theta': f'{self.theta:.0f}{self.inputs()["theta"]["unit"]}',
             'rho': f'{self.rho:.0f}{self.inputs()["rho"]["unit"]}',
             'c': f'{self.c:.0f}{self.inputs()["c"]["unit"]}',
