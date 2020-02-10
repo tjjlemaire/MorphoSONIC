@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-05 18:18:45
+# @Last Modified time: 2020-02-07 12:27:10
 
 import abc
 import numpy as np
@@ -484,7 +484,7 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
     source_density = 217e6  # points/m2
     min_focus = 1e-4    # m
 
-    def __init__(self, x, f, u=None, rho=10e3, c=1500., r=2e-3, theta=0):
+    def __init__(self, x, f, u=None, rho=1e3, c=1500., r=2e-3, theta=0):
         ''' Initialization.
 
             :param u: particle velocity normal to the transducer surface (m/s)
@@ -498,8 +498,8 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
         self.r = r
         self.theta = theta
         self.u = u
-        ExtracellularSource.__init__(self, x)
         AcousticSource.__init__(self, f)
+        ExtracellularSource.__init__(self, x)
 
     def __repr__(self):
         s = f'{ExtracellularSource.__repr__(self)[:-1]}, {si_format(self.f, 1, space="")}Hz'
@@ -513,6 +513,8 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
 
     @x.setter
     def x(self, value):
+        if isinstance(value, tuple):
+            value = list(value)
         if value[-1] == 'focus':
             value[-1] = self.getFocalDistance()
         value = tuple([self.checkFloat('x', v) for v in value])

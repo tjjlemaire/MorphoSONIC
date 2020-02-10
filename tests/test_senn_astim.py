@@ -3,9 +3,13 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-05 16:55:30
+# @Last Modified time: 2020-02-10 10:37:54
 
+import os
 import numpy as np
+import csv
+import pandas as pd
+import matplotlib.pyplot as plt
 
 from PySONIC.neurons import getPointNeuron
 from PySONIC.core import PulsedProtocol
@@ -64,50 +68,43 @@ class TestSennAstim(TestFiber):
         # Log output metrics
         self.logOutputMetrics(sim_metrics)
 
-    def test_transducer(self, is_profiled=False):
-        ''' Run SENN fiber ASTIM simulation for a flat external transducer. '''
-        logger.info('Test: transducer source on myelinated fiber')
-
-        # Myelinated fiber model
-        fiber = myelinatedFiberReilly(SonicFiber, a=self.a, fs=self.fs)
-
-        # US stimulation parameters
-        pp = PulsedProtocol(3e-3, 3e-3)  # pulsing protocol
-        x = (0., 0., -fiber.interL)      # transducer coordinates (m)
-
-        # Create ultrasound source
-        psource = PlanarDiskTransducerSource(x, self.Fdrive)
+    def transducer(self, fiber, pp):
+        ''' Run SENN fiber ASTIM simulations with a flat external transducer. '''
+        # US source
+        diam = 19e-3  # transducer diameter (m)
+        source = PlanarDiskTransducerSource((0., 0., 'focus'), self.Fdrive, r=diam/2)
 
         # Titrate for a specific duration and simulate fiber at threshold particle velocity
         logger.info(f'Running titration for {si_format(pp.tstim)}s pulse')
-        uthr = fiber.titrate(psource, pp)  # m/s
-        data, meta = fiber.simulate(psource.updatedX(1.2 * uthr), pp)
+        uthr = fiber.titrate(source, pp)  # m/s
+        Athr = uthr * source.relNormalAxisAmp(source.z)  # Pa
+        data, meta = fiber.simulate(source.updatedX(1.2 * uthr), pp)
 
         # Compute conduction velocity and spike amplitude from resulting data
         sim_metrics = {
             'uthr': uthr,                             # m/s
+            'Athr': Athr,                             # Pa
             'cv': fiber.getConductionVelocity(data),  # m/s
             'dV': fiber.getSpikeAmp(data)             # mV
         }
 
         # Plot membrane potential traces for specific duration at threshold current
-        fig1 = SectionCompTimeSeries([(data, meta)], 'Qm', fiber.ids).render()
-        fig2 = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
-
-        # Comparative SD curve
-        durations = np.logspace(-5, -3, 20)  # s
-        toffset = 10e-3                     # s
-        pps = [PulsedProtocol(t, toffset) for t in durations]
-        uthrs = np.array([fiber.titrate(psource, pp) for pp in pps])
-
-        # Plot strength-duration curve
-        fig3 = strengthDurationCurve(
-            fiber, durations, {'myelinated': uthrs}, scale='log',
-            yname='particle velocity', yfactor=1e3, yunit='m/s', plot_chr=False)
+        fig = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
 
         # Log output metrics
         self.logOutputMetrics(sim_metrics)
 
+    def test_transducer1(self, is_profiled=False):
+        logger.info('Test: transducer source on myelinated fiber')
+        fiber = myelinatedFiberReilly(SonicFiber, a=self.a, fs=self.fs)
+        pp = PulsedProtocol(100e-6, 3e-3)
+        self.transducer(fiber, pp)
+
+    def test_transducer2(self, is_profiled=False):
+        logger.info('Test: transducer source on myelinated fiber')
+        fiber = unmyelinatedFiberSundt(SonicFiber, a=self.a, fs=self.fs)
+        pp = PulsedProtocol(10e-3, 3e-3)
+        self.transducer(fiber, pp)
 
 if __name__ == '__main__':
     tester = TestSennAstim()
