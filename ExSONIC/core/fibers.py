@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-11-27 18:03:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-05 16:29:46
+# @Last Modified time: 2020-02-06 20:09:15
 
 ''' Constructor functions for different types of fibers. '''
 
@@ -374,7 +374,7 @@ def strengthDuration(fiberType, fiberClass, fiberD, tstim_range, toffset=20e-3, 
             fiber = myelinatedFiberReilly(fiber_class, fiberD, a=a, fs=fs)
         else:
             raise ValueError('fiber type unknown')
-        psource = PlanarDiskTransducerSource((0., 0., zdistance), Fdrive, r=r)
+        psource = PlanarDiskTransducerSource((0, 0, zdistance), Fdrive, r=r)
     else:
         raise ValueError('fiber class unknown')
 

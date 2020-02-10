@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-05 16:52:08
+# @Last Modified time: 2020-02-06 14:16:25
 
 import abc
 import pickle
@@ -211,11 +211,10 @@ class SennFiber(metaclass=abc.ABCMeta):
     def length(self):
         return self.nnodes * self.nodeL + (self.nnodes - 1) * self.interL
 
-    @property
     @abc.abstractmethod
     def createSections(self, ids):
         ''' Create morphological sections. '''
-        return NotImplementedError
+        raise NotImplementedError
 
     def setGeometry(self):
         ''' Set sections geometry. '''
@@ -299,7 +298,7 @@ class SennFiber(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def setDrives(self, source):
         ''' Set distributed stimulus amplitudes. '''
-        return NotImplementedError
+        raise NotImplementedError
 
     def setStimON(self, value):
         return setStimON(self, value)

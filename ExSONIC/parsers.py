@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-18 21:14:43
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-01-17 18:19:49
+# @Last Modified time: 2020-02-05 18:55:38
 
 import matplotlib.pyplot as plt
 from PySONIC.parsers import *
@@ -128,10 +128,10 @@ class EStimMyelinatedFiberParser(MyelinatedFiberParser, PWSimParser):
         self.add_argument(
             '--Arange', type=str, nargs='+',
             help='Point-source current amplitude range {} ({})'.format(self.dist_str, self.amp_unit))
-        self.to_parse['amp'] = self.parseAmp
+        self.to_parse['amp'] = self.parseAmplitude
 
-    def parseAmp(self, args):
-        return EStimParser.parseAmp(self, args)
+    def parseAmplitude(self, args):
+        return EStimParser.parseAmplitude(self, args)
 
     def parse(self):
         args = MyelinatedFiberParser.parse(self, args=PWSimParser.parse(self))
@@ -238,8 +238,8 @@ class NodeAStimMyelinatedFiberParser(AStimMyelinatedFiberParser):
         self.add_argument(
             '--inode', nargs='+', type=int, help='Node index for acoustic source')
 
-    def parseAmp(self, args):
-        return AStimParser.parseAmp(self, args)
+    def parseAmplitude(self, args):
+        return AStimParser.parseAmplitude(self, args)
 
 
 class ExtSonicNodeAStimParser(SpatiallyExtendedAStimParser):

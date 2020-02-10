@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-15 20:33:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-15 00:40:23
+# @Last Modified time: 2020-02-05 18:58:57
 
 ''' Run simulations of an SENN fiber model with a specific point-neuron mechanism
     upon extracellular electrical stimulation. '''
@@ -25,6 +25,7 @@ def main():
 
     # Run batch
     logger.info('Starting SENN fiber Iext-STIM simulation batch')
+    out = EStimParser.parseSimInputs(args)
     queue = PointNeuron.simQueue(*EStimParser.parseSimInputs(args), outputdir=args['outputdir'])
     output = []
     for pneuron in args['neuron']:
@@ -39,13 +40,19 @@ def main():
                                     for zps in args['zps']:
                                         if zps is None:
                                             zps = fiber.interL
-                                        psource = ExtracellularCurrent((xps, zps), args['mode'])
+                                        psource = ExtracellularCurrent((xps, zps), mode=args['mode'])
                                         if args['save']:
-                                            simqueue = [([psource, *item[0]], item[1]) for item in queue]
+                                            simqueue = [(
+                                                [psource.updatedX(item[0][0].I), *item[0][1:]],
+                                                item[1]
+                                            ) for item in queue]
+                                            func = fiber.simAndSave
                                         else:
-                                            simqueue = [[psource, *item] for item in queue]
-                                        batch = Batch(
-                                            fiber.simAndSave if args['save'] else fiber.simulate, simqueue)
+                                            simqueue = [
+                                                [psource.updatedX(item[0].I), *item[1:]]
+                                                for item in queue]
+                                            func = fiber.simulate
+                                        batch = Batch(func, simqueue)
                                         output += batch(loglevel=args['loglevel'])
 
     # Plot resulting profiles

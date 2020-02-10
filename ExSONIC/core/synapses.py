@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-01-14 15:49:25
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-01-17 12:03:42
+# @Last Modified time: 2020-02-05 18:18:40
 
 import abc
 from neuron import h
@@ -22,7 +22,7 @@ class Synapse(metaclass=abc.ABCMeta):
     @property
     @abc.abstractmethod
     def hoc_obj(self):
-        return NotImplementedError
+        raise NotImplementedError
 
     def __init__(self, Vthr=0., delay=1.):
         ''' Constructor.

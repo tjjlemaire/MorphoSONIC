@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-05 16:47:05
+# @Last Modified time: 2020-02-07 12:27:10
 
 import abc
 import numpy as np
@@ -22,15 +22,15 @@ class Source(StimObject):
 
     @abc.abstractmethod
     def copy(self):
-        return NotImplementedError
+        raise NotImplementedError
 
     @abc.abstractmethod
     def computeNodesAmps(self, fiber):
-        return NotImplementedError
+        raise NotImplementedError
 
     @abc.abstractmethod
     def computeSourceAmp(self, fiber):
-        return NotImplementedError
+        raise NotImplementedError
 
     @property
     def is_searchable(self):
@@ -513,7 +513,8 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
 
     @x.setter
     def x(self, value):
-        value = list(value)
+        if isinstance(value, tuple):
+            value = list(value)
         if value[-1] == 'focus':
             value[-1] = self.getFocalDistance()
         value = tuple([self.checkFloat('x', v) for v in value])

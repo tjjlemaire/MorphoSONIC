@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 11:34:09
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-03 23:31:09
+# @Last Modified time: 2020-02-05 18:18:31
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -25,7 +25,7 @@ class TestComp(TestBase):
 
     @staticmethod
     def runSims(pneuron, drive, pp, a, Fdrive, dt, atol):
-        return NotImplementedError
+        raise NotImplementedError
 
     @staticmethod
     def createFigureBackbone():
@@ -68,7 +68,7 @@ class TestComp(TestBase):
 
     @classmethod
     def compare(cls, pneuron, drive, pp, a=None, dt=None, atol=None):
-        return NotImplementedError
+        raise NotImplementedError
 
 
 class TestCompNode(TestComp):
