@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-05 18:18:29
+# @Last Modified time: 2020-02-14 11:05:31
 
 import pickle
 import abc
@@ -272,7 +272,7 @@ class SonicNode(Node):
         super().__init__(pneuron, *args, **kwargs)
 
     def __repr__(self):
-        return f'{self.__class__.__name__}({self.a * 1e9:.1f} nm, {self.pneuron}, fs={self.fs})'
+        return f'{self.__class__.__name__}({self.a * 1e9:.1f} nm, {self.pneuron}, fs={self.fs:.2f})'
 
     def str_biophysics(self):
         fs_str = f', fs = {self.fs * 1e2:.0f}%' if self.fs is not None else ''

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-10 10:37:54
+# @Last Modified time: 2020-02-14 14:48:15
 
 import os
 import numpy as np
@@ -16,7 +16,7 @@ from PySONIC.core import PulsedProtocol
 from PySONIC.utils import logger, si_format
 from ExSONIC.test import TestFiber
 from ExSONIC.core import SonicFiber, myelinatedFiberReilly, unmyelinatedFiberSundt
-from ExSONIC.core import NodeAcousticSource, PlanarDiskTransducerSource
+from ExSONIC.core.sources import *
 from ExSONIC.plt import SectionCompTimeSeries, strengthDurationCurve, strengthDistanceCurve
 from ExSONIC.utils import chronaxie
 
@@ -62,6 +62,46 @@ class TestSennAstim(TestFiber):
 
         # Plot strength-duration curve
         fig3 = strengthDurationCurve(
+            fiber, durations, {'myelinated': Athrs}, scale='log',
+            yname='amplitude', yfactor=1e-3, yunit='Pa', plot_chr=False)
+
+        # Log output metrics
+        self.logOutputMetrics(sim_metrics)
+
+    def test_gaussian(self, is_profiled=False):
+        ''' Run myelinated fiber ASTIM simulation with gaussian distribution source. '''
+        logger.info('Test: gaussian distribution source on myelinated fiber')
+
+        # Myelinated fiber model
+        fiber = myelinatedFiberReilly(SonicFiber, a=self.a, fs=self.fs)
+
+        # US stimulation parameters
+        psource = GaussianAcousticSource(0., fiber.length() / 4., self.Fdrive)
+        pp = PulsedProtocol(3e-3, 3e-3)
+
+        # Titrate for a specific duration and simulate fiber at threshold US amplitude
+        logger.info(f'Running titration for {si_format(pp.tstim)}s pulse')
+        Athr = fiber.titrate(psource, pp)  # Pa
+        data, meta = fiber.simulate(psource.updatedX(1.2 * Athr), pp)
+
+        # Compute conduction velocity and spike amplitude from resulting data
+        sim_metrics = {
+           'Athr': Athr,                             # Pa
+           'cv': fiber.getConductionVelocity(data),  # m/s
+           'dV': fiber.getSpikeAmp(data)             # mV
+        }
+
+        # Plot membrane potential and membrane charge density traces
+        fig1 = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
+
+        # Comparative SD curve
+        durations = np.logspace(-5, -3, 20)  # s
+        toffset = 10e-3                     # s
+        pps = [PulsedProtocol(t, toffset) for t in durations]
+        Athrs = np.array([fiber.titrate(psource, pp) for pp in pps])
+
+        # Plot strength-duration curve
+        fig2 = strengthDurationCurve(
             fiber, durations, {'myelinated': Athrs}, scale='log',
             yname='amplitude', yfactor=1e-3, yunit='Pa', plot_chr=False)
 
