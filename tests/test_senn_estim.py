@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-04 19:41:18
+# @Last Modified time: 2020-02-14 18:30:01
 
 import os
 import numpy as np
@@ -294,6 +294,53 @@ class TestSennEstim(TestFiber):
         self.logOutputMetrics(pulse_sim_metrics, pulse_ref_metrics)
         logger.info(f'Computing strength-duration curve metrics')
         self.logOutputMetrics(SDcurve_sim_metrics)
+
+
+    def gaussian(self, fiber, pp):
+        ''' Run myelinated fiber ESTIM simulation with gaussian distribution source. '''
+        # US source
+        source = GaussianVoltageSource(0., fiber.length() / 4., mode='cathode')
+
+        # Titrate for a specific duration and simulate fiber at threshold US amplitude
+        logger.info(f'Running titration for {si_format(pp.tstim)}s pulse')
+        Vthr = fiber.titrate(source, pp)  # Pa
+        data, meta = fiber.simulate(source.updatedX(1.2 * Vthr), pp)
+
+        # Compute conduction velocity and spike amplitude from resulting data
+        sim_metrics = {
+           'Vthr': Vthr,                             # Pa
+           'cv': fiber.getConductionVelocity(data),  # m/s
+           'dV': fiber.getSpikeAmp(data)             # mV
+        }
+
+        # Plot membrane potential and membrane charge density traces
+        fig1 = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
+
+        # # Comparative SD curve
+        # durations = np.logspace(-5, -3, 20)  # s
+        # toffset = 10e-3                     # s
+        # pps = [PulsedProtocol(t, toffset) for t in durations]
+        # Athrs = np.array([fiber.titrate(source, pp) for pp in pps])
+
+        # # Plot strength-duration curve
+        # fig2 = strengthDurationCurve(
+        #     fiber, durations, {'myelinated': Athrs}, scale='log',
+        #     yname='amplitude', yfactor=1e-3, yunit='Pa', plot_chr=False)
+
+        # Log output metrics
+        self.logOutputMetrics(sim_metrics)
+
+    def test_gaussian1(self, is_profiled=False):
+        logger.info('Test: gaussian distribution source on myelinated fiber')
+        fiber = myelinatedFiberReilly(IextraFiber)
+        pp = PulsedProtocol(3e-3, 3e-3)
+        return self.gaussian(fiber, pp)
+
+    def test_gaussian2(self, is_profiled=False):
+        logger.info('Test: gaussian distribution source on unmyelinated fiber')
+        fiber = unmyelinatedFiberSundt(IextraFiber)
+        pp = PulsedProtocol(10e-3, 3e-3)
+        return self.gaussian(fiber, pp)
 
 
 if __name__ == '__main__':

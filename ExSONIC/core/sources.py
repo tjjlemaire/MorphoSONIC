@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-14 14:55:21
+# @Last Modified time: 2020-02-14 18:28:45
 
 import abc
 import numpy as np
@@ -427,6 +427,124 @@ class ExtracellularCurrent(ExtracellularSource, CurrentSource):
     def computeSourceAmp(self, fiber, Ve):
         ''' Compute the current needed to generate the extracellular potential value at closest node. '''
         return self.Iext(Ve, self.getMinNodeDistance(fiber))  # A
+
+
+class VoltageSource(XSource):
+
+    conv_factor = 1e0  # mV
+    xkey = 'Ve'
+    polarities = ('anode', 'cathode')
+
+    def __init__(self, Ve, mode=None):
+        ''' Constructor.
+
+            :param Ve: extracellular voltage amplitude (mV)
+            :param mode: polarity mode ("cathode" or "anode")
+        '''
+        self.mode = mode
+        self.Ve = Ve
+
+    @property
+    def mode(self):
+        return self._mode
+
+    @mode.setter
+    def mode(self, value):
+        if value not in self.polarities:
+            raise ValueError(f'Unknown polarity: {value} (should be in one of {self.polarities})')
+        self._mode = value
+
+    @property
+    def Ve(self):
+        return self._Ve
+
+    @Ve.setter
+    def Ve(self, value):
+        if value is not None:
+            value = self.checkFloat('Ve', value)
+            if self.mode == 'cathode':
+                self.checkNegativeOrNull('Ve', value)
+            else:
+                self.checkPositiveOrNull('Ve', value)
+        self._Ve = value
+
+    @property
+    def is_cathodal(self):
+        return self.mode == 'cathode'
+
+    @staticmethod
+    def inputs():
+        return {
+            'Ve': {
+                'desc': 'extracellular voltage amplitude',
+                'label': 'Ve',
+                'unit': 'mV',
+                'factor': 1e0,
+                'precision': 1
+            },
+            'mode': {
+                'desc': 'polarity mode',
+                'label': 'mode',
+                'unit': '',
+            }
+        }
+
+    @property
+    def xvar(self):
+        return self.Ve
+
+    @xvar.setter
+    def xvar(self, value):
+        self.Ve = value
+
+    def Vstr(self):
+        return f'{self.Ve:.1f} {self.inputs()["Ve"]["unit"]}'
+
+    def filecodes(self):
+        unit = self.inputs()["Ve"]["unit"]
+        prefix = si_format(1 / self.conv_factor)[-1]
+        return {'Ve': f'{(self.Ve * self.conv_factor):.2f}{prefix}{unit}'}
+
+
+class GaussianVoltageSource(GaussianSource, VoltageSource):
+
+    def __init__(self, x0, sigma, Ve=None, mode='cathode'):
+        ''' Constructor.
+
+            :param Ve: Extracellular voltage (mV)
+        '''
+        GaussianSource.__init__(self, x0, sigma)
+        VoltageSource.__init__(self, Ve, mode=mode)
+
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+        for k in ['x0', 'sigma', 'Ve', 'mode']:
+            if getattr(self, k) != getattr(other, k):
+                return False
+        return True
+
+    def __repr__(self):
+        s = f'{GaussianSource.__repr__(self)[:-1]}, {self.mode}'
+        if self.Ve is not None:
+            s = f'{s}, {self.Vstr()}'
+        return f'{s})'
+
+    def copy(self):
+        return self.__class__(self.x0, self.sigma, Ve=self.Ve, mode=self.mode)
+
+    def computeNodesAmps(self, fiber):
+        return GaussianSource.computeNodesAmps(self, fiber) * self.conv_factor
+
+    def filecodes(self):
+        return {**GaussianSource.filecodes(self), **VoltageSource.filecodes(self)}
+
+    @staticmethod
+    def inputs():
+        return {**GaussianSource.inputs(), **VoltageSource.inputs()}
+
+    def computeMaxNodeAmp(self, fiber):
+        return self.Ve
 
 
 class AcousticSource(XSource):

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-14 14:48:15
+# @Last Modified time: 2020-02-14 15:08:09
 
 import os
 import numpy as np
@@ -68,21 +68,15 @@ class TestSennAstim(TestFiber):
         # Log output metrics
         self.logOutputMetrics(sim_metrics)
 
-    def test_gaussian(self, is_profiled=False):
+    def gaussian(self, fiber, pp):
         ''' Run myelinated fiber ASTIM simulation with gaussian distribution source. '''
-        logger.info('Test: gaussian distribution source on myelinated fiber')
-
-        # Myelinated fiber model
-        fiber = myelinatedFiberReilly(SonicFiber, a=self.a, fs=self.fs)
-
-        # US stimulation parameters
-        psource = GaussianAcousticSource(0., fiber.length() / 4., self.Fdrive)
-        pp = PulsedProtocol(3e-3, 3e-3)
+        # US source
+        source = GaussianAcousticSource(0., fiber.length() / 4., self.Fdrive)
 
         # Titrate for a specific duration and simulate fiber at threshold US amplitude
         logger.info(f'Running titration for {si_format(pp.tstim)}s pulse')
-        Athr = fiber.titrate(psource, pp)  # Pa
-        data, meta = fiber.simulate(psource.updatedX(1.2 * Athr), pp)
+        Athr = fiber.titrate(source, pp)  # Pa
+        data, meta = fiber.simulate(source.updatedX(1.2 * Athr), pp)
 
         # Compute conduction velocity and spike amplitude from resulting data
         sim_metrics = {
@@ -94,19 +88,31 @@ class TestSennAstim(TestFiber):
         # Plot membrane potential and membrane charge density traces
         fig1 = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
 
-        # Comparative SD curve
-        durations = np.logspace(-5, -3, 20)  # s
-        toffset = 10e-3                     # s
-        pps = [PulsedProtocol(t, toffset) for t in durations]
-        Athrs = np.array([fiber.titrate(psource, pp) for pp in pps])
+        # # Comparative SD curve
+        # durations = np.logspace(-5, -3, 20)  # s
+        # toffset = 10e-3                     # s
+        # pps = [PulsedProtocol(t, toffset) for t in durations]
+        # Athrs = np.array([fiber.titrate(source, pp) for pp in pps])
 
-        # Plot strength-duration curve
-        fig2 = strengthDurationCurve(
-            fiber, durations, {'myelinated': Athrs}, scale='log',
-            yname='amplitude', yfactor=1e-3, yunit='Pa', plot_chr=False)
+        # # Plot strength-duration curve
+        # fig2 = strengthDurationCurve(
+        #     fiber, durations, {'myelinated': Athrs}, scale='log',
+        #     yname='amplitude', yfactor=1e-3, yunit='Pa', plot_chr=False)
 
         # Log output metrics
         self.logOutputMetrics(sim_metrics)
+
+    def test_gaussian1(self, is_profiled=False):
+        logger.info('Test: gaussian distribution source on myelinated fiber')
+        fiber = myelinatedFiberReilly(SonicFiber, a=self.a, fs=self.fs)
+        pp = PulsedProtocol(3e-3, 3e-3)
+        return self.gaussian(fiber, pp)
+
+    def test_gaussian2(self, is_profiled=False):
+        logger.info('Test: gaussian distribution source on unmyelinated fiber')
+        fiber = unmyelinatedFiberSundt(SonicFiber, a=self.a, fs=self.fs)
+        pp = PulsedProtocol(10e-3, 3e-3)
+        return self.gaussian(fiber, pp)
 
     def transducer(self, fiber, pp):
         ''' Run SENN fiber ASTIM simulations with a flat external transducer. '''
@@ -141,7 +147,7 @@ class TestSennAstim(TestFiber):
         self.transducer(fiber, pp)
 
     def test_transducer2(self, is_profiled=False):
-        logger.info('Test: transducer source on myelinated fiber')
+        logger.info('Test: transducer source on unmyelinated fiber')
         fiber = unmyelinatedFiberSundt(SonicFiber, a=self.a, fs=self.fs)
         pp = PulsedProtocol(10e-3, 3e-3)
         self.transducer(fiber, pp)
