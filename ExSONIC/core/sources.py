@@ -3,13 +3,13 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-07 12:27:10
+# @Last Modified time: 2020-02-14 18:28:45
 
 import abc
 import numpy as np
 from scipy.optimize import brentq
 
-from PySONIC.utils import si_format, rotAroundPoint2D, StimObject
+from PySONIC.utils import si_format, rotAroundPoint2D, StimObject, gaussian
 from PySONIC.core.drives import *
 from .grids import getCircle2DGrid
 
@@ -63,7 +63,7 @@ class XSource(Source):
         return self.xvar is not None
 
 
-class IntracellularSource(XSource):
+class NodeSource(XSource):
 
     def __init__(self, inode):
         ''' Constructor.
@@ -101,6 +101,75 @@ class IntracellularSource(XSource):
     def computeNodesAmps(self, fiber):
         amps = np.zeros(fiber.nnodes)
         amps[self.inode] = self.xvar
+        return amps
+
+    def computeSourceAmp(self, fiber, A):
+        return A
+
+
+class GaussianSource(XSource):
+
+    def __init__(self, x0, sigma):
+        ''' Constructor.
+
+            :param x0: gaussian center coordinate (m)
+            :param sigma: gaussian width (m)
+        '''
+        self.x0 = x0
+        self.sigma = sigma
+
+    @property
+    def x0(self):
+        return self._x0
+
+    @x0.setter
+    def x0(self, value):
+        value = self.checkFloat('center', value)
+        self._x0 = value
+
+    @property
+    def sigma(self):
+        return self._sigma
+
+    @sigma.setter
+    def sigma(self, value):
+        value = self.checkFloat('width', value)
+        self.checkStrictlyPositive('width', value)
+        self._sigma = value
+
+    @staticmethod
+    def inputs():
+        return {
+            'x0': {
+                'desc': 'center coordinate',
+                'label': 'x0',
+                'unit': 'mm',
+                'factor': 1e3,
+                'precision': 1
+            },
+            'sigma': {
+                'desc': 'width',
+                'label': 'sigma',
+                'unit': 'mm',
+                'factor': 1e3,
+                'precision': 1
+            }
+        }
+
+    def __repr__(self):
+        params = [f'{key} = {value}' for key, value in self.filecodes().items()]
+        return f'{self.__class__.__name__}({", ".join(params)})'
+
+    def filecodes(self):
+        codes = {}
+        for key in ['x0', 'sigma']:
+            d = self.inputs()[key]
+            codes[key] = f'{getattr(self, key) * d.get("factor", 1.):.1f}{d["unit"]}'
+        return codes
+
+    def computeNodesAmps(self, fiber):
+        xcoords = fiber.getNodeCoords()  # m
+        amps = gaussian(xcoords, mu=self.x0, sigma=self.sigma, A=self.xvar)
         return amps
 
     def computeSourceAmp(self, fiber, A):
@@ -235,12 +304,12 @@ class CurrentSource(XSource):
         self.I = value
 
 
-class IntracellularCurrent(IntracellularSource, CurrentSource):
+class IntracellularCurrent(NodeSource, CurrentSource):
 
     conv_factor = 1e9  # A to nA
 
     def __init__(self, inode, I=None, mode='anode'):
-        IntracellularSource.__init__(self, inode)
+        NodeSource.__init__(self, inode)
         CurrentSource.__init__(self, I, mode)
 
     def __eq__(self, other):
@@ -252,23 +321,23 @@ class IntracellularCurrent(IntracellularSource, CurrentSource):
         return True
 
     def __repr__(self):
-        s = f'{IntracellularSource.__repr__(self)[:-1]}, {self.mode}'
+        s = f'{NodeSource.__repr__(self)[:-1]}, {self.mode}'
         if self.I is not None:
             s = f'{s}, {self.Istr()}'
         return f'{s})'
 
     def computeNodesAmps(self, fiber):
-        return IntracellularSource.computeNodesAmps(self, fiber) * self.conv_factor
+        return NodeSource.computeNodesAmps(self, fiber) * self.conv_factor
 
     def filecodes(self):
-        return {**IntracellularSource.filecodes(self), **CurrentSource.filecodes(self)}
+        return {**NodeSource.filecodes(self), **CurrentSource.filecodes(self)}
 
     def copy(self):
         return self.__class__(self.inode, self.I, mode=self.mode)
 
     @staticmethod
     def inputs():
-        return {**IntracellularSource.inputs(), **CurrentSource.inputs()}
+        return {**NodeSource.inputs(), **CurrentSource.inputs()}
 
 
 class ExtracellularCurrent(ExtracellularSource, CurrentSource):
@@ -360,6 +429,124 @@ class ExtracellularCurrent(ExtracellularSource, CurrentSource):
         return self.Iext(Ve, self.getMinNodeDistance(fiber))  # A
 
 
+class VoltageSource(XSource):
+
+    conv_factor = 1e0  # mV
+    xkey = 'Ve'
+    polarities = ('anode', 'cathode')
+
+    def __init__(self, Ve, mode=None):
+        ''' Constructor.
+
+            :param Ve: extracellular voltage amplitude (mV)
+            :param mode: polarity mode ("cathode" or "anode")
+        '''
+        self.mode = mode
+        self.Ve = Ve
+
+    @property
+    def mode(self):
+        return self._mode
+
+    @mode.setter
+    def mode(self, value):
+        if value not in self.polarities:
+            raise ValueError(f'Unknown polarity: {value} (should be in one of {self.polarities})')
+        self._mode = value
+
+    @property
+    def Ve(self):
+        return self._Ve
+
+    @Ve.setter
+    def Ve(self, value):
+        if value is not None:
+            value = self.checkFloat('Ve', value)
+            if self.mode == 'cathode':
+                self.checkNegativeOrNull('Ve', value)
+            else:
+                self.checkPositiveOrNull('Ve', value)
+        self._Ve = value
+
+    @property
+    def is_cathodal(self):
+        return self.mode == 'cathode'
+
+    @staticmethod
+    def inputs():
+        return {
+            'Ve': {
+                'desc': 'extracellular voltage amplitude',
+                'label': 'Ve',
+                'unit': 'mV',
+                'factor': 1e0,
+                'precision': 1
+            },
+            'mode': {
+                'desc': 'polarity mode',
+                'label': 'mode',
+                'unit': '',
+            }
+        }
+
+    @property
+    def xvar(self):
+        return self.Ve
+
+    @xvar.setter
+    def xvar(self, value):
+        self.Ve = value
+
+    def Vstr(self):
+        return f'{self.Ve:.1f} {self.inputs()["Ve"]["unit"]}'
+
+    def filecodes(self):
+        unit = self.inputs()["Ve"]["unit"]
+        prefix = si_format(1 / self.conv_factor)[-1]
+        return {'Ve': f'{(self.Ve * self.conv_factor):.2f}{prefix}{unit}'}
+
+
+class GaussianVoltageSource(GaussianSource, VoltageSource):
+
+    def __init__(self, x0, sigma, Ve=None, mode='cathode'):
+        ''' Constructor.
+
+            :param Ve: Extracellular voltage (mV)
+        '''
+        GaussianSource.__init__(self, x0, sigma)
+        VoltageSource.__init__(self, Ve, mode=mode)
+
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+        for k in ['x0', 'sigma', 'Ve', 'mode']:
+            if getattr(self, k) != getattr(other, k):
+                return False
+        return True
+
+    def __repr__(self):
+        s = f'{GaussianSource.__repr__(self)[:-1]}, {self.mode}'
+        if self.Ve is not None:
+            s = f'{s}, {self.Vstr()}'
+        return f'{s})'
+
+    def copy(self):
+        return self.__class__(self.x0, self.sigma, Ve=self.Ve, mode=self.mode)
+
+    def computeNodesAmps(self, fiber):
+        return GaussianSource.computeNodesAmps(self, fiber) * self.conv_factor
+
+    def filecodes(self):
+        return {**GaussianSource.filecodes(self), **VoltageSource.filecodes(self)}
+
+    @staticmethod
+    def inputs():
+        return {**GaussianSource.inputs(), **VoltageSource.inputs()}
+
+    def computeMaxNodeAmp(self, fiber):
+        return self.Ve
+
+
 class AcousticSource(XSource):
 
     conv_factor = 1e-3  # Pa to kPa
@@ -397,14 +584,14 @@ class AcousticSource(XSource):
         return {'f': f'{self.f * 1e-3:.0f}kHz'}
 
 
-class NodeAcousticSource(IntracellularSource, AcousticSource):
+class NodeAcousticSource(NodeSource, AcousticSource):
 
     def __init__(self, inode, f, A=None):
         ''' Constructor.
 
             :param A: Acoustic amplitude (Pa)
         '''
-        IntracellularSource.__init__(self, inode)
+        NodeSource.__init__(self, inode)
         AcousticSource.__init__(self, f)
         self.A = A
 
@@ -436,17 +623,17 @@ class NodeAcousticSource(IntracellularSource, AcousticSource):
         return True
 
     def __repr__(self):
-        s = f'{IntracellularSource.__repr__(self)[:-1]}, {si_format(self.f, 1, space="")}Hz'
+        s = f'{NodeSource.__repr__(self)[:-1]}, {si_format(self.f, 1, space="")}Hz'
         if self.A is not None:
             s = f'{s}, {si_format(self.A, 1, space="")}Pa'
         return f'{s})'
 
     def computeNodesAmps(self, fiber):
-        return IntracellularSource.computeNodesAmps(self, fiber) * self.conv_factor
+        return NodeSource.computeNodesAmps(self, fiber) * self.conv_factor
 
     def filecodes(self):
         return {
-            **IntracellularSource.filecodes(self), **AcousticSource.filecodes(self),
+            **NodeSource.filecodes(self), **AcousticSource.filecodes(self),
             'A': f'{(self.A * self.conv_factor):.2f}kPa'
         }
 
@@ -456,7 +643,7 @@ class NodeAcousticSource(IntracellularSource, AcousticSource):
     @staticmethod
     def inputs():
         return {
-            **IntracellularSource.inputs(), **AcousticSource.inputs(),
+            **NodeSource.inputs(), **AcousticSource.inputs(),
             'A': {
                 'desc': 'US pressure amplitude',
                 'label': 'A',
@@ -467,7 +654,83 @@ class NodeAcousticSource(IntracellularSource, AcousticSource):
         }
 
     def computeNodesAmps(self, fiber):
-        return IntracellularSource.computeNodesAmps(self, fiber)
+        return NodeSource.computeNodesAmps(self, fiber)
+
+    def computeMaxNodeAmp(self, fiber):
+        return self.A
+
+
+class GaussianAcousticSource(GaussianSource, AcousticSource):
+
+    def __init__(self, x0, sigma, f, A=None):
+        ''' Constructor.
+
+            :param A: Acoustic amplitude (Pa)
+        '''
+        GaussianSource.__init__(self, x0, sigma)
+        AcousticSource.__init__(self, f)
+        self.A = A
+
+    @property
+    def A(self):
+        return self._A
+
+    @A.setter
+    def A(self, value):
+        if value is not None:
+            value = self.checkFloat('A', value)
+            self.checkPositiveOrNull('A', value)
+        self._A = value
+
+    @property
+    def xvar(self):
+        return self.A
+
+    @xvar.setter
+    def xvar(self, value):
+        self.A = value
+
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+        for k in ['x0', 'sigma', 'f', 'A']:
+            if getattr(self, k) != getattr(other, k):
+                return False
+        return True
+
+    def __repr__(self):
+        s = f'{GaussianSource.__repr__(self)[:-1]}, {si_format(self.f, 1, space="")}Hz'
+        if self.A is not None:
+            s = f'{s}, {si_format(self.A, 1, space="")}Pa'
+        return f'{s})'
+
+    def computeNodesAmps(self, fiber):
+        return GaussianSource.computeNodesAmps(self, fiber) * self.conv_factor
+
+    def filecodes(self):
+        return {
+            **GaussianSource.filecodes(self), **AcousticSource.filecodes(self),
+            'A': f'{(self.A * self.conv_factor):.2f}kPa'
+        }
+
+    def copy(self):
+        return self.__class__(self.x0, self.sigma, self.f, A=self.A)
+
+    @staticmethod
+    def inputs():
+        return {
+            **GaussianSource.inputs(), **AcousticSource.inputs(),
+            'A': {
+                'desc': 'US pressure amplitude',
+                'label': 'A',
+                'unit': 'kPa',
+                'factor': 1e-3,
+                'precision': 2
+            }
+        }
+
+    def computeNodesAmps(self, fiber):
+        return GaussianSource.computeNodesAmps(self, fiber)
 
     def computeMaxNodeAmp(self, fiber):
         return self.A

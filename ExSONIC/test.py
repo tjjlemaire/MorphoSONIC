@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 11:34:09
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-05 18:18:31
+# @Last Modified time: 2020-02-14 16:07:17
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -306,6 +306,10 @@ class TestFiber(TestBase):
             'Ithr': {
                 'name': 'threshold current',
                 'fmt': lambda x: f'{si_format(np.abs(x), 1)}A'
+            },
+            'Vthr': {
+                'name': 'threshold extracellular voltage',
+                'fmt': lambda x: f'{np.abs(x):.2f}mV'
             },
             'cv': {
                 'name': 'conduction velocity',

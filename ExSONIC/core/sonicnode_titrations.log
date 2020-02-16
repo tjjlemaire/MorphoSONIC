@@ -1,0 +1,2 @@
+titrate(SonicNode(32.0 nm, CorticalRS, fs=1.0), AcousticDrive(500.0kHz), PulsedProtocol(200.0ms, 100.0ms, 10.0Hz, 1.00), xfunc=None)	35156.25
+titrate(SonicNode(32.0 nm, CorticalRS, fs=1.0), AcousticDrive(500.0kHz), PulsedProtocol(195.0ms, 97.5ms, 10.0Hz, 1.00), xfunc=None)	35234.375
