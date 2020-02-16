@@ -347,7 +347,7 @@ def strengthDuration(fiberType, fiberClass, fiberD, tstim_range, toffset=20e-3, 
             fiber = myelinatedFiberReilly(fiber_class, fiberD)
         else:
             raise ValueError('fiber type unknown')
-        psource = IntracellularCurrent(fiber.nnodes // 2)
+        source = IntracellularCurrent(fiber.nnodes // 2)
     elif fiberClass == 'extracellular_electrical_stim':
         fiber_class = IextraFiber
         if fiberType =='sundt':
@@ -356,7 +356,7 @@ def strengthDuration(fiberType, fiberClass, fiberD, tstim_range, toffset=20e-3, 
             fiber = myelinatedFiberReilly(fiber_class, fiberD)
         else:
             raise ValueError('fiber type unknown')
-        psource = ExtracellularCurrent((0, zdistance), mode='cathode')
+        source = ExtracellularCurrent((0, zdistance), mode='cathode')
     elif fiberClass == 'acoustic_single_node':
         fiber_class = SonicFiber
         if fiberType =='sundt':
@@ -365,7 +365,7 @@ def strengthDuration(fiberType, fiberClass, fiberD, tstim_range, toffset=20e-3, 
             fiber = myelinatedFiberReilly(fiber_class, fiberD, a=a)
         else:
             raise ValueError('fiber type unknown')
-        psource = NodeAcousticSource(fiber.nnodes//2, f)
+        source = NodeAcousticSource(fiber.nnodes//2, f)
     elif fiberClass == 'acoustic_planar_transducer':
         fiber_class = SonicFiber
         if fiberType =='sundt':
@@ -374,18 +374,18 @@ def strengthDuration(fiberType, fiberClass, fiberD, tstim_range, toffset=20e-3, 
             fiber = myelinatedFiberReilly(fiber_class, fiberD, a=a, fs=fs)
         else:
             raise ValueError('fiber type unknown')
-        psource = PlanarDiskTransducerSource((0, 0, zdistance), Fdrive, r=r)
+        source = PlanarDiskTransducerSource((0., 0., zdistance), Fdrive, r=r)
     else:
         raise ValueError('fiber class unknown')
 
     # Get filecode
-    filecodes = fiber.filecodes(psource.updatedX(1), PulsedProtocol(toffset/100, toffset))
+    filecodes = fiber.filecodes(source.updatedX(1), PulsedProtocol(toffset/100, toffset))
     for k in ['nnodes', 'nodeD', 'rs', 'nodeL', 'interD', 'interL', 'I', 'inode', 'nature', 'tstim', 'toffset', 'PRF', 'DC', 'u', 'theta', 'rho', 'position', 'c']:
         if k in filecodes:
             del filecodes[k]
     filecodes['fiberD'] = f'fiberD{(fiberD * 1e6):.2f}um'
     if fiberClass == 'extracellular_electrical_stim' or fiberClass == 'acoustic_planar_transducer':
-        filecodes['zsource'] = f'zsource{(psource.z * 1e3):.2f}mm'
+        filecodes['zsource'] = f'zsource{(source.z * 1e3):.2f}mm'
     filecodes['tstim_range'] = 'tstim' + '-'.join(
         [f'{si_format(x, 1, "")}s' for x in [min(tstim_range), max(tstim_range)]])
     print(filecodes)
@@ -395,7 +395,7 @@ def strengthDuration(fiberType, fiberClass, fiberD, tstim_range, toffset=20e-3, 
     fname = f'{fcode}_strengthduration_results.csv'
     fpath = os.path.join(outdir, fname)
     delimiter = '\t'
-    labels = ['t stim (m)', 'Ithr (A)']
+    labels = ['t stim (m)', 'thr (A for electric/Pa for US)']
 
     # Create log file if it does not exist
     if not os.path.isfile(fpath):
@@ -417,13 +417,18 @@ def strengthDuration(fiberType, fiberClass, fiberD, tstim_range, toffset=20e-3, 
 
             # Perform titration to find threshold current
             pp = PulsedProtocol(x, toffset)
-            Ithr = fiber.titrate(psource, pp)  # A
+            print(fiber)
+            print(source)
+            print(pp)
+            thr = fiber.titrate(source, pp)  
+            if fiberClass == 'acoustic_planar_transducer':
+                thr = thr * source.relNormalAxisAmp(source.z)  
 
             # Log input-output pair into file
             logger.info('saving result to log file')
             with open(fpath, 'a', newline='') as csvfile:
                 writer = csv.writer(csvfile, delimiter=delimiter)
-                writer.writerow([x, Ithr])
+                writer.writerow([x, thr])
 
     logger.info('parameter sweep successfully completed')
     fiber.clear()
