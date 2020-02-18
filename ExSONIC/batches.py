@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-17 12:19:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-18 21:10:04
+# @Last Modified time: 2020-02-18 23:09:25
 
 import abc
 import numpy as np
@@ -79,6 +79,23 @@ class StrengthDurationBatch(LogBatch):
     def run(self):
         logger.info(f'Computing SD curve for {self.fiber} with {self.source}')
         return super().run()
+
+
+class CurrentStrengthDurationBatch(StrengthDurationBatch):
+    ''' Strength-duration batch with an acoustic source '''
+
+    out_keys = ['Ithr (A)']
+
+    def sourcecode(self):
+        codes = self.source.filecodes()
+        for k in ['rho']:
+            if k in codes:
+                del codes[k]
+        return '_'.join(codes.values())
+
+    def compute(self, t):
+        Ithr = self.fiber.titrate(self.source, PulsedProtocol(t, self.offset))  # A
+        return [Ithr]
 
 
 class AcousticStrengthDurationBatch(StrengthDurationBatch):
