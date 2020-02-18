@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-03 23:16:21
+# @Last Modified time: 2020-02-17 12:02:40
 
 import numpy as np
 import pandas as pd
@@ -149,11 +149,11 @@ class ExtendedSonicNode(SonicNode):
         data = {}
         for id in self.sections.keys():
             data[id] = pd.DataFrame({
-                't': vec_to_array(t) * 1e-3,  # s
-                'stimstate': vec_to_array(stim)
+                't': t.to_array() * 1e-3,  # s
+                'stimstate': stim.to_array()
             })
             for k, v in probes[id].items():
-                data[id][k] = vec_to_array(v)
+                data[id][k] = v.to_array()
             data[id].loc[:,'Qm'] *= 1e-5  # C/m2
 
         # Prepend initial conditions (prior to stimulation)

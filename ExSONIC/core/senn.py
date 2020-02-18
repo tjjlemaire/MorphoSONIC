@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-06 14:16:25
+# @Last Modified time: 2020-02-18 19:12:53
 
 import abc
 import pickle
@@ -338,11 +338,11 @@ class SennFiber(metaclass=abc.ABCMeta):
         data = {}
         for id in self.sections.keys():
             data[id] = pd.DataFrame({
-                't': vec_to_array(t) * 1e-3,  # s
-                'stimstate': vec_to_array(stim)
+                't': t.to_array() * 1e-3,  # s
+                'stimstate': stim.to_array()
             })
             for k, v in probes[id].items():
-                data[id][k] = vec_to_array(v)
+                data[id][k] = v.to_array()
             data[id].loc[:,'Qm'] *= 1e-5  # C/m2
 
         # Prepend initial conditions (prior to stimulation)
@@ -422,6 +422,7 @@ class SennFiber(metaclass=abc.ABCMeta):
             'interL': f'interL{(self.interL * 1e6):.1f}um'
         }
 
+
     def filecodes(self, source, pp):
         return {
             **self.modelcodes,
@@ -432,6 +433,16 @@ class SennFiber(metaclass=abc.ABCMeta):
 
     def filecode(self, *args):
         return filecode(self, *args)
+
+    @property
+    def quickcode(self):
+        if self.interL == 0.:
+            fiber_type = 'unmyelinated'
+            fiberD = self.nodeD
+        else:
+            fiber_type = 'myelinated'
+            fiberD = self.interL / 100.  # default inter_ratio
+        return f'senn_{fiber_type}_{fiberD * 1e6:.2f}um'
 
     def simAndSave(self, *args, **kwargs):
         return simAndSave(self, *args, **kwargs)
@@ -563,22 +574,15 @@ class EStimFiber(SennFiber):
     def setDrives(self, source):
         ''' Set distributed stimulation drives. '''
         amps = source.computeNodesAmps(self)
-        self.Iinj = self.preProcessAmps(amps)
+        Iinj = self.preProcessAmps(amps)
         logger.debug('injected intracellular currents: Iinj = [{}] nA'.format(
-            ', '.join([f'{I:.2f}' for I in self.Iinj])))
-
-        # Assign current clamps
-        self.iclamps = []
-        for i, sec in enumerate(self.sections.values()):
-            iclamp = h.IClamp(sec(0.5))
-            iclamp.delay = 0  # we want to exert control over amp starting at 0 ms
-            iclamp.dur = 1e9  # dur must be long enough to span all our changes
-            self.iclamps.append(iclamp)
+            ', '.join([f'{I:.2f}' for I in Iinj])))
+        self.iclamps = [IClamp(sec(0.5), I) for I, sec in zip(Iinj, self.sections.values())]
 
     def setStimON(self, value):
         value = super().setStimON(value)
-        for iclamp, Iinj in zip(self.iclamps, self.Iinj):
-            iclamp.amp = value * Iinj
+        for iclamp in self.iclamps:
+            iclamp.toggle(value)
         return value
 
     def titrate(self, source, pp):

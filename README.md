@@ -182,34 +182,41 @@ from ExSONIC.core import IintraNode, SonicNode
 
 logger.setLevel(logging.INFO)
 
-# Stimulation parameters
-a = 32e-9        # m
-Fdrive = 500e3   # Hz
-Adrive = 100e3   # Pa
-Astim = 10.      # mA/m2
+# Point-neuron model and corresponding neuronal bilayer sonophore model
+pneuron = getPointNeuron('RS')
+nbls = NeuronalBilayerSonophore(a, pneuron)
+
+# Point-neuron model and corresponding Iintra and SONIC node models
+pneuron = getPointNeuron('RS')
+estim_node = IintraNode(pneuron)
+a = 32e-9  # sonophore radius (m)
+sonic_node = SonicNode(pneuron, a=a)
+
+# Electric and ultrasonic drives
+ELdrive = ElectricDrive(10.)  # mA/m2
+USdrive = AcousticDrive(
+  500e3,  # Hz
+  100e3)  # Pa
+
+# Pulsing protocol
 tstim = 250e-3   # s
 toffset = 50e-3  # s
 PRF = 100.       # Hz
 DC = 0.5         # -
 pp = PulsedProtocol(tstim, toffset, PRF, DC)
 
-# Point-neuron model and corresponding Iintra and SONIC node models
-pneuron = getPointNeuron('RS')
-estim_node = IintraNode(pneuron)
-sonic_node = SonicNode(pneuron, a=a, Fdrive=Fdrive)
-
 # Run simulation upon electrical stimulation, and plot results
-data, meta = estim_node.simulate(Astim, pp)
+data, meta = estim_node.simulate(ELdrive, pp)
 fig1 = GroupedTimeSeries([(data, meta)]).render()
 
 # Run simulation upon ultrasonic stimulation, and plot results
-data, meta = sonic_node.simulate(Adrive, pp)
+data, meta = sonic_node.simulate(USdrive, pp)
 fig2 = GroupedTimeSeries([(data, meta)]).render()
 
 plt.show()
 ```
 
-Similarly, you can run simulations of SENN-type myelinated fiber models under extracellular electrical stimulation, and visualize the simulation results:
+Similarly, you can run simulations of SENN-type myelinated and unmyelinated fiber models under extracellular electrical and ultrasonic stimulation, and visualize the simulation results:
 
 ```python
 import logging
@@ -218,12 +225,13 @@ import matplotlib.pyplot as plt
 from PySONIC.core import PulsedProtocol
 from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import logger, si_format
-from ExSONIC.core import myelinatedFiber, IextraFiber, ExtracellularCurrent
+from ExSONIC.core import myelinatedFiber, unmyelinatedFiber, IextraFiber, SonicFiber
+from ExSONIC.core.sources import ExtracellularCurrent, PlanarDiskTransducerSource
 from ExSONIC.plt import SectionCompTimeSeries
 
 logger.setLevel(logging.INFO)
 
-# Fiber model
+# Myelinated fiber model
 pneuron = getPointNeuron('FH')
 fiberD = 20e-6  # m
 nnodes = 11
@@ -297,8 +305,8 @@ The SONIC model predicts a time-varying capacitance introducing a nonlinear disc
 
 Here is a list of future developments:
 
-- [ ] Spatial expansion into morphologically realistic fiber models
-- [ ] Model validation against experimental data (leech neurons)
+- [ ] Spatial expansion into more complex neuronal morphologies (axons, soma, dendrites)
+- [ ] Experimental validation of the fiber models
 
 # Authors
 

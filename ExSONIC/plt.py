@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-12-09 12:08:46
+# @Last Modified time: 2020-02-18 21:51:42
 
 import numpy as np
 import pandas as pd
@@ -189,7 +189,7 @@ def thresholdCurve(fiber, x, thrs, thrs2=None,
     for item in ax.get_xticklabels() + ax.get_yticklabels():
         item.set_fontsize(fs)
     ax.legend(fontsize=fs/1.8, frameon=False, loc='upper left', ncol=2)
-    
+
     if thrs2 != None:
         ax2 = ax.twinx()
         prefix = si_format(1 / y2factor, space='')[1:]
@@ -199,7 +199,7 @@ def thresholdCurve(fiber, x, thrs, thrs2=None,
         for i, k in enumerate(thrs2.keys()):
             if colors == None:
                 ax2.plot(x * xfactor, thrs2[k] * y2factor, linestyle='--')
-            else: 
+            else:
                 ax2.plot(x * xfactor, thrs2[k] * y2factor, linestyle='--', color=colors[i])
         if scale != 'log':
             ax2.set_ylim(0., ax2.get_ylim()[1])
@@ -236,7 +236,7 @@ def plotConvergenceResults(df, inkey, outkeys, rel_eps_thr_Ithr=0.05, rel_eps_th
 
     # Extract input range and figure out if it must be reversed
     xin = df[inkey].values
-#    reverse = xin[-1] < xin[0]
+    # reverse = xin[-1] < xin[0]
 
     # Create figure backbone
     fig, axes = plt.subplots(len(outkeys) + 1, 1, figsize=(6, 9))
@@ -267,7 +267,7 @@ def plotConvergenceResults(df, inkey, outkeys, rel_eps_thr_Ithr=0.05, rel_eps_th
             ybottomaxis = max(yconv - ydelta, ymin - 0.05 * yptp)
             axes[i].set_ylim(
                     ybottomaxis, ymax + 0.08 * (ymax - ybottomaxis))
-            
+
         # Compute and plot relative error w.r.t. reference (last) value
         xref = xout[-1]
         eps[k] = np.abs((xout - xref) / xref)
@@ -275,7 +275,7 @@ def plotConvergenceResults(df, inkey, outkeys, rel_eps_thr_Ithr=0.05, rel_eps_th
 
         # Compute and plot input value yielding threshold relative error
         j = eps[k].size - 1
-        if i is 0:
+        if i == 0:
             rel_thr = rel_eps_thr_Ithr
         else:
             rel_thr = rel_eps_thr
@@ -287,7 +287,7 @@ def plotConvergenceResults(df, inkey, outkeys, rel_eps_thr_Ithr=0.05, rel_eps_th
     # Compute minimal required input value to satisfy all relative error threshold on all inputs
     # logger.info(f'Relative error threshold Ithr = {rel_eps_thr_Ithr * 1e2:.1f} %')
     # logger.info(f'Relative error threshold for CV and dV = {rel_eps_thr * 1e2:.1f} %')
-    if axesdirection == 'd': 
+    if axesdirection == 'd':
         logger.info(f'max {inkey} = {min(xin_thr.values()):.2e}')
     else:
         logger.info(f'To reach convergence {inkey} = {max(xin_thr.values()):.2e}')

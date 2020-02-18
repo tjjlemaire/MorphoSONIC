@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-04 20:35:47
+# @Last Modified time: 2020-02-17 11:59:12
 # @Author: Theo Lemaire
 # @Date:   2018-08-21 19:48:04
 # @Last Modified by:   Theo Lemaire
@@ -15,7 +15,7 @@
 import os
 import platform
 import numpy as np
-from neuron import h
+from neuron import h, hclass
 
 from PySONIC.utils import logger
 
@@ -132,14 +132,27 @@ def setFuncTable(mechname, fname, matrix, xref, yref):
     return fillTable(matrix._ref_x[0][0], nx, xref._ref_x[0], ny, yref._ref_x[0])
 
 
-def setTimeProbe():
-    ''' Set recording vector for time.
+class Vector(hclass(h.Vector)):
+    ''' Neuron vector with an extra method to and return itself as a numpy array. '''
 
-        :return: time recording vector
+    def to_array(self):
+        return np.array(self.to_python())
+
+
+def probe(variable):
+    ''' Recording vector for a particular variable.
+
+        :param variable: NEURON variable to record.
+        :return: probe object recording the variable
     '''
-    t = h.Vector()
-    t.record(h._ref_t)
-    return t
+    p = Vector()
+    p.record(variable)
+    return p
+
+
+def setTimeProbe():
+    ''' Set time probe. '''
+    return probe(h._ref_t)
 
 
 def setStimProbe(section, mechname):
@@ -147,11 +160,9 @@ def setStimProbe(section, mechname):
 
         :param section: section to record from
         :param mechname: variable parent mechanism
-        :return: stimulation state recording vector
+        :return: stimulation state probe
     '''
-    states = h.Vector()
-    states.record(getattr(section(0.5), mechname)._ref_stimon)
-    return states
+    return probe(getattr(section(0.5), mechname)._ref_stimon)
 
 
 def setRangeProbe(section, var, loc=0.5):
@@ -161,9 +172,21 @@ def setRangeProbe(section, var, loc=0.5):
         :param var: range variable to record
         :return: list of recording vectors
     '''
-    probe = h.Vector()
-    probe.record(getattr(section(loc), '_ref_{}'.format(var)))
-    return probe
+    return probe(getattr(section(loc), '_ref_{}'.format(var)))
+
+
+class IClamp(hclass(h.IClamp)):
+    ''' IClamp object that allows setting parameters on creation. '''
+
+    def __init__(self, segment, amplitude):
+        super().__init__(segment)
+        self.delay = 0  # we want to exert control over amp starting at 0 ms
+        self.dur = 1e9  # dur must be long enough to span all our changes
+        self.amp = 0.  # initially, we set the amplitude to zero
+        self.xamp = amplitude
+
+    def toggle(self, value):
+        self.amp = value * self.xamp
 
 
 def setRangesProbes(sections, var, locs=None):

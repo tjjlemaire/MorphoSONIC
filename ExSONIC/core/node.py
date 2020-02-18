@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-14 11:05:31
+# @Last Modified time: 2020-02-17 12:01:40
 
 import pickle
 import abc
@@ -144,11 +144,11 @@ class Node(metaclass=abc.ABCMeta):
 
         # Store output in dataframe
         data = pd.DataFrame({
-            't': vec_to_array(t) * 1e-3,  # s
-            'stimstate': vec_to_array(stim)
+            't': t.to_array() * 1e-3,  # s
+            'stimstate': stim.to_array()
         })
         for k, v in probes.items():
-            data[k] = vec_to_array(v)
+            data[k] = v.to_array()
         data.loc[:,'Qm'] *= 1e-5  # C/m2
 
         # Prepend initial conditions (prior to stimulation)
@@ -227,15 +227,13 @@ class IintraNode(Node):
             :param drive: electric drive object.
         '''
         logger.debug(f'Stimulus: {drive}')
-        self.Iinj = drive.I * self.section(0.5).area() * 1e-6  # nA
-        logger.debug(f'Equivalent injected current: {self.Iinj:.1f} nA')
-        self.iclamp = h.IClamp(self.section(0.5))
-        self.iclamp.delay = 0  # we want to exert control over amp starting at 0 ms
-        self.iclamp.dur = 1e9  # dur must be long enough to span all our changes
+        Iinj = drive.I * self.section(0.5).area() * 1e-6  # nA
+        logger.debug(f'Equivalent injected current: {Iinj:.1f} nA')
+        self.iclamp = IClamp(self.section(0.5), Iinj)
 
     def setStimON(self, value):
         value = super().setStimON(value)
-        self.iclamp.amp = value * self.Iinj
+        self.iclamp.toggle(value)
         return value
 
     def filecodes(self, *args):
@@ -322,12 +320,10 @@ class DrivenSonicNode(SonicNode):
 
     def setDrive(self):
         logger.debug(f'setting {self.Idrive:.2f} mA/m2 driving current')
-        self.Iinj = self.Idrive * self.section(0.5).area() * 1e-6  # nA
-        logger.debug(f'Equivalent injected current: {self.Iinj:.1f} nA')
-        self.iclamp = h.IClamp(self.section(0.5))
-        self.iclamp.delay = 0  # we want to exert control over amp starting at 0 ms
-        self.iclamp.dur = 1e9  # dur must be long enough to span all our changes
-        self.iclamp.amp = self.Iinj
+        Iinj = self.Idrive * self.section(0.5).area() * 1e-6  # nA
+        logger.debug(f'Equivalent injected current: {Iinj:.1f} nA')
+        self.iclamp = IClamp(self.section(0.5), Iinj)
+        self.iclamp.toggle(1)
 
     def __repr__(self):
         return super().__repr__()[:-1] + f', Idrive = {self.Idrive:.2f} mA/m2)'

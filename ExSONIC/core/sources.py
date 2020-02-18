@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-14 18:28:45
+# @Last Modified time: 2020-02-18 19:11:30
 
 import abc
 import numpy as np
@@ -216,7 +216,7 @@ class ExtracellularSource(XSource):
         }
 
     def filecodes(self):
-        return {'position': self.strPos()}
+        return {'position': self.strPos().replace(',', '_').replace('(', '').replace(')', '')}
 
     def distance(self, x):
         return np.linalg.norm(np.asarray(x) - np.asarray(self.x))
@@ -906,13 +906,15 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
     def filecodes(self):
         d = {
             **ExtracellularSource.filecodes(self),
-            'r': f'{self.r:.0f}{self.inputs()["r"]["unit"]}',
+            'r': f'{si_format(self.r, 2, space="")}{self.inputs()["r"]["unit"]}',
             'theta': f'{self.theta:.0f}{self.inputs()["theta"]["unit"]}',
             'rho': f'{self.rho:.0f}{self.inputs()["rho"]["unit"]}',
             'c': f'{self.c:.0f}{self.inputs()["c"]["unit"]}',
             **AcousticSource.filecodes(self)}
         if self.u is not None:
             d['u'] = f'{self.u:.0f}{self.inputs()["u"]["unit"]}'
+        for k, v in d.items():
+            d[k] = v.replace('/', '_per_')
         return d
 
     @property
