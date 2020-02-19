@@ -3,10 +3,11 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 14:38:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-09-27 12:15:56
+# @Last Modified time: 2020-02-19 14:50:31
 
 import os
 import pickle
+import platform
 import numpy as np
 from scipy.optimize import curve_fit
 from neuron import h
@@ -14,10 +15,60 @@ from neuron import h
 from PySONIC.constants import *
 from PySONIC.utils import si_format, logger
 
+# global list of paths already loaded by load_mechanisms
+nrn_dll_loaded = []
+
+def load_mechanisms(path, modfile=None):
+    ''' Rewrite of NEURON's native load_mechanisms method to ensure Windows and Linux compatibility.
+
+        :param path: full path to directory containing the MOD files of the mechanisms to load.
+        :param modfile (optional): name of specific mechanism to check for untracked changes
+        in source file.
+    '''
+    # If mechanisms of input path are already loaded, return silently
+    global nrn_dll_loaded
+    if path in nrn_dll_loaded:
+        return
+
+    # in case NEURON is assuming a different architecture to Python,
+    # we try multiple possibilities
+    libname = 'libnrnmech.so'
+    libsubdir = '.libs'
+    arch_list = [platform.machine(), 'i686', 'x86_64', 'powerpc', 'umac']
+
+    # windows loads nrnmech.dll
+    if h.unix_mac_pc() == 3:
+        libname = 'nrnmech.dll'
+        libsubdir = ''
+        arch_list = ['']
+
+    # check for library file existence with every possible architecture
+    lib_path = None
+    for arch in arch_list:
+        candidate_lib_path = os.path.join(path, arch, libsubdir, libname)
+        if os.path.exists(candidate_lib_path):
+            lib_path = candidate_lib_path
+
+    # if library file does not seem to exist, raise error
+    if lib_path is None:
+        raise RuntimeError(f'Compiled library file not found for mechanisms in "{path}"')
+
+    # If mechanism name is provided, check for uncompiled changes in source file
+    if modfile is not None:
+        mod_path = os.path.join(path, modfile)
+        if not os.path.isfile(mod_path):
+            raise RuntimeError(f'"{modfile}" not found in "{path}"')
+        if os.path.getmtime(mod_path) > os.path.getmtime(lib_path):
+            raise UserWarning(f'"{modfile}" more recent than compiled library')
+
+    # Load library file and add directory to list of loaded libraries
+    h.nrn_load_dll(lib_path)
+    nrn_dll_loaded.append(path)
+
 
 def loadData(fpath, frequency=1):
     ''' Load dataframe and metadata dictionary from pickle file. '''
-    logger.info('Loading data from "%s"', os.path.basename(fpath))
+    logger.info(f'Loading data from "{os.path.basename(fpath)}"')
     with open(fpath, 'rb') as fh:
         frame = pickle.load(fh)
         data = frame['data']

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2017-08-24 11:55:07
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-17 13:50:51
+# @Last Modified time: 2020-02-19 02:11:01
 
 ''' Run E-STIM simulations of a specific point-neuron. '''
 
@@ -21,8 +21,8 @@ def main():
     parser = EStimParser()
     args = parser.parse()
     logger.setLevel(args['loglevel'])
-    # if args['mpi']:
-    #     logger.warning('NEURON multiprocessing disabled')
+    if args['mpi']:
+        logger.warning('NEURON multiprocessing disabled')
 
     # Run E-STIM batch
     logger.info("Starting E-STIM simulation batch")

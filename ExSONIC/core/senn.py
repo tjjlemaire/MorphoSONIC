@@ -3,32 +3,28 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-18 19:12:53
+# @Last Modified time: 2020-02-19 15:34:39
 
 import abc
-import pickle
-import csv
 import os
 import numpy as np
 import pandas as pd
-from inspect import signature
 from scipy import stats
-import scipy.signal
 
 from PySONIC.neurons import getPointNeuron
 from PySONIC.core import Model, PointNeuron, NeuronalBilayerSonophore
-from PySONIC.utils import si_format, pow10_format, logger, plural, filecode, simAndSave
+from PySONIC.utils import si_format, logger, plural, filecode, simAndSave
 from PySONIC.threshold import threshold
 from PySONIC.constants import *
 from PySONIC.postpro import detectSpikes, prependDataFrame
 
-from .pyhoc import *
 from ..constants import *
+from .nmodel import NeuronModel
 from .node import IintraNode, SonicNode
 from .connectors import SeriesConnector
 
 
-class SennFiber(metaclass=abc.ABCMeta):
+class SennFiber(NeuronModel):
     ''' Generic single-cable, Spatially Extended Nonlinear Node (SENN) fiber model. '''
 
     tscale = 'ms'        # relevant temporal scale of the model
@@ -65,7 +61,6 @@ class SennFiber(metaclass=abc.ABCMeta):
         self.nodeL = nodeL    # m
         self.interD = interD  # m
         self.interL = interL  # m
-        self.mechname = self.pneuron.name + 'auto'
         self.cell = self
 
         # Compute nodal and internodal axial resistance ()
@@ -280,12 +275,6 @@ class SennFiber(metaclass=abc.ABCMeta):
             for sec1, sec2 in zip(sec_list[:-1], sec_list[1:]):
                 self.connector.connect(sec1, sec2)
 
-    def setFuncTables(self, *args, **kwargs):
-        return setFuncTables(self, *args, **kwargs)
-
-    def setModLookup(self, *args, **kwargs):
-        return setModLookup(self, *args, **kwargs)
-
     @abc.abstractmethod
     def preProcessAmps(self, drives):
         ''' Convert stimulus to a model-friendly unit
@@ -301,14 +290,9 @@ class SennFiber(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     def setStimON(self, value):
-        return setStimON(self, value)
-
-    def initToSteadyState(self):
-        ''' Initialize model variables to pre-stimulus resting state values. '''
-        h.finitialize(self.pneuron.Qm0 * 1e5)  # nC/cm2
-
-    def toggleStim(self):
-        return toggleStim(self)
+        for sec in self.sections.values():
+            sec.setStimON(value)
+        return value
 
     @Model.checkTitrate
     @Model.addMeta
@@ -324,15 +308,15 @@ class SennFiber(metaclass=abc.ABCMeta):
         logger.info(self.desc(self.meta(source, pp)))
 
         # Set recording vectors
-        t = setTimeProbe()
-        stim = setStimProbe(self.sections[self.ids[0]], self.mechname)
-        probes = {k: self.nodes[k].setProbesDict(v) for k, v in self.sections.items()}
+        t = self.setTimeProbe()
+        stim = self.sections[self.ids[0]].setStimProbe()
+        probes = {k: v.setProbesDict() for k, v in self.sections.items()}
 
         # Set distributed drives
         self.setDrives(source)
 
         # Integrate model
-        integrate(self, pp, dt, atol)
+        self.integrate(pp, dt, atol)
 
         # Store output in dataframes
         data = {}
@@ -634,7 +618,6 @@ class SonicFiber(SennFiber):
 
         # Assign attributes
         self.pneuron = pneuron
-        self.mechname = self.pneuron.name + 'auto'
         self.a = a            # m
         self.fs = fs          # (-)
 

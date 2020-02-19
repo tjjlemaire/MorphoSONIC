@@ -3,29 +3,26 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-17 12:01:40
+# @Last Modified time: 2020-02-19 15:29:24
 
-import pickle
+import os
 import abc
 from inspect import signature
 import numpy as np
-from scipy.interpolate import interp1d
 import pandas as pd
-from neuron import h
 
 from PySONIC.constants import *
-from PySONIC.core import Model, PointNeuron, NeuronalBilayerSonophore, AcousticDrive
-from PySONIC.neurons import getPointNeuron
-from PySONIC.utils import si_format, timer, logger, plural, debug, logCache, filecode, simAndSave
+from PySONIC.core import Model, PointNeuron, NeuronalBilayerSonophore
+from PySONIC.utils import si_format, logger, logCache, filecode, simAndSave
 from PySONIC.threshold import threshold
 from PySONIC.postpro import prependDataFrame
 
-from .pyhoc import *
-from ..utils import getNmodlDir
+from ..utils import getNmodlDir, load_mechanisms
 from ..constants import *
+from .nmodel import NeuronModel
 
 
-class Node(metaclass=abc.ABCMeta):
+class Node(NeuronModel):
     ''' Generic node interface. '''
 
     tscale = 'ms'  # relevant temporal scale of the model
@@ -49,13 +46,10 @@ class Node(metaclass=abc.ABCMeta):
             logger.debug('Creating {} model'.format(self))
 
         # Load mechanisms and set appropriate membrane mechanism
-        self.modfile = f'{self.pneuron.name}.mod'
-        self.mechname = f'{self.pneuron.name}auto'
         load_mechanisms(getNmodlDir(), self.modfile)
 
-        # Create section and set membrane mechanism
-        self.section = h.Section(name=id, cell=self.cell)
-        self.section.insert(self.mechname)
+        # Construct model section and set membrane mechanism
+        self.section = self.createSection(self.id)
 
     def __repr__(self):
         return '{}({})'.format(self.__class__.__name__, self.pneuron)
@@ -72,12 +66,6 @@ class Node(metaclass=abc.ABCMeta):
         A = self.pneuron.area                  # neuron membrane area (m2)
         return A0 / A
 
-    def setFuncTables(self, *args, **kwargs):
-        return setFuncTables(self, *args, **kwargs)
-
-    def setModLookup(self, *args, **kwargs):
-        return setModLookup(self, *args, **kwargs)
-
     @abc.abstractmethod
     def setPyLookup(self, *args, **kwargs):
         raise NotImplementedError
@@ -93,27 +81,8 @@ class Node(metaclass=abc.ABCMeta):
             :param value: new stimulation state (0 = OFF, 1 = ON)
             :return: new stimulation state
         '''
-        setattr(self.section, 'stimon_{}'.format(self.mechname), value)
+        self.section.setStimON(value)
         return value
-
-    def initToSteadyState(self):
-        ''' Initialize model variables to pre-stimulus resting state values. '''
-        h.finitialize(self.pneuron.Qm0 * 1e5)  # nC/cm2
-
-    def toggleStim(self):
-        return toggleStim(self)
-
-    def setProbesDict(self, sec):
-        return {
-            **{
-                'Qm': setRangeProbe(sec, 'v'),
-                'Vm': setRangeProbe(sec, 'Vm_{}'.format(self.mechname))
-            },
-            **{
-                k: setRangeProbe(sec, '{}_{}'.format(alias(k), self.mechname))
-                for k in self.pneuron.statesNames()
-            }
-        }
 
     @staticmethod
     def getNSpikes(data):
@@ -134,13 +103,13 @@ class Node(metaclass=abc.ABCMeta):
         logger.info(self.desc(self.meta(drive, pp)))
 
         # Set recording vectors
-        t = setTimeProbe()
-        stim = setStimProbe(self.section, self.mechname)
-        probes = self.setProbesDict(self.section)
+        t = self.setTimeProbe()
+        stim = self.section.setStimProbe()
+        probes = self.section.setProbesDict()
 
         # Set drive and integrate model
         self.setDrive(drive)
-        integrate(self, pp, dt, atol)
+        self.integrate(pp, dt, atol)
 
         # Store output in dataframe
         data = pd.DataFrame({
@@ -289,7 +258,7 @@ class SonicNode(Node):
         ''' Set US drive. '''
         logger.debug(f'Stimulus: {drive}')
         self.setFuncTables(drive.f)
-        setattr(self.section, 'Adrive_{}'.format(self.mechname), drive.A * 1e-3)
+        self.section.setMechValue('Adrive', drive.A * 1e-3)
 
     def filecodes(self, *args):
         return self.nbls.filecodes(*args, self.fs, 'NEURON', None)

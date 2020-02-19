@@ -3,28 +3,28 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-17 12:02:40
+# @Last Modified time: 2020-02-19 15:33:16
 
+import os
 import numpy as np
 import pandas as pd
-from neuron import h
 
 from PySONIC.neurons import getPointNeuron
-from PySONIC.utils import si_format, pow10_format, logger, debug, logCache
+from PySONIC.utils import si_format, logger, logCache
 from PySONIC.threshold import threshold
 from PySONIC.constants import *
 from PySONIC.core import Model, PointNeuron
 from PySONIC.postpro import detectSpikes, prependDataFrame
 
-from .pyhoc import *
+from ..constants import *
 from .node import SonicNode
 from .connectors import SeriesConnector
-from ..constants import *
 
 
 class ExtendedSonicNode(SonicNode):
 
     simkey = 'nano_ext_SONIC'
+    secnames = ['sonophore', 'surroundings']
 
     def __init__(self, pneuron, rs, a=32e-9, fs=0.5, deff=100e-9):
 
@@ -38,12 +38,8 @@ class ExtendedSonicNode(SonicNode):
         self.fs = fs
         del self.section
 
-        # Create sections and set their geometry, biophysics and topology
-        self.createSections()
-        self.setGeometry()  # must be called PRIOR to setTopology()
-        self.setBiophysics()
-        self.setResistivity()
-        self.setTopology()
+        # Construct model
+        self.construct()
 
     def __repr__(self):
         ''' Explicit naming of the model instance. '''
@@ -60,9 +56,16 @@ class ExtendedSonicNode(SonicNode):
             self.pylkp = self.nbls.getLookup2D(f, 1.)
             self.fref = f
 
+    def construct(self):
+        ''' Create and connect node sections with assigned membrane dynamics. '''
+        self.createSections()
+        self.setGeometry()  # must be called PRIOR to build_custom_topology()
+        self.setResistivity()
+        self.setTopology()
+
     def createSections(self):
         ''' Create morphological sections. '''
-        self.sections = {id: h.Section(name=id, cell=self) for id in ['sonophore', 'surroundings']}
+        self.sections = {id: self.createSection(id) for id in self.secnames}
 
     def clear(self):
         del self.sections
@@ -96,12 +99,6 @@ class ExtendedSonicNode(SonicNode):
         self.sections['sonophore'].L = L1  # um
         self.sections['surroundings'].L = L2  # um
 
-    def setBiophysics(self):
-        ''' Set section-specific membrane properties with specific sonophore membrane coverage. '''
-        logger.debug('defining membrane biophysics: {}'.format(self.str_biophysics()))
-        for sec in self.sections.values():
-            sec.insert(self.mechname)
-
     def setResistivity(self):
         ''' Set sections axial resistivity, corrected to account for internodes and membrane capacitance
             in the Q-based differentiation scheme. '''
@@ -122,7 +119,9 @@ class ExtendedSonicNode(SonicNode):
         setattr(self.sections['surroundings'], 'Adrive_{}'.format(self.mechname), 0.)
 
     def setStimON(self, value):
-        return setStimON(self, value)
+        for sec in self.sections.values():
+            sec.setStimON(value)
+        return value
 
     @Model.logNSpikes
     @Model.checkTitrate
@@ -137,13 +136,13 @@ class ExtendedSonicNode(SonicNode):
         logger.info(f'{self}: simulation @ {drive.desc}, {pp.desc}')
 
         # Set recording vectors
-        t = setTimeProbe()
-        stim = setStimProbe(self.sections['sonophore'], self.mechname)
-        probes = {k: self.setProbesDict(v) for k, v in self.sections.items()}
+        t = self.setTimeProbe()
+        stim = self.sections[self.secnames[0]].setStimProbe()
+        probes = {k: v.setProbesDict() for k, v in self.sections.items()}
 
         # Set stimulus amplitude and integrate model
         self.setDrive(drive)
-        integrate(self, pp, dt, atol)
+        self.integrate(pp, dt, atol)
 
         # Store output in dataframes
         data = {}
