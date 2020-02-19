@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-19 15:08:50
+# @Last Modified time: 2020-02-19 22:04:16
 
 from .pyhoc import *
 
@@ -19,7 +19,12 @@ class NeuronModel(metaclass=abc.ABCMeta):
 
     def createSection(self, id):
         ''' Create a model section with a given id. '''
-        return Section(self.mechname, self.pneuron.statesNames(), name=id, cell=self.cell)
+        if hasattr(self, 'connection_scheme'):
+            return IaxSection(self.connection_scheme,
+                self.mechname, self.pneuron.statesNames(), name=id, cell=self)
+        else:
+            return Section(
+                self.mechname, self.pneuron.statesNames(), name=id, cell=self)
 
     def initToSteadyState(self):
         ''' Initialize model variables to pre-stimulus resting state values. '''
@@ -133,8 +138,7 @@ class NeuronModel(metaclass=abc.ABCMeta):
             and link them to FUNCTION_TABLEs in the MOD file of the corresponding
             membrane mechanism.
         '''
-        if self.cell == self:
-            logger.debug(f'loading {self.mechname} membrane dynamics lookup tables')
+        logger.debug(f'loading {self.mechname} membrane dynamics lookup tables')
 
         # Set Lookup
         self.setModLookup(*args, **kwargs)

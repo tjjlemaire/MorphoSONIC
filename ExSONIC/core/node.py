@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-19 15:29:24
+# @Last Modified time: 2020-02-19 22:05:30
 
 import os
 import abc
@@ -27,29 +27,24 @@ class Node(NeuronModel):
 
     tscale = 'ms'  # relevant temporal scale of the model
 
-    def __init__(self, pneuron, id=None, cell=None, pylkp=None):
+    def __init__(self, pneuron, id=None, construct=True):
         ''' Initialization.
 
             :param pneuron: point-neuron model
         '''
-        self.cell = cell
-        if self.cell is None:
-            self.cell = self
-        self.pylkp = pylkp
-
         # Initialize arguments
         self.pneuron = pneuron
         if id is None:
             id = self.__repr__()
         self.id = id
-        if cell == self:
-            logger.debug('Creating {} model'.format(self))
+        logger.debug('Creating {} model'.format(self))
 
         # Load mechanisms and set appropriate membrane mechanism
         load_mechanisms(getNmodlDir(), self.modfile)
 
         # Construct model section and set membrane mechanism
-        self.section = self.createSection(self.id)
+        if construct:
+            self.section = self.createSection(self.id)
 
     def __repr__(self):
         return '{}({})'.format(self.__class__.__name__, self.pneuron)

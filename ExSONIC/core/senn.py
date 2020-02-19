@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-19 15:34:39
+# @Last Modified time: 2020-02-19 22:08:40
 
 import abc
 import os
@@ -19,9 +19,11 @@ from PySONIC.constants import *
 from PySONIC.postpro import detectSpikes, prependDataFrame
 
 from ..constants import *
+from ..utils import getNmodlDir, load_mechanisms
 from .nmodel import NeuronModel
+from .pyhoc import IClamp, IaxSection
 from .node import IintraNode, SonicNode
-from .connectors import SeriesConnector
+from .connectors import SerialConnectionScheme
 
 
 class SennFiber(NeuronModel):
@@ -61,7 +63,6 @@ class SennFiber(NeuronModel):
         self.nodeL = nodeL    # m
         self.interD = interD  # m
         self.interL = interL  # m
-        self.cell = self
 
         # Compute nodal and internodal axial resistance ()
         self.R_node = self.resistance(self.nodeD, self.nodeL)  # Ohm
@@ -69,6 +70,9 @@ class SennFiber(NeuronModel):
 
         # Assign nodes IDs
         self.ids = [f'node{i}' for i in range(self.nnodes)]
+
+        # Load mechanisms and set appropriate membrane mechanism
+        load_mechanisms(getNmodlDir(), self.modfile)
 
         # Construct model
         self.construct()
@@ -206,18 +210,19 @@ class SennFiber(NeuronModel):
     def length(self):
         return self.nnodes * self.nodeL + (self.nnodes - 1) * self.interL
 
-    @abc.abstractmethod
+    @property
+    def seclist(self):
+        return list(self.sections.values())
+
     def createSections(self, ids):
         ''' Create morphological sections. '''
-        raise NotImplementedError
+        self.sections = {k: self.createSection(k) for k in ids}
 
     def setGeometry(self):
         ''' Set sections geometry. '''
         logger.debug(f'defining sections geometry: {self.str_geometry()}')
-        for sec in self.sections.values():
-            sec.diam = self.nodeD * 1e6  # um
-            sec.L = self.nodeL * 1e6     # um
-            sec.nseg = 1
+        for sec in self.seclist:
+            sec.setGeometry(self.nodeD, self.nodeL)
 
     def resistance(self, d, L, rs=None):
         ''' Return resistance of cylindrical section based on its diameter and length.
@@ -231,7 +236,7 @@ class SennFiber(NeuronModel):
             rs = self.rs
         return 4 * rs * L / (np.pi * d**2) * 1e-2  # Ohm
 
-    def setResistivity(self): ####ASK!
+    def setResistivity(self):
         ''' Set sections axial resistivity, corrected to account for internodes and membrane capacitance
             in the Q-based differentiation scheme. '''
 
@@ -253,27 +258,19 @@ class SennFiber(NeuronModel):
         # In case the axial coupling variable is v (an alias for membrane charge density),
         # multiply resistivity by membrane capacitance to ensure consistency of Q-based
         # differential scheme, where Iax = dV / r = dQ / (r * cm)
-        if self.connector is None or self.connector.vref == 'v':
+        if not hasattr(self, 'connection_scheme') or self.connection_scheme.vref == 'v':
             logger.debug('adjusting resistivities to account for Q-based differential scheme')
             rho_nodes *= self.pneuron.Cm0 * 1e2  # Ohm.cm
 
         # Assigning resistivities to sections
         for sec, rho in zip(self.sections.values(), rho_nodes):
-            sec.Ra = rho
+            sec.setResistivity(rho)
+            # sec.Ra = rho
 
     def setTopology(self):
         ''' Connect the sections in series. '''
-        sec_list = list(self.sections.values())
-        if self.connector is None:
-            logger.debug('building standard topology')
-            for sec1, sec2 in zip(sec_list[:-1], sec_list[1:]):
-                sec2.connect(sec1, 1, 0)
-        else:
-            logger.debug(f'building custom {self.connector.vref}-based topology')
-            for sec in sec_list:
-                self.connector.attach(sec)
-            for sec1, sec2 in zip(sec_list[:-1], sec_list[1:]):
-                self.connector.connect(sec1, sec2)
+        for sec1, sec2 in zip(self.seclist[:-1], self.seclist[1:]):
+            sec2.connect(sec1)
 
     @abc.abstractmethod
     def preProcessAmps(self, drives):
@@ -290,7 +287,7 @@ class SennFiber(NeuronModel):
         raise NotImplementedError
 
     def setStimON(self, value):
-        for sec in self.sections.values():
+        for sec in self.seclist:
             sec.setStimON(value)
         return value
 
@@ -547,13 +544,14 @@ class SennFiber(NeuronModel):
 class EStimFiber(SennFiber):
 
     def __init__(self, *args, **kwargs):
-        self.connector = None
+        # Initialize parent class
         super().__init__(*args, **kwargs)
 
-    def createSections(self, ids):
-        ''' Create morphological sections. '''
-        self.nodes = {id: IintraNode(self.pneuron, id, cell=self) for id in ids}
-        self.sections = {id: node.section for id, node in self.nodes.items()}
+        # Set invariant function tables
+        self.setFuncTables()
+
+    def setPyLookup(self, *args, **kwargs):
+        return IintraNode.setPyLookup(self, *args, **kwargs)
 
     def setDrives(self, source):
         ''' Set distributed stimulation drives. '''
@@ -561,7 +559,7 @@ class EStimFiber(SennFiber):
         Iinj = self.preProcessAmps(amps)
         logger.debug('injected intracellular currents: Iinj = [{}] nA'.format(
             ', '.join([f'{I:.2f}' for I in Iinj])))
-        self.iclamps = [IClamp(sec(0.5), I) for I, sec in zip(Iinj, self.sections.values())]
+        self.iclamps = [IClamp(sec(0.5), I) for I, sec in zip(Iinj, self.seclist)]
 
     def setStimON(self, value):
         value = super().setStimON(value)
@@ -613,20 +611,21 @@ class SonicFiber(SennFiber):
     A_range = (1e0, 6e5)  # Pa
 
     def __init__(self, *args, a=32e-9, fs=1., **kwargs):
-        # Retrieve point neuron object
-        pneuron = args[0]
-
         # Assign attributes
-        self.pneuron = pneuron
+        self.pneuron = args[0]
         self.a = a            # m
         self.fs = fs          # (-)
 
-        # Initialize connector NBLS objects
-        self.connector = SeriesConnector(vref=f'Vm_{self.mechname}', rmin=None)
+        # Initialize connection scheme and NBLS object
+        self.connection_scheme = SerialConnectionScheme(vref=f'Vm_{self.mechname}', rmin=None)
+        logger.debug(f'Assigning custom connection scheme: {self.connection_scheme}')
         self.nbls = NeuronalBilayerSonophore(self.a, self.pneuron)
 
+        # Initalize reference frequency and python lookup to None
         self.fref = None
         self.pylkp = None
+
+        # Initialize parent class
         super().__init__(*args, **kwargs)
 
     @classmethod
@@ -636,17 +635,8 @@ class SonicFiber(SennFiber):
     def str_biophysics(self):
         return f'{super().str_biophysics()}, a = {self.a * 1e9:.1f} nm'
 
-    def createSections(self, ids):
-        ''' Create morphological sections. '''
-        self.nodes = {
-            id: SonicNode(self.pneuron, id, cell=self, a=self.a, fs=self.fs, nbls=self.nbls)
-            for id in ids}
-        self.sections = {id: node.section for id, node in self.nodes.items()}
-
-    def setPyLookup(self, f):
-        if self.pylkp is None or f != self.fref:
-            self.pylkp = self.nbls.getLookup2D(f, self.fs)
-            self.fref = f
+    def setPyLookup(self, *args, **kwargs):
+        return SonicNode.setPyLookup(self, *args, **kwargs)
 
     def preProcessAmps(self, A):
         return A
@@ -654,12 +644,11 @@ class SonicFiber(SennFiber):
     def setDrives(self, source):
         ''' Set distributed stimulation drives. '''
         self.setFuncTables(source.f)
-        amps = source.computeNodesAmps(self)
-        self.amps = self.preProcessAmps(amps)
+        self.amps = self.preProcessAmps(source.computeNodesAmps(self))
         logger.debug('Acoustic pressures: A = [{}] kPa'.format(
             ', '.join([f'{A * 1e-3:.2f}' for A in self.amps])))
-        for i, sec in enumerate(self.sections.values()):
-            setattr(sec, 'Adrive_{}'.format(self.mechname), self.amps[i] * 1e-3)
+        for i, sec in enumerate(self.seclist):
+            sec.setMechValue('Adrive', self.amps[i] * 1e-3)
 
     def meta(self, source, pp):
         meta = super().meta(source, pp)
@@ -680,6 +669,7 @@ class SonicFiber(SennFiber):
         }
 
     def titrate(self, source, pp):
+        self.setFuncTables(source.f)  # pre-loading lookups to have a defined Arange
         Arange = self.getArange(source)
         A_conv_thr = np.abs(Arange[1] - Arange[0]) / 1e4
         return threshold(

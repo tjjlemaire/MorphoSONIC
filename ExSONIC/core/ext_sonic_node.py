@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-19 15:33:16
+# @Last Modified time: 2020-02-19 21:47:43
 
 import os
 import numpy as np
@@ -18,7 +18,7 @@ from PySONIC.postpro import detectSpikes, prependDataFrame
 
 from ..constants import *
 from .node import SonicNode
-from .connectors import SeriesConnector
+from .connectors import SerialConnectionScheme
 
 
 class ExtendedSonicNode(SonicNode):
@@ -33,10 +33,12 @@ class ExtendedSonicNode(SonicNode):
         self.deff = deff  # m
         assert fs < 1., 'fs must be lower than 1'
 
-        # Initialize parent class and delete nominal section
-        super().__init__(pneuron, id=None, a=a, fs=1.)
+        # Initialize parent class wihtout constructing sections
+        super().__init__(pneuron, id=None, a=a, fs=1., construct=False)
         self.fs = fs
-        del self.section
+
+        # Define Vm-based connection scheme
+        self.connection_scheme = SerialConnectionScheme(vref=f'Vm_{self.mechname}', rmin=1e2)
 
         # Construct model
         self.construct()
@@ -106,10 +108,7 @@ class ExtendedSonicNode(SonicNode):
             sec.Ra = self.rs
 
     def setTopology(self):
-        self.connector = SeriesConnector(vref='Vm_{}'.format(self.mechname), rmin=1e2)
-        logger.debug('building custom {}-based topology'.format(self.connector.vref))
-        list(map(self.connector.attach, self.sections.values()))
-        self.connector.connect(self.sections['sonophore'], self.sections['surroundings'])
+        self.sections['sonophore'].connect(self.sections['surroundings'])
 
     def setDrive(self, drive):
         ''' Set US drive. '''
