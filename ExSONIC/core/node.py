@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-19 22:05:30
+# @Last Modified time: 2020-02-20 18:30:43
 
 import os
 import abc
@@ -13,12 +13,13 @@ import pandas as pd
 
 from PySONIC.constants import *
 from PySONIC.core import Model, PointNeuron, NeuronalBilayerSonophore
-from PySONIC.utils import si_format, logger, logCache, filecode, simAndSave
+from PySONIC.utils import si_format, logger, logCache, filecode, simAndSave, getMeta
 from PySONIC.threshold import threshold
 from PySONIC.postpro import prependDataFrame
 
 from ..utils import getNmodlDir, load_mechanisms
 from ..constants import *
+from .pyhoc import IClamp
 from .nmodel import NeuronModel
 
 
@@ -86,6 +87,7 @@ class Node(NeuronModel):
     @Model.logNSpikes
     @Model.checkTitrate
     @Model.addMeta
+    @Model.logDesc
     def simulate(self, drive, pp, dt=None, atol=None):
         ''' Set appropriate recording vectors, integrate and return output variables.
 
@@ -95,7 +97,6 @@ class Node(NeuronModel):
             :param atol: absolute error tolerance for adaptive time step method (default = 1e-3)
             :return: output dataframe
         '''
-        logger.info(self.desc(self.meta(drive, pp)))
 
         # Set recording vectors
         t = self.setTimeProbe()
@@ -120,8 +121,9 @@ class Node(NeuronModel):
 
         return data
 
-    def meta(self, drive, pp):
-        return self.pneuron.meta(drive, pp)
+    @property
+    def meta(self):
+        return self.pneuron.meta
 
     def desc(self, meta):
         return f'{self}: simulation @ {meta["drive"].desc}, {meta["pp"].desc}'
@@ -164,6 +166,10 @@ class IintraNode(Node):
     A_conv_rel_thr = ESTIM_REL_CONV_THR
     A_conv_thr = None
     A_conv_precheck = False
+
+    @property
+    def simkey(self):
+        return self.pneuron.simkey
 
     @property
     def Arange(self):
@@ -233,6 +239,10 @@ class SonicNode(Node):
         self.pylkp = None
         super().__init__(pneuron, *args, **kwargs)
 
+    @property
+    def simkey(self):
+        return self.nbls.simkey
+
     def __repr__(self):
         return f'{self.__class__.__name__}({self.a * 1e9:.1f} nm, {self.pneuron}, fs={self.fs:.2f})'
 
@@ -255,11 +265,16 @@ class SonicNode(Node):
         self.setFuncTables(drive.f)
         self.section.setMechValue('Adrive', drive.A * 1e-3)
 
-    def filecodes(self, *args):
-        return self.nbls.filecodes(*args, self.fs, 'NEURON', None)
+    def filecodes(self, *args, **kwargs):
+        args = args[:-3] + [self.fs, 'NEURON', None]
+        return self.nbls.filecodes(*args)
 
-    def meta(self, drive, pp):
-        return self.nbls.meta(drive, pp, self.fs, 'NEURON', None)
+    @property
+    def meta(self):
+        d = self.nbls.meta
+        d['method'] = 'NEURON'
+        d['fs'] = self.fs
+        return d
 
     def getPltVars(self, *args, **kwargs):
         return self.nbls.getPltVars(*args, **kwargs)
@@ -297,7 +312,8 @@ class DrivenSonicNode(SonicNode):
         codes['Idrive'] = f'Idrive{self.Idrive:.1f}mAm2'
         return codes
 
-    def meta(self, A, pp):
-        meta = super().meta(A, pp)
+    @property
+    def meta(self):
+        meta = super().meta
         meta['Idrive'] = self.Idrive
         return meta

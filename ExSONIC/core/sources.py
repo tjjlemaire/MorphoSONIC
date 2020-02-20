@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-18 19:11:30
+# @Last Modified time: 2020-02-20 18:37:20
 
 import abc
 import numpy as np
@@ -97,6 +97,10 @@ class NodeSource(XSource):
 
     def filecodes(self):
         return {'inode': f'node{self.inode}'}
+
+    @property
+    def quickcode(self):
+        return f'node{self.inode}'
 
     def computeNodesAmps(self, fiber):
         amps = np.zeros(fiber.nnodes)
@@ -195,6 +199,20 @@ class ExtracellularSource(XSource):
             value = tuple([self.checkFloat('x', v) for v in value])
         self._x = value
 
+    @property
+    def y(self):
+        if len(self.x) <= 2:
+            raise ValueError('Cannot return y-component for a 2D position (XZ)')
+        return self._x[1]
+
+    @property
+    def z(self):
+        return self._x[-1]
+
+    @property
+    def xz(self):
+        return (self._x[0], self._x[-1])
+
     def strPos(self):
         d = self.inputs()["x"]
         x_mm = [f'{xx * d.get("factor", 1.):.1f}' for xx in self.x]
@@ -217,6 +235,15 @@ class ExtracellularSource(XSource):
 
     def filecodes(self):
         return {'position': self.strPos().replace(',', '_').replace('(', '').replace(')', '')}
+
+    @property
+    def zstr(self):
+        d = self.inputs()['x']
+        return f'z{self.z * d.get("factor", 1.):.1f}{d["unit"]}'
+
+    @property
+    def quickcode(self):
+        return self.zstr
 
     def distance(self, x):
         return np.linalg.norm(np.asarray(x) - np.asarray(self.x))
@@ -574,7 +601,7 @@ class AcousticSource(XSource):
             'f': {
                 'desc': 'US drive frequency',
                 'label': 'f',
-                'unit': 'kHz',
+                'unit': 'Hz',
                 'factor': 1e-3,
                 'precision': 0
             }
@@ -784,18 +811,6 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
         self._x = value
 
     @property
-    def y(self):
-        return self._x[1]
-
-    @property
-    def z(self):
-        return self._x[-1]
-
-    @property
-    def xz(self):
-        return (self._x[0], self._x[-1])
-
-    @property
     def r(self):
         return self._r
 
@@ -916,6 +931,14 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
         for k, v in d.items():
             d[k] = v.replace('/', '_per_')
         return d
+
+    @property
+    def quickcode(self):
+        return '_'.join([
+            f'r{si_format(self.r, 2, space="")}{self.inputs()["r"]["unit"]}',
+            f'f{si_format(self.f, 0, space="")}{self.inputs()["f"]["unit"]}',
+            ExtracellularSource.quickcode.fget(self)
+        ])
 
     @property
     def xvar(self):

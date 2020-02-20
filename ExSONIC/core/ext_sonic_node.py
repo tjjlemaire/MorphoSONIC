@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-19 21:47:43
+# @Last Modified time: 2020-02-20 18:27:56
 
 import os
 import numpy as np
@@ -47,10 +47,24 @@ class ExtendedSonicNode(SonicNode):
         ''' Explicit naming of the model instance. '''
         return f'{super().__repr__()[:-1]}, rs={self.rs:.2e} Ohm.cm, deff={self.deff * 1e9:.0f} nm)'
 
+    @property
+    def meta(self):
+        meta = {
+            **super().meta,
+            'fs': self.fs,
+            'rs': self.rs,
+            'deff': self.deff
+        }
+        # meta = super().meta
+        # meta['fs'] = self.fs
+        # meta['rs'] = self.rs
+        # meta['deff'] = self.deff
+        meta['simkey'] = self.simkey
+        return meta
+
     @classmethod
-    def initFromMeta(cls, meta):
-        return cls(getPointNeuron(meta['neuron']), meta['rs'], a=meta['a'],
-                   fs=meta['fs'], deff=meta['deff'])
+    def initFromMeta(cls, d):
+        return cls(getPointNeuron(d['neuron']), d['rs'], a=d['a'], fs=d['fs'], deff=d['deff'])
 
     def setPyLookup(self, f):
         ''' Set lookups computing with fs = 1. '''
@@ -194,7 +208,7 @@ class ExtendedSonicNode(SonicNode):
             self.Arange, x0=ASTIM_AMP_INITIAL,
             eps_thr=ASTIM_ABS_CONV_THR, rel_eps_thr=1e0, precheck=True)
 
-    def filecodes(self, drive, pp):
+    def filecodes(self, drive, pp, _):
         # Get parent codes and supress irrelevant entries
         codes = self.nbls.filecodes(drive, pp, self.fs, 'NEURON', None)
         del codes['method']
@@ -203,14 +217,6 @@ class ExtendedSonicNode(SonicNode):
             'deff': f'deff{(self.deff * 1e9):.0f}nm'
         })
         return codes
-
-    def meta(self, drive, pp):
-        meta = super().meta(drive, pp)
-        meta['fs'] = self.fs
-        meta['rs'] = self.rs
-        meta['deff'] = self.deff
-        meta['simkey'] = self.simkey
-        return meta
 
     @staticmethod
     def isExcited(data):

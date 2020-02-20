@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-19 22:08:40
+# @Last Modified time: 2020-02-20 18:32:02
 
 import abc
 import os
@@ -42,7 +42,6 @@ class SennFiber(NeuronModel):
         ''' Constructor.
 
             :param pneuron: point-neuron model object
-            :param fiberD: fiber outer diameter (m)
             :param nnodes: number of nodes
             :param rs: axoplasmic resistivity (Ohm.cm)
             :param nodeD: node diameter (m)
@@ -140,6 +139,20 @@ class SennFiber(NeuronModel):
     @staticmethod
     def getSennArgs(meta):
         return [meta[x] for x in ['nnodes', 'rs', 'nodeD', 'nodeL', 'interD', 'interL']]
+
+
+    @property
+    def meta(self):
+        return {
+            'simkey': self.simkey,
+            'neuron': self.pneuron.name,
+            'nnodes': self.nnodes,
+            'rs': self.rs,
+            'nodeD': self.nodeD,
+            'nodeL': self.nodeL,
+            'interD': self.interD,
+            'interL': self.interL,
+        }
 
     @classmethod
     def initFromMeta(cls, meta):
@@ -293,6 +306,7 @@ class SennFiber(NeuronModel):
 
     @Model.checkTitrate
     @Model.addMeta
+    @Model.logDesc
     def simulate(self, source, pp, dt=None, atol=None):
         ''' Set appropriate recording vectors, integrate and return output variables.
 
@@ -302,7 +316,7 @@ class SennFiber(NeuronModel):
             :param atol: absolute error tolerance for adaptive time step method (default = 1e-3)
             :return: output dataframe
         '''
-        logger.info(self.desc(self.meta(source, pp)))
+        # logger.info(self.desc(self.meta(source, pp)))
 
         # Set recording vectors
         t = self.setTimeProbe()
@@ -330,24 +344,6 @@ class SennFiber(NeuronModel):
         data = {id: prependDataFrame(df) for id, df in data.items()}
 
         return data
-
-    def modelMeta(self):
-        return {
-            'simkey': self.simkey,
-            'neuron': self.pneuron.name,
-            'nnodes': self.nnodes,
-            'rs': self.rs,
-            'nodeD': self.nodeD,
-            'nodeL': self.nodeL,
-            'interD': self.interD,
-            'interL': self.interL,
-        }
-
-    def meta(self, source, pp):
-        return {**self.modelMeta(), **{
-            'source': source,
-            'pp': pp
-        }}
 
     def desc(self, meta):
         return f'{self}: simulation @ {meta["source"]}, {meta["pp"].desc}'
@@ -391,10 +387,16 @@ class SennFiber(NeuronModel):
         return self.pneuron.pltScheme
 
     @property
-    def modelcodes(self):
+    def corecodes(self):
         return {
             'simkey': self.simkey,
-            'neuron': self.pneuron.name,
+            'neuron': self.pneuron.name
+        }
+
+    @property
+    def modelcodes(self):
+        return {
+            **self.corecodes,
             'nnodes': f'{self.nnodes}node{plural(self.nnodes)}',
             'rs': f'rs{self.rs:.0f}ohm.cm',
             'nodeD': f'nodeD{(self.nodeD * 1e6):.1f}um',
@@ -403,8 +405,7 @@ class SennFiber(NeuronModel):
             'interL': f'interL{(self.interL * 1e6):.1f}um'
         }
 
-
-    def filecodes(self, source, pp):
+    def filecodes(self, source, pp, _):
         return {
             **self.modelcodes,
             **source.filecodes(),
@@ -416,14 +417,22 @@ class SennFiber(NeuronModel):
         return filecode(self, *args)
 
     @property
+    def fiberD(self):
+        if self.interL == 0.:  # unmyelinated case -> fiberD = nodeD
+            return self.nodeD
+        else:  # myelinated case: fiberD = interL / 100. (default inter_ratio)
+            return self.interL / 100.
+
+    @property
+    def is_myelinated(self):
+        return self.interL > 0.
+
+    @property
     def quickcode(self):
-        if self.interL == 0.:
-            fiber_type = 'unmyelinated'
-            fiberD = self.nodeD
-        else:
-            fiber_type = 'myelinated'
-            fiberD = self.interL / 100.  # default inter_ratio
-        return f'senn_{fiber_type}_{fiberD * 1e6:.2f}um'
+        return '_'.join([
+            *self.corecodes.values(),
+            f'fiberD{self.fiberD * 1e6:.2f}um'
+        ])
 
     def simAndSave(self, *args, **kwargs):
         return simAndSave(self, *args, **kwargs)
@@ -650,22 +659,21 @@ class SonicFiber(SennFiber):
         for i, sec in enumerate(self.seclist):
             sec.setMechValue('Adrive', self.amps[i] * 1e-3)
 
-    def meta(self, source, pp):
-        meta = super().meta(source, pp)
+    @property
+    def meta(self):
+        meta = super().meta
         meta.update({
             'a': self.a,
             'fs': self.fs
         })
         return meta
 
-    def filecodes(self, source, pp):
+    @property
+    def corecodes(self):
         return {
-            **self.modelcodes,
+            **super().corecodes,
             'a': f'{self.a * 1e9:.0f}nm',
-            'fs': f'fs{self.fs * 1e2:.0f}%' if self.fs <= 1 else None,
-            **source.filecodes(),
-            'nature': pp.nature,
-            **pp.filecodes
+            'fs': f'fs{self.fs * 1e2:.0f}%' if self.fs <= 1 else None
         }
 
     def titrate(self, source, pp):

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-17 12:19:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-18 23:09:25
+# @Last Modified time: 2020-02-20 13:02:39
 
 import abc
 import numpy as np
@@ -55,9 +55,10 @@ class StrengthDurationBatch(LogBatch):
     suffix = 'strengthduration'
     unit = 's'
 
-    def __init__(self, source, fiber, durations, offset, root='.'):
+    def __init__(self, out_key, source, fiber, durations, offset, root='.', convert_func=None):
         ''' Construtor.
 
+            :param out_key: string defining the unique batch output key
             :param source: source object
             :param fiber: fiber model
             :param durations: array of pulse durations
@@ -65,13 +66,26 @@ class StrengthDurationBatch(LogBatch):
             :param root: root for IO operations
             :return: array of threshold acoustic amplitudes for each pulse duration
         '''
+        self.out_keys = [out_key]
+        if convert_func is None:
+            self.convert_func = lambda x: x
+        else:
+            self.convert_func = convert_func
         self.source = source
         self.fiber = fiber
         self.offset = offset
         super().__init__(durations, root=root)
 
+    @property
+    def out_keys(self):
+        return self._out_keys
+
+    @out_keys.setter
+    def out_keys(self, value):
+        self._out_keys = value
+
     def sourcecode(self):
-        return '_'.join(self.source.filecodes().values())
+        return self.source.quickcode
 
     def corecode(self):
         return f'{self.fiber.quickcode}_source_{self.sourcecode()}'
@@ -80,40 +94,9 @@ class StrengthDurationBatch(LogBatch):
         logger.info(f'Computing SD curve for {self.fiber} with {self.source}')
         return super().run()
 
-
-class CurrentStrengthDurationBatch(StrengthDurationBatch):
-    ''' Strength-duration batch with an acoustic source '''
-
-    out_keys = ['Ithr (A)']
-
-    def sourcecode(self):
-        codes = self.source.filecodes()
-        for k in ['rho']:
-            if k in codes:
-                del codes[k]
-        return '_'.join(codes.values())
-
     def compute(self, t):
-        Ithr = self.fiber.titrate(self.source, PulsedProtocol(t, self.offset))  # A
-        return [Ithr]
-
-
-class AcousticStrengthDurationBatch(StrengthDurationBatch):
-    ''' Strength-duration batch with an acoustic source '''
-
-    out_keys = ['Athr (Pa)']
-
-    def sourcecode(self):
-        codes = self.source.filecodes()
-        for k in ['theta', 'rho', 'c']:
-            if k in codes:
-                del codes[k]
-        return '_'.join(codes.values())
-
-    def compute(self, t):
-        uthr = self.fiber.titrate(self.source, PulsedProtocol(t, self.offset))  # m/s
-        Athr = uthr * self.source.relNormalAxisAmp(0.)                          # Pa
-        return [Athr]
+        xthr = self.fiber.titrate(self.source, PulsedProtocol(t, self.offset))
+        return [self.convert_func(xthr)]
 
 
 class FiberConvergenceBatch(LogBatch):
@@ -164,7 +147,6 @@ class FiberConvergenceBatch(LogBatch):
         fiber = self.fiber_func(x)
         logger.info(f'resulting node length: {si_format(fiber.nodeL, 2)}m')
         return fiber
-
 
     def compute(self, x):
         ''' Create a fiber with a specific discretization pattern, simulate it upon application
