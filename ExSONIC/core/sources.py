@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-20 18:37:20
+# @Last Modified time: 2020-02-20 18:52:36
 
 import abc
 import numpy as np
@@ -610,6 +610,10 @@ class AcousticSource(XSource):
     def filecodes(self):
         return {'f': f'{self.f * 1e-3:.0f}kHz'}
 
+    @property
+    def quickcode(self):
+        return f'f{si_format(self.f, 0, space="")}{self.inputs()["f"]["unit"]}'
+
 
 class NodeAcousticSource(NodeSource, AcousticSource):
 
@@ -663,6 +667,13 @@ class NodeAcousticSource(NodeSource, AcousticSource):
             **NodeSource.filecodes(self), **AcousticSource.filecodes(self),
             'A': f'{(self.A * self.conv_factor):.2f}kPa'
         }
+
+    @property
+    def quickcode(self):
+        return '_'.join([
+            AcousticSource.quickcode.fget(self),
+            NodeSource.quickcode.fget(self)
+        ])
 
     def copy(self):
         return self.__class__(self.inode, self.f, A=self.A)
@@ -935,8 +946,8 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
     @property
     def quickcode(self):
         return '_'.join([
+            AcousticSource.quickcode.fget(self),
             f'r{si_format(self.r, 2, space="")}{self.inputs()["r"]["unit"]}',
-            f'f{si_format(self.f, 0, space="")}{self.inputs()["f"]["unit"]}',
             ExtracellularSource.quickcode.fget(self)
         ])
 
