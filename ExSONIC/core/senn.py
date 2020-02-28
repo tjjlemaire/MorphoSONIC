@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-20 18:32:02
+# @Last Modified time: 2020-02-28 11:09:35
 
 import abc
 import os
@@ -29,8 +29,7 @@ from .connectors import SerialConnectionScheme
 class SennFiber(NeuronModel):
     ''' Generic single-cable, Spatially Extended Nonlinear Node (SENN) fiber model. '''
 
-    tscale = 'ms'        # relevant temporal scale of the model
-    titration_var = 'A'  # name of the titration parameter
+    tscale = 'ms'  # relevant temporal scale of the model
 
     @property
     @abc.abstractmethod

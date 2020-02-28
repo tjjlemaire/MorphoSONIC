@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-11-27 18:03:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-21 12:28:27
+# @Last Modified time: 2020-02-28 17:47:21
 
 ''' Constructor functions for different types of fibers. '''
 
@@ -167,8 +167,7 @@ def getFiberFactory(fiberType):
 
 
 def strengthDuration(fiberType, fiberClass, fiberD, tstim_range, toffset=20e-3, outdir='.',
-                     zdistance=1e-3, Fdrive=500e3, a=32e-9, fs=1., r=2e-3):
-
+                     zdistance=1e-3, Fdrive=500e3, a=32e-9, fs=1., r=2e-3, sigma=1e-3):
 
     # Default conversion function
     convert_func = lambda x: x
@@ -191,6 +190,11 @@ def strengthDuration(fiberType, fiberClass, fiberD, tstim_range, toffset=20e-3, 
     elif fiberClass == 'acoustic_single_node':
         fiber = fiber_factory(SonicFiber, fiberD=fiberD, a=a, fs=fs)
         source = NodeAcousticSource(fiber.nnodes//2, Fdrive)
+        out_key = 'Athr (Pa)'
+
+    elif fiberClass == 'acoustic_gaussian':
+        fiber = fiber_factory(SonicFiber, fiberD=fiberD, a=a, fs=fs)
+        source = GaussianAcousticSource(0., sigma, Fdrive)
         out_key = 'Athr (Pa)'
 
     elif fiberClass == 'acoustic_planar_transducer':

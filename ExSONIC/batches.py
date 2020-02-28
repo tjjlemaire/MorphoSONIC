@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-17 12:19:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-20 13:02:39
+# @Last Modified time: 2020-02-28 17:39:12
 
 import abc
 import numpy as np
@@ -85,7 +85,15 @@ class StrengthDurationBatch(LogBatch):
         self._out_keys = value
 
     def sourcecode(self):
-        return self.source.quickcode
+        code = self.source.quickcode
+        if 'inode' in self.source.inputs():
+            istart = code.index('node')
+            code_node = code[istart:]
+            inode = int(code[istart + 4:])
+            if inode == self.fiber.nnodes // 2:
+                code_node = 'centralnode'
+            code = code[:istart] + code_node
+        return code
 
     def corecode(self):
         return f'{self.fiber.quickcode}_source_{self.sourcecode()}'

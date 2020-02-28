@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-20 18:52:36
+# @Last Modified time: 2020-02-28 17:50:43
 
 import abc
 import numpy as np
@@ -170,6 +170,10 @@ class GaussianSource(XSource):
             d = self.inputs()[key]
             codes[key] = f'{getattr(self, key) * d.get("factor", 1.):.1f}{d["unit"]}'
         return codes
+
+    @property
+    def quickcode(self):
+        return f'sigma{self.sigma * 1e3:.3f}mm'
 
     def computeNodesAmps(self, fiber):
         xcoords = fiber.getNodeCoords()  # m
@@ -746,10 +750,17 @@ class GaussianAcousticSource(GaussianSource, AcousticSource):
         return GaussianSource.computeNodesAmps(self, fiber) * self.conv_factor
 
     def filecodes(self):
-        return {
-            **GaussianSource.filecodes(self), **AcousticSource.filecodes(self),
-            'A': f'{(self.A * self.conv_factor):.2f}kPa'
-        }
+        codes = {**GaussianSource.filecodes(self), **AcousticSource.filecodes(self)}
+        if self.A is not None:
+            codes['A'] = f'{(self.A * self.conv_factor):.2f}kPa'
+        return codes
+
+    @property
+    def quickcode(self):
+        return '_'.join([
+            AcousticSource.quickcode.fget(self),
+            GaussianSource.quickcode.fget(self)
+        ])
 
     def copy(self):
         return self.__class__(self.x0, self.sigma, self.f, A=self.A)
