@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-03-18 18:06:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-14 19:03:10
+# @Last Modified time: 2020-02-19 14:37:55
 
 import os
 
@@ -21,12 +21,12 @@ def main():
     logger.setLevel(args['loglevel'])
 
     for pneuron in args['neuron']:
-        logger.info('generating %s neuron MOD file', pneuron.name)
+        logger.info(f'generating {pneuron.name} neuron MOD file')
         translator = NmodlTranslator(pneuron.__class__)
         if args['save']:
             outfile = f'{pneuron.name}.mod'
             outpath = os.path.join(args['outputdir'], outfile)
-            logger.info('dumping MOD file in "%s"', args['outputdir'])
+            logger.info(f'dumping MOD file in "{args["outputdir"]}"')
             translator.dump(outpath)
         else:
             translator.print()

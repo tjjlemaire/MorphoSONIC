@@ -3,59 +3,49 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-14 11:05:31
+# @Last Modified time: 2020-02-20 18:30:43
 
-import pickle
+import os
 import abc
 from inspect import signature
 import numpy as np
-from scipy.interpolate import interp1d
 import pandas as pd
-from neuron import h
 
 from PySONIC.constants import *
-from PySONIC.core import Model, PointNeuron, NeuronalBilayerSonophore, AcousticDrive
-from PySONIC.neurons import getPointNeuron
-from PySONIC.utils import si_format, timer, logger, plural, debug, logCache, filecode, simAndSave
+from PySONIC.core import Model, PointNeuron, NeuronalBilayerSonophore
+from PySONIC.utils import si_format, logger, logCache, filecode, simAndSave, getMeta
 from PySONIC.threshold import threshold
 from PySONIC.postpro import prependDataFrame
 
-from .pyhoc import *
-from ..utils import getNmodlDir
+from ..utils import getNmodlDir, load_mechanisms
 from ..constants import *
+from .pyhoc import IClamp
+from .nmodel import NeuronModel
 
 
-class Node(metaclass=abc.ABCMeta):
+class Node(NeuronModel):
     ''' Generic node interface. '''
 
     tscale = 'ms'  # relevant temporal scale of the model
 
-    def __init__(self, pneuron, id=None, cell=None, pylkp=None):
+    def __init__(self, pneuron, id=None, construct=True):
         ''' Initialization.
 
             :param pneuron: point-neuron model
         '''
-        self.cell = cell
-        if self.cell is None:
-            self.cell = self
-        self.pylkp = pylkp
-
         # Initialize arguments
         self.pneuron = pneuron
         if id is None:
             id = self.__repr__()
         self.id = id
-        if cell == self:
-            logger.debug('Creating {} model'.format(self))
+        logger.debug('Creating {} model'.format(self))
 
         # Load mechanisms and set appropriate membrane mechanism
-        self.modfile = f'{self.pneuron.name}.mod'
-        self.mechname = f'{self.pneuron.name}auto'
         load_mechanisms(getNmodlDir(), self.modfile)
 
-        # Create section and set membrane mechanism
-        self.section = h.Section(name=id, cell=self.cell)
-        self.section.insert(self.mechname)
+        # Construct model section and set membrane mechanism
+        if construct:
+            self.section = self.createSection(self.id)
 
     def __repr__(self):
         return '{}({})'.format(self.__class__.__name__, self.pneuron)
@@ -72,12 +62,6 @@ class Node(metaclass=abc.ABCMeta):
         A = self.pneuron.area                  # neuron membrane area (m2)
         return A0 / A
 
-    def setFuncTables(self, *args, **kwargs):
-        return setFuncTables(self, *args, **kwargs)
-
-    def setModLookup(self, *args, **kwargs):
-        return setModLookup(self, *args, **kwargs)
-
     @abc.abstractmethod
     def setPyLookup(self, *args, **kwargs):
         raise NotImplementedError
@@ -93,27 +77,8 @@ class Node(metaclass=abc.ABCMeta):
             :param value: new stimulation state (0 = OFF, 1 = ON)
             :return: new stimulation state
         '''
-        setattr(self.section, 'stimon_{}'.format(self.mechname), value)
+        self.section.setStimON(value)
         return value
-
-    def initToSteadyState(self):
-        ''' Initialize model variables to pre-stimulus resting state values. '''
-        h.finitialize(self.pneuron.Qm0 * 1e5)  # nC/cm2
-
-    def toggleStim(self):
-        return toggleStim(self)
-
-    def setProbesDict(self, sec):
-        return {
-            **{
-                'Qm': setRangeProbe(sec, 'v'),
-                'Vm': setRangeProbe(sec, 'Vm_{}'.format(self.mechname))
-            },
-            **{
-                k: setRangeProbe(sec, '{}_{}'.format(alias(k), self.mechname))
-                for k in self.pneuron.statesNames()
-            }
-        }
 
     @staticmethod
     def getNSpikes(data):
@@ -122,6 +87,7 @@ class Node(metaclass=abc.ABCMeta):
     @Model.logNSpikes
     @Model.checkTitrate
     @Model.addMeta
+    @Model.logDesc
     def simulate(self, drive, pp, dt=None, atol=None):
         ''' Set appropriate recording vectors, integrate and return output variables.
 
@@ -131,24 +97,23 @@ class Node(metaclass=abc.ABCMeta):
             :param atol: absolute error tolerance for adaptive time step method (default = 1e-3)
             :return: output dataframe
         '''
-        logger.info(self.desc(self.meta(drive, pp)))
 
         # Set recording vectors
-        t = setTimeProbe()
-        stim = setStimProbe(self.section, self.mechname)
-        probes = self.setProbesDict(self.section)
+        t = self.setTimeProbe()
+        stim = self.section.setStimProbe()
+        probes = self.section.setProbesDict()
 
         # Set drive and integrate model
         self.setDrive(drive)
-        integrate(self, pp, dt, atol)
+        self.integrate(pp, dt, atol)
 
         # Store output in dataframe
         data = pd.DataFrame({
-            't': vec_to_array(t) * 1e-3,  # s
-            'stimstate': vec_to_array(stim)
+            't': t.to_array() * 1e-3,  # s
+            'stimstate': stim.to_array()
         })
         for k, v in probes.items():
-            data[k] = vec_to_array(v)
+            data[k] = v.to_array()
         data.loc[:,'Qm'] *= 1e-5  # C/m2
 
         # Prepend initial conditions (prior to stimulation)
@@ -156,8 +121,9 @@ class Node(metaclass=abc.ABCMeta):
 
         return data
 
-    def meta(self, drive, pp):
-        return self.pneuron.meta(drive, pp)
+    @property
+    def meta(self):
+        return self.pneuron.meta
 
     def desc(self, meta):
         return f'{self}: simulation @ {meta["drive"].desc}, {meta["pp"].desc}'
@@ -202,6 +168,10 @@ class IintraNode(Node):
     A_conv_precheck = False
 
     @property
+    def simkey(self):
+        return self.pneuron.simkey
+
+    @property
     def Arange(self):
         return self.pneuron.Arange
 
@@ -227,15 +197,13 @@ class IintraNode(Node):
             :param drive: electric drive object.
         '''
         logger.debug(f'Stimulus: {drive}')
-        self.Iinj = drive.I * self.section(0.5).area() * 1e-6  # nA
-        logger.debug(f'Equivalent injected current: {self.Iinj:.1f} nA')
-        self.iclamp = h.IClamp(self.section(0.5))
-        self.iclamp.delay = 0  # we want to exert control over amp starting at 0 ms
-        self.iclamp.dur = 1e9  # dur must be long enough to span all our changes
+        Iinj = drive.I * self.section(0.5).area() * 1e-6  # nA
+        logger.debug(f'Equivalent injected current: {Iinj:.1f} nA')
+        self.iclamp = IClamp(self.section(0.5), Iinj)
 
     def setStimON(self, value):
         value = super().setStimON(value)
-        self.iclamp.amp = value * self.Iinj
+        self.iclamp.toggle(value)
         return value
 
     def filecodes(self, *args):
@@ -271,6 +239,10 @@ class SonicNode(Node):
         self.pylkp = None
         super().__init__(pneuron, *args, **kwargs)
 
+    @property
+    def simkey(self):
+        return self.nbls.simkey
+
     def __repr__(self):
         return f'{self.__class__.__name__}({self.a * 1e9:.1f} nm, {self.pneuron}, fs={self.fs:.2f})'
 
@@ -291,13 +263,18 @@ class SonicNode(Node):
         ''' Set US drive. '''
         logger.debug(f'Stimulus: {drive}')
         self.setFuncTables(drive.f)
-        setattr(self.section, 'Adrive_{}'.format(self.mechname), drive.A * 1e-3)
+        self.section.setMechValue('Adrive', drive.A * 1e-3)
 
-    def filecodes(self, *args):
-        return self.nbls.filecodes(*args, self.fs, 'NEURON', None)
+    def filecodes(self, *args, **kwargs):
+        args = args[:-3] + [self.fs, 'NEURON', None]
+        return self.nbls.filecodes(*args)
 
-    def meta(self, drive, pp):
-        return self.nbls.meta(drive, pp, self.fs, 'NEURON', None)
+    @property
+    def meta(self):
+        d = self.nbls.meta
+        d['method'] = 'NEURON'
+        d['fs'] = self.fs
+        return d
 
     def getPltVars(self, *args, **kwargs):
         return self.nbls.getPltVars(*args, **kwargs)
@@ -322,12 +299,10 @@ class DrivenSonicNode(SonicNode):
 
     def setDrive(self):
         logger.debug(f'setting {self.Idrive:.2f} mA/m2 driving current')
-        self.Iinj = self.Idrive * self.section(0.5).area() * 1e-6  # nA
-        logger.debug(f'Equivalent injected current: {self.Iinj:.1f} nA')
-        self.iclamp = h.IClamp(self.section(0.5))
-        self.iclamp.delay = 0  # we want to exert control over amp starting at 0 ms
-        self.iclamp.dur = 1e9  # dur must be long enough to span all our changes
-        self.iclamp.amp = self.Iinj
+        Iinj = self.Idrive * self.section(0.5).area() * 1e-6  # nA
+        logger.debug(f'Equivalent injected current: {Iinj:.1f} nA')
+        self.iclamp = IClamp(self.section(0.5), Iinj)
+        self.iclamp.toggle(1)
 
     def __repr__(self):
         return super().__repr__()[:-1] + f', Idrive = {self.Idrive:.2f} mA/m2)'
@@ -337,7 +312,8 @@ class DrivenSonicNode(SonicNode):
         codes['Idrive'] = f'Idrive{self.Idrive:.1f}mAm2'
         return codes
 
-    def meta(self, A, pp):
-        meta = super().meta(A, pp)
+    @property
+    def meta(self):
+        meta = super().meta
         meta['Idrive'] = self.Idrive
         return meta

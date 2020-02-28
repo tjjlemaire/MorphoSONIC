@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-14 18:28:45
+# @Last Modified time: 2020-02-28 17:50:43
 
 import abc
 import numpy as np
@@ -98,6 +98,10 @@ class NodeSource(XSource):
     def filecodes(self):
         return {'inode': f'node{self.inode}'}
 
+    @property
+    def quickcode(self):
+        return f'node{self.inode}'
+
     def computeNodesAmps(self, fiber):
         amps = np.zeros(fiber.nnodes)
         amps[self.inode] = self.xvar
@@ -167,6 +171,10 @@ class GaussianSource(XSource):
             codes[key] = f'{getattr(self, key) * d.get("factor", 1.):.3f}{d["unit"]}'
         return codes
 
+    @property
+    def quickcode(self):
+        return f'sigma{self.sigma * 1e3:.3f}mm'
+
     def computeNodesAmps(self, fiber):
         xcoords = fiber.getNodeCoords()  # m
         amps = gaussian(xcoords, mu=self.x0, sigma=self.sigma, A=self.xvar)
@@ -195,6 +203,20 @@ class ExtracellularSource(XSource):
             value = tuple([self.checkFloat('x', v) for v in value])
         self._x = value
 
+    @property
+    def y(self):
+        if len(self.x) <= 2:
+            raise ValueError('Cannot return y-component for a 2D position (XZ)')
+        return self._x[1]
+
+    @property
+    def z(self):
+        return self._x[-1]
+
+    @property
+    def xz(self):
+        return (self._x[0], self._x[-1])
+
     def strPos(self):
         d = self.inputs()["x"]
         x_mm = [f'{xx * d.get("factor", 1.):.1f}' for xx in self.x]
@@ -216,7 +238,16 @@ class ExtracellularSource(XSource):
         }
 
     def filecodes(self):
-        return {'position': self.strPos()}
+        return {'position': self.strPos().replace(',', '_').replace('(', '').replace(')', '')}
+
+    @property
+    def zstr(self):
+        d = self.inputs()['x']
+        return f'z{self.z * d.get("factor", 1.):.1f}{d["unit"]}'
+
+    @property
+    def quickcode(self):
+        return self.zstr
 
     def distance(self, x):
         return np.linalg.norm(np.asarray(x) - np.asarray(self.x))
@@ -574,7 +605,7 @@ class AcousticSource(XSource):
             'f': {
                 'desc': 'US drive frequency',
                 'label': 'f',
-                'unit': 'kHz',
+                'unit': 'Hz',
                 'factor': 1e-3,
                 'precision': 0
             }
@@ -582,6 +613,10 @@ class AcousticSource(XSource):
 
     def filecodes(self):
         return {'f': f'{self.f * 1e-3:.0f}kHz'}
+
+    @property
+    def quickcode(self):
+        return f'f{si_format(self.f, 0, space="")}{self.inputs()["f"]["unit"]}'
 
 
 class NodeAcousticSource(NodeSource, AcousticSource):
@@ -636,6 +671,13 @@ class NodeAcousticSource(NodeSource, AcousticSource):
             **NodeSource.filecodes(self), **AcousticSource.filecodes(self),
             'A': f'{(self.A * self.conv_factor):.2f}kPa'
         }
+
+    @property
+    def quickcode(self):
+        return '_'.join([
+            AcousticSource.quickcode.fget(self),
+            NodeSource.quickcode.fget(self)
+        ])
 
     def copy(self):
         return self.__class__(self.inode, self.f, A=self.A)
@@ -708,10 +750,17 @@ class GaussianAcousticSource(GaussianSource, AcousticSource):
         return GaussianSource.computeNodesAmps(self, fiber) * self.conv_factor
 
     def filecodes(self):
-        return {
-            **GaussianSource.filecodes(self), **AcousticSource.filecodes(self),
-            'A': f'{(self.A * self.conv_factor):.2f}kPa'
-        }
+        codes = {**GaussianSource.filecodes(self), **AcousticSource.filecodes(self)}
+        if self.A is not None:
+            codes['A'] = f'{(self.A * self.conv_factor):.2f}kPa'
+        return codes
+
+    @property
+    def quickcode(self):
+        return '_'.join([
+            AcousticSource.quickcode.fget(self),
+            GaussianSource.quickcode.fget(self)
+        ])
 
     def copy(self):
         return self.__class__(self.x0, self.sigma, self.f, A=self.A)
@@ -782,18 +831,6 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
             value[-1] = self.getFocalDistance()
         value = tuple([self.checkFloat('x', v) for v in value])
         self._x = value
-
-    @property
-    def y(self):
-        return self._x[1]
-
-    @property
-    def z(self):
-        return self._x[-1]
-
-    @property
-    def xz(self):
-        return (self._x[0], self._x[-1])
 
     @property
     def r(self):
@@ -868,8 +905,8 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
             'r': {
                 'desc': 'transducer radius',
                 'label': 'r',
-                'unit': 'mm',
-                'factor': 1e3,
+                'unit': 'm',
+                'factor': 1e0,
                 'precision': 1
             },
             'theta': {
@@ -906,14 +943,24 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
     def filecodes(self):
         d = {
             **ExtracellularSource.filecodes(self),
-            'r': f'{self.r*(self.inputs()["r"]["factor"]):.2f}{self.inputs()["r"]["unit"]}',
+            'r': f'{si_format(self.r, 2, space="")}{self.inputs()["r"]["unit"]}',
             'theta': f'{self.theta:.0f}{self.inputs()["theta"]["unit"]}',
             'rho': f'{self.rho:.0f}{self.inputs()["rho"]["unit"]}',
             'c': f'{self.c:.0f}{self.inputs()["c"]["unit"]}',
             **AcousticSource.filecodes(self)}
         if self.u is not None:
             d['u'] = f'{self.u:.0f}{self.inputs()["u"]["unit"]}'
+        for k, v in d.items():
+            d[k] = v.replace('/', '_per_')
         return d
+
+    @property
+    def quickcode(self):
+        return '_'.join([
+            AcousticSource.quickcode.fget(self),
+            f'r{si_format(self.r, 2, space="")}{self.inputs()["r"]["unit"]}',
+            ExtracellularSource.quickcode.fget(self)
+        ])
 
     @property
     def xvar(self):

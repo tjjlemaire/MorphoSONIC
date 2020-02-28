@@ -3,13 +3,12 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-01-14 15:49:25
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-05 18:18:40
+# @Last Modified time: 2020-02-19 14:50:01
 
 import abc
 from neuron import h
 
-from ..utils import getNmodlDir
-from .pyhoc import load_mechanisms
+from ..utils import getNmodlDir, load_mechanisms
 
 nmodl_dir = getNmodlDir()
 for syn_mod_file in ['fexp2syn.mod', 'fdexp2syn.mod']:

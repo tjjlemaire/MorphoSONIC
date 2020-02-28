@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-01-13 20:15:35
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-03 16:25:17
+# @Last Modified time: 2020-02-19 14:54:09
 
 import pandas as pd
 from neuron import h
@@ -137,9 +137,9 @@ class NodeCollection:
         logger.info(self.desc(self.meta(amps, pp)))
 
         # Set recording vectors
-        t = setTimeProbe()
-        stim = setStimProbe(self.refnode.section, self.refnode.mechname)
-        probes = {k: v.setProbesDict(v.section) for k, v in self.nodes.items()}
+        t = self.setTimeProbe()
+        stim = self.refnode.section.setStimProbe()
+        probes = {k: v.section.setProbesDict(v.pneuron.statesNames()) for k, v in self.nodes.items()}
 
         # Set distributed stimulus amplitudes
         self.setStimAmps(amps)
@@ -151,11 +151,11 @@ class NodeCollection:
         data = {}
         for id in self.nodes.keys():
             data[id] = pd.DataFrame({
-                't': vec_to_array(t) * 1e-3,  # s
-                'stimstate': vec_to_array(stim)
+                't': t.to_array() * 1e-3,  # s
+                'stimstate': stim.to_array()
             })
             for k, v in probes[id].items():
-                data[id][k] = vec_to_array(v)
+                data[id][k] = v.to_array()
             data[id].loc[:,'Qm'] *= 1e-5  # C/m2
 
         # Prepend initial conditions (prior to stimulation)

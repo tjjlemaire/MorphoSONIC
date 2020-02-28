@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-04 21:24:30
+# @Last Modified time: 2020-02-20 17:04:52
 
 import sys
 
@@ -16,6 +16,7 @@ from .connectors import *
 from .pyhoc import *
 from .pymodl import *
 from .grids import *
+from .nmodel import *
 from .sources import *
 from .fibers import *
 from .synapses import *
@@ -37,6 +38,6 @@ def getModel(meta):
     ''' Return appropriate model object based on a dictionary of meta-information. '''
     simkey = meta['simkey']
     try:
-        return models_dict[simkey].initFromMeta(meta)
+        return models_dict[simkey].initFromMeta(meta['model'])
     except KeyError:
         raise ValueError(f'Unknown model type:{simkey}')

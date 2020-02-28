@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-09-27 14:28:52
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-05 19:15:28
+# @Last Modified time: 2020-02-19 21:36:43
 
 ''' Run simulations of an SENN SONIC fiber model with a specific point-neuron mechanism
     upon ultrasound stimulation at one onde. '''
@@ -55,7 +55,6 @@ def main():
                                                 simqueue = [
                                                     [NodeAcousticSource(inode, item[0].f, item[0].A), *item[1:]]
                                                     for item in queue]
-                                                print(simqueue)
                                                 # simqueue = [[psource, *item] for item in queue]
                                                 func = fiber.simulate
                                             batch = Batch(func, simqueue)

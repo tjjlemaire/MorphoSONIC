@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-14 18:30:01
+# @Last Modified time: 2020-02-14 19:02:33
 
 import os
 import numpy as np
@@ -299,7 +299,7 @@ class TestSennEstim(TestFiber):
     def gaussian(self, fiber, pp):
         ''' Run myelinated fiber ESTIM simulation with gaussian distribution source. '''
         # US source
-        source = GaussianVoltageSource(0., fiber.length() / 4., mode='cathode')
+        source = GaussianVoltageSource(0., fiber.length() / 10., mode='cathode')
 
         # Titrate for a specific duration and simulate fiber at threshold US amplitude
         logger.info(f'Running titration for {si_format(pp.tstim)}s pulse')
@@ -333,7 +333,7 @@ class TestSennEstim(TestFiber):
     def test_gaussian1(self, is_profiled=False):
         logger.info('Test: gaussian distribution source on myelinated fiber')
         fiber = myelinatedFiberReilly(IextraFiber)
-        pp = PulsedProtocol(3e-3, 3e-3)
+        pp = PulsedProtocol(10e-3, 3e-3)
         return self.gaussian(fiber, pp)
 
     def test_gaussian2(self, is_profiled=False):
