@@ -336,7 +336,7 @@ def unmyelinatedFiberSundt(fiber_class, fiberD=0.8e-6, fiberL = 5e-3, **kwargs):
     return unmyelinatedFiber(fiber_class, pneuron, fiberD, rs, fiberL, **kwargs)
 
 
-def strengthDuration(fiberType, fiberClass, fiberD, tstim_range, toffset=20e-3, outdir='.', zdistance='focus', Fdrive=500e3, a=32e-9, fs=1., r=2e-3):
+def strengthDuration(fiberType, fiberClass, fiberD, tstim_range, toffset=20e-3, outdir='.', zdistance='focus', Fdrive=500e3, a=32e-9, fs=1., r=2e-3, sigma=1e-3):
 
     logger.info(f'creating model with fiberD = {fiberD * 1e6:.2f} um ...')
     if fiberClass == 'intracellular_electrical_stim':
@@ -350,37 +350,34 @@ def strengthDuration(fiberType, fiberClass, fiberD, tstim_range, toffset=20e-3, 
         source = IntracellularCurrent(fiber.nnodes // 2)
     elif fiberClass == 'extracellular_electrical_stim':
         fiber_class = IextraFiber
+        source = ExtracellularCurrent((0, zdistance), mode='cathode')
+    elif fiberClass == 'acoustic_single_node':
+        fiber_class = SonicFiber
         if fiberType =='sundt':
             fiber = unmyelinatedFiberSundt(fiber_class, fiberD)
         elif fiberType =='reilly':
             fiber = myelinatedFiberReilly(fiber_class, fiberD)
         else:
             raise ValueError('fiber type unknown')
-        source = ExtracellularCurrent((0, zdistance), mode='cathode')
-    elif fiberClass == 'acoustic_single_node':
-        fiber_class = SonicFiber
-        if fiberType =='sundt':
-            fiber = unmyelinatedFiberSundt(fiber_class, fiberD, a=a)
-        elif fiberType =='reilly':
-            fiber = myelinatedFiberReilly(fiber_class, fiberD, a=a)
-        else:
-            raise ValueError('fiber type unknown')
-        source = NodeAcousticSource(fiber.nnodes//2, f)
+        source = NodeAcousticSource(fiber.nnodes//2, Fdrive)
     elif fiberClass == 'acoustic_planar_transducer':
         fiber_class = SonicFiber
-        if fiberType =='sundt':
-            fiber = unmyelinatedFiberSundt(fiber_class, fiberD, a=a, fs=fs)
-        elif fiberType =='reilly':
-            fiber = myelinatedFiberReilly(fiber_class, fiberD, a=a, fs=fs)
-        else:
-            raise ValueError('fiber type unknown')
         source = PlanarDiskTransducerSource((0., 0., zdistance), Fdrive, r=r)
+    elif fiberClass == 'acoustic_gaussian':
+        fiber_class = SonicFiber
+        source = GaussianAcousticSource(0, sigma, Fdrive, 1)
     else:
-        raise ValueError('fiber class unknown')
+        raise ValueError('fiber class unknown')       
+    if fiberType =='sundt':
+            fiber = unmyelinatedFiberSundt(fiber_class, fiberD)
+    elif fiberType =='reilly':
+        fiber = myelinatedFiberReilly(fiber_class, fiberD)
+    else:
+        raise ValueError('fiber type unknown')
 
     # Get filecode
     filecodes = fiber.filecodes(source.updatedX(1), PulsedProtocol(toffset/100, toffset))
-    for k in ['nnodes', 'nodeD', 'rs', 'nodeL', 'interD', 'interL', 'I', 'inode', 'nature', 'tstim', 'toffset', 'PRF', 'DC', 'u', 'theta', 'rho', 'position', 'c']:
+    for k in ['nnodes', 'nodeD', 'rs', 'nodeL', 'interD', 'interL', 'I', 'inode', 'nature', 'tstim', 'toffset', 'PRF', 'DC', 'u', 'theta', 'rho', 'position', 'c', 'x0', 'A']:
         if k in filecodes:
             del filecodes[k]
     filecodes['fiberD'] = f'fiberD{(fiberD * 1e6):.2f}um'
@@ -388,7 +385,6 @@ def strengthDuration(fiberType, fiberClass, fiberD, tstim_range, toffset=20e-3, 
         filecodes['zsource'] = f'zsource{(source.z * 1e3):.2f}mm'
     filecodes['tstim_range'] = 'tstim' + '-'.join(
         [f'{si_format(x, 1, "")}s' for x in [min(tstim_range), max(tstim_range)]])
-    print(filecodes)
     fcode = '_'.join(filecodes.values())
 
     # Output file and column names
@@ -417,12 +413,9 @@ def strengthDuration(fiberType, fiberClass, fiberD, tstim_range, toffset=20e-3, 
 
             # Perform titration to find threshold current
             pp = PulsedProtocol(x, toffset)
-            print(fiber)
-            print(source)
-            print(pp)
             thr = fiber.titrate(source, pp)  
             if fiberClass == 'acoustic_planar_transducer':
-                thr = thr * source.relNormalAxisAmp(source.z)  
+                thr = thr * source.relNormalAxisAmp(0)  
 
             # Log input-output pair into file
             logger.info('saving result to log file')

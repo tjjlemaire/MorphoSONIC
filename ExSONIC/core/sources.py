@@ -164,7 +164,7 @@ class GaussianSource(XSource):
         codes = {}
         for key in ['x0', 'sigma']:
             d = self.inputs()[key]
-            codes[key] = f'{getattr(self, key) * d.get("factor", 1.):.1f}{d["unit"]}'
+            codes[key] = f'{getattr(self, key) * d.get("factor", 1.):.3f}{d["unit"]}'
         return codes
 
     def computeNodesAmps(self, fiber):
@@ -927,9 +927,32 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
         return np.linalg.norm(np.asarray(x) - np.asarray(self.xz))
 
     def getFocalDistance(self):
-        ''' Get transducer focal distance. '''
+        ''' Get transducer focal distance, according to the equation of the normal axis amplitude.
+        '''
         d = self.f * self.r**2 / self.c - self.c / (4 * self.f)
         return max(d, self.min_focus)
+    
+    def getFocalWidth(self, xmax, n):
+        ''' Compute the width of the beam at the focal distance (-6 dB focal diameter), 
+            we assume the beam centered in z=0 and symmetric with x and y.
+
+            param xmax: maximum x value of the interval used in the searching for the limit of the beam
+            param n: number of evaluation points in the interval [0, xmax]
+        '''
+
+        # Get the pressure amplitudes in the focal zone along x
+        xx = np.linspace(0, xmax, n)
+        amps = self.DPSMxy(xx, np.array([0]), self.z - self.getFocalDistance())
+
+        # Compute the conversion of the amplitudes into decibels
+        ampsdB = 20 * np.log10(amps/amps[0])
+
+        # Find the width of the x interval in which the reduction is less than 6 dB
+        i = 0
+        while ampsdB[i] > -6:
+            i = i + 1
+        x_6dB = xx[i] - (xx[i] - xx[i-1]) * (ampsdB[i] + 6) / (ampsdB[i] - ampsdB[i-1])
+        return np.float(2 * x_6dB)
 
     def area(self):
         ''' Transducer surface area. '''
@@ -941,7 +964,7 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
             :param z: coordinate on transducer normal axis (m)
             :return: acoustic amplitude per particle velocity (Pa.s/m)
         '''
-        deltaz = z - self.z
+        deltaz = abs(z - self.z)
         j = complex(0, 1)  # imaginary number
         ez = np.exp(j * self.kf * deltaz)
         ezr = np.exp(j * self.kf * np.sqrt(deltaz**2 + self.r**2))
@@ -1073,7 +1096,7 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
         '''
 
         # Compute the particle velocity needed to generate the acoustic amplitude value at this node
-        return A / self.relNormalAxisAmp(self.getMinNodeDistance(fiber))  # m/s
+        return A / self.relNormalAxisAmp(0.)  # m/s
 
 
 class SourceArray:
