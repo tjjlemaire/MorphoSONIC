@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-27 23:08:23
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-03-24 03:41:36
+# @Last Modified time: 2020-03-24 13:35:38
 
 import numpy as np
 from neuron import h
@@ -536,7 +536,7 @@ class IextraMRGFiber(EStimMRGFiber):
 
     simkey = 'mrg_Iextra'
     A_range = (1e0, 1e5)  # mV
-    use_equivalent_currents = False
+    use_equivalent_currents = True
 
     def toInjectedCurrents(self, Ve):
         ''' Convert extracellular potential array into equivalent injected currents.
@@ -544,33 +544,40 @@ class IextraMRGFiber(EStimMRGFiber):
             :param Ve: model-sized vector of extracellular potentials (mV)
             :return: model-sized vector of intracellular injected currents (nA)
         '''
-        # Extract and reshape STIN Ve array
-        Ve_stin = Ve['STIN'].reshape((self.ninters, self.nstin_per_inter)).T
+        # Extract and reshape STIN Ve to (6 x ninters) array to facilitate downstream computations
+        Ve_stin = Ve['STIN'].reshape((self.nstin_per_inter, self.ninters), order='F')
 
-        # Compute equivalent currents across sections (in nA)
-        I_node_mysa = np.vstack((
-            Ve['node'][:-1] - Ve['MYSA'][::2],  # right-side of the node
-            Ve['node'][1:] - Ve['MYSA'][1::2]   # left-side of the node
+        # Compute equivalent currents flowing across sections (in nA)
+        I_node_mysa = np.vstack((  # currents flowing from nodes to MYSA compartments
+            Ve['node'][:-1] - Ve['MYSA'][::2],  # node -> right-side MYSA
+            Ve['node'][1:] - Ve['MYSA'][1::2]   # left-side MYSA <- node
         )) * 2 / (self.R_node + self.R_mysa) * self.mA_to_nA
-        I_mysa_flut = np.vstack((
-            Ve['MYSA'][::2] - Ve['FLUT'][::2],    # right-side of the node
-            Ve['MYSA'][1::2] - Ve['FLUT'][1::2],  # left-side of the node
+        I_mysa_flut = np.vstack((  # currents flowing from MYSA to FLUT compartments
+            Ve['MYSA'][::2] - Ve['FLUT'][::2],    # right-side MYSA -> right-side FLUT
+            Ve['MYSA'][1::2] - Ve['FLUT'][1::2],  # left-side FLUT <- left-side MYSA
         )) * 2 / (self.R_mysa + self.R_flut) * self.mA_to_nA
-        I_flut_stin = np.vstack((
-            Ve['FLUT'][::2] - Ve_stin[0],   # right-side of the node
-            Ve['FLUT'][1::2] - Ve_stin[-1]  # left-side of the node
+        I_flut_stin = np.vstack((  # currents flowing from FLUT to boundary STIN compartments
+            Ve['FLUT'][::2] - Ve_stin[0],   # right-side FLUT -> right-side boundary STIN
+            Ve['FLUT'][1::2] - Ve_stin[-1]  # left-side boundary STIN <- left-side FLUT
         )) * 2 / (self.R_flut + self.R_stin) * self.mA_to_nA
-        I_stin_stin = np.diff(Ve_stin, axis=0) / self.R_stin * self.mA_to_nA
+        I_stin_stin = np.diff(Ve_stin, axis=0) / self.R_stin * self.mA_to_nA  # STIN -> STIN
 
-        # Compute and return equivalent injected currents (in mA)
+        # Create an array to currents flowing to nodes with appropriate zero-padding at extremities
+        I_mysa_node = np.vstack((
+            np.hstack((-I_node_mysa[0], [0.])),  # node <- right-side MYSA: 0 at the end
+            np.hstack(([0.], -I_node_mysa[1]))   # left-side MYSA -> node: 0 at the beginning
+        ))
+
+        # Return dictionary with sum of currents flowing to each section
         return {
-            'node': np.hstack((-I_node_mysa[0], [0.])) + np.hstack(([0.], -I_node_mysa[1])),
-            'MYSA': np.ravel(I_node_mysa - I_mysa_flut, order='F'),
-            'FLUT': np.ravel(I_mysa_flut - I_flut_stin, order='F'),
+            'node': I_mysa_node[0] + I_mysa_node[1],  # -> node
+            'MYSA': np.ravel(I_node_mysa - I_mysa_flut, order='F'),  # -> MYSA
+            'FLUT': np.ravel(I_mysa_flut - I_flut_stin, order='F'),  # -> FLUT
             'STIN': np.ravel(np.vstack((
-                I_stin_stin[0] + I_flut_stin[0],
-                np.diff(I_stin_stin, axis=0),
-                -I_stin_stin[-1] + I_flut_stin[1])), order='F')
+                I_stin_stin[0] + I_flut_stin[0],   # right-side boundary STIN
+                np.diff(I_stin_stin, axis=0),      # central STIN
+                -I_stin_stin[-1] + I_flut_stin[1]  # left-side boundary STIN
+            )), order='F')
         }
 
     def setDrives(self, source):

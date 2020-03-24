@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-03-24 01:04:20
+# @Last Modified time: 2020-03-24 16:18:41
 
 import numpy as np
 import pandas as pd
@@ -145,6 +145,9 @@ def thresholdCurve(fiber, x, thrs, thrs2=None,
                    y2name='charge', y2factor=1, y2unit='C',
                    scale='log', plot_chr=True, fs=12, colors=None, limits=None, xlimits=None):
 
+    if colors is None:
+        colors = plt.get_cmap('tab10').colors
+
     fig, ax = plt.subplots()
     prefix = si_format(1 / yfactor, space='')[1:]
     ax.set_title(f'{fiber}', fontsize=fs)
@@ -154,20 +157,15 @@ def thresholdCurve(fiber, x, thrs, thrs2=None,
         ax.set_xscale('log')
         ax.set_yscale('log')
     testvalues = thrs[list(thrs.keys())[0]]
-    if np.all(testvalues[np.logical_not(np.isnan(testvalues))] < 0.):
+    testvalues = testvalues[np.logical_not(np.isnan(testvalues))]
+    if np.all(testvalues < 0.):
         thrs = {k: -v for k, v in thrs.items()}
         if thrs2 is not None:
             thrs2 = {k: -v for k, v in thrs2.items()}
-    if colors is None:
-        for i, k in enumerate(thrs.keys()):
-            ax.plot(x * xfactor, thrs[k] * yfactor, label=k)
-            if plot_chr:
-                ax.axvline(chronaxie(x, thrs[k]) * xfactor, linestyle='-.')
-    else:
-        for i, k in enumerate(thrs.keys()):
-            ax.plot(x * xfactor, thrs[k] * yfactor, label=k, color=colors[i])
-            if plot_chr:
-                ax.axvline(chronaxie(x, thrs[k]) * xfactor, linestyle='-.', color=colors[i])
+    for i, k in enumerate(thrs.keys()):
+        ax.plot(x * xfactor, thrs[k] * yfactor, label=k, color=colors[i])
+        if plot_chr:
+            ax.axvline(chronaxie(x, thrs[k]) * xfactor, linestyle='-.', color=colors[i])
     if scale != 'log':
         if xlimits is None:
             ax.set_xlim(0., x.max() * xfactor)
@@ -196,10 +194,7 @@ def thresholdCurve(fiber, x, thrs, thrs2=None,
         if scale == 'log':
             ax2.set_yscale('log')
         for i, k in enumerate(thrs2.keys()):
-            if colors is None:
-                ax2.plot(x * xfactor, thrs2[k] * y2factor, linestyle='--')
-            else:
-                ax2.plot(x * xfactor, thrs2[k] * y2factor, linestyle='--', color=colors[i])
+            ax2.plot(x * xfactor, thrs2[k] * y2factor, linestyle='--', color=colors[i])
         if scale != 'log':
             ax2.set_ylim(0., ax2.get_ylim()[1])
         else:
@@ -308,10 +303,27 @@ def plotConvergenceResults(df, inkey, outkeys, rel_eps_thr_Ithr=0.05, rel_eps_th
     return fig
 
 
+def plotFiberXCoords(fiber, fs=12):
+    ''' Plot the x coordinates of a fiber model, per section type. '''
+    fig, ax = plt.subplots(figsize=(12, 2))
+    ax.set_title(f'{fiber} - x-coordinates per section type', fontsize=fs)
+    ax.set_xlabel('section mid-point x-coordinate (mm)', fontsize=fs)
+    ax.set_ylabel('section type', fontsize=fs)
+    ax.set_yticks(range(len(fiber.sectypes)))
+    ax.set_yticklabels(fiber.sectypes)
+    for i, (k, xcoords) in enumerate(fiber.getXCoords().items()):
+        ax.plot(xcoords * 1e3, np.ones(xcoords.size) * i, '|', markersize=15, label=k)
+    for item in ax.get_xticklabels() + ax.get_yticklabels():
+        item.set_fontsize(fs)
+    fig.tight_layout()
+    return fig
+
+
 def plotFieldDistribution(fiber, source, fs=12):
-    fig, ax = plt.subplots(figsize=(10, 2))
-    ax.set_title(f'Field distribution from {source}', fontsize=fs)
-    ax.set_xlabel('fiber coordinate (mm)', fontsize=fs)
+    ''' Plot a source's field distribution over a fiber, per section type. '''
+    fig, ax = plt.subplots(figsize=(12, 3))
+    ax.set_title(f'{fiber} - field distribution from {source}', fontsize=fs)
+    ax.set_xlabel('section mid-point x-coordinate (mm)', fontsize=fs)
     ax.set_ylabel('Extracellular voltage (mV)', fontsize=fs)
     field_dict = source.computeDistributedAmps(fiber)
     for k, xcoords in fiber.getXCoords().items():
@@ -324,4 +336,31 @@ def plotFieldDistribution(fiber, source, fs=12):
     for item in ax.get_xticklabels() + ax.get_yticklabels():
         item.set_fontsize(fs)
     ax.legend(fontsize=fs, frameon=False)
+    fig.tight_layout()
+    return fig
+
+
+def plotMRGLookups(fiberD_range=None, fs=12):
+    ''' Plot MRG morphological parameters interpolated over a fiber diameter range. '''
+    ref_diams = mrg_lkp.refs['fiberD']
+    if fiberD_range is None:
+        fiberD_range = bounds(ref_diams)
+    diams = np.linspace(*fiberD_range, 100)
+    interp_mrg_lkp = mrg_lkp.project('fiberD', diams)
+    nouts = len(mrg_lkp.outputs)
+    fig, axes = plt.subplots(1, nouts, figsize=(nouts * 3, 2.5))
+    label = f'{mrg_lkp.interp_method} method'
+    for ax, (k, v) in zip(axes, interp_mrg_lkp.items()):
+        factor = 1e0 if k == 'nlayers' else 1e6
+        yunit = '' if k == 'nlayers' else '(um)'
+        ax.set_xlabel('fiber diameter (um)', fontsize=fs)
+        ax.set_ylabel(f'{k} {yunit}', fontsize=fs)
+        ax.plot(diams * 1e6, v * factor, label=label)
+        ax.plot(ref_diams * 1e6, mrg_lkp[k] * factor, '.', c='k')
+        for item in ax.get_xticklabels() + ax.get_yticklabels():
+            item.set_fontsize(fs)
+        ax.legend(frameon=False)
+    title = fig.suptitle(f'MRG morphological parameters', fontsize=fs)
+    fig.tight_layout()
+    title.set_y(title._y + 0.03)
     return fig
