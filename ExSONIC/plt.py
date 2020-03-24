@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-18 21:51:42
+# @Last Modified time: 2020-03-24 01:04:20
 
 import numpy as np
 import pandas as pd
@@ -54,7 +54,7 @@ class SectionGroupedTimeSeries(GroupedTimeSeries):
 
 
 class SectionCompTimeSeries(CompTimeSeries):
-    ''' Plot the time evolution of a specific variable across sections, for one specific condition '''
+    ''' Plot the time evolution of a specific variable across sections, for a specific condition '''
 
     def __init__(self, filepath, varname, sections):
         self.entry = filepath[0]
@@ -114,7 +114,6 @@ class SectionCompTimeSeries(CompTimeSeries):
                 prefix, label_indexes = out
                 sorted_indexes = (np.array(range(nlabels)) + min(label_indexes)).tolist()
                 if label_indexes == sorted_indexes:
-                    logger.debug(f'creating colorbar legend for {prefix} index')
                     use_cbar_legend = True
         if use_cbar_legend:
             colors = [h.get_color() for h in handles]
@@ -157,9 +156,9 @@ def thresholdCurve(fiber, x, thrs, thrs2=None,
     testvalues = thrs[list(thrs.keys())[0]]
     if np.all(testvalues[np.logical_not(np.isnan(testvalues))] < 0.):
         thrs = {k: -v for k, v in thrs.items()}
-        if thrs2 != None:
+        if thrs2 is not None:
             thrs2 = {k: -v for k, v in thrs2.items()}
-    if colors == None:
+    if colors is None:
         for i, k in enumerate(thrs.keys()):
             ax.plot(x * xfactor, thrs[k] * yfactor, label=k)
             if plot_chr:
@@ -170,34 +169,34 @@ def thresholdCurve(fiber, x, thrs, thrs2=None,
             if plot_chr:
                 ax.axvline(chronaxie(x, thrs[k]) * xfactor, linestyle='-.', color=colors[i])
     if scale != 'log':
-        if xlimits == None:
+        if xlimits is None:
             ax.set_xlim(0., x.max() * xfactor)
             ax.set_ylim(0., ax.get_ylim()[1])
         else:
-            ax.set_xlim(xlimits[0]*xfactor, xlimits[1]*xfactor)
+            ax.set_xlim(xlimits[0] * xfactor, xlimits[1] * xfactor)
     else:
         ax.set_xlim(x.min() * xfactor, x.max() * xfactor)
-        if limits == None:
+        if limits is None:
             ymin = np.nanmin([np.nanmin(v) for v in thrs.values()])
             ymax = np.nanmax([np.nanmax(v) for v in thrs.values()])
-            ymin = getPow10(ymin * yfactor ,'down')
-            ymax = getPow10(ymax * yfactor ,'up')
+            ymin = getPow10(ymin * yfactor, 'down')
+            ymax = getPow10(ymax * yfactor, 'up')
         else:
             ymin = limits[0] * yfactor
             ymax = limits[1] * yfactor
         ax.set_ylim(ymin, ymax)
     for item in ax.get_xticklabels() + ax.get_yticklabels():
         item.set_fontsize(fs)
-    ax.legend(fontsize=fs/1.8, frameon=False, loc='upper left', ncol=2)
+    ax.legend(fontsize=fs / 1.8, frameon=False, loc='upper left', ncol=2)
 
-    if thrs2 != None:
+    if thrs2 is not None:
         ax2 = ax.twinx()
         prefix = si_format(1 / y2factor, space='')[1:]
         ax2.set_ylabel(f'threshold {y2name} ({prefix}{y2unit})', fontsize=fs)
         if scale == 'log':
-           ax2.set_yscale('log')
+            ax2.set_yscale('log')
         for i, k in enumerate(thrs2.keys()):
-            if colors == None:
+            if colors is None:
                 ax2.plot(x * xfactor, thrs2[k] * y2factor, linestyle='--')
             else:
                 ax2.plot(x * xfactor, thrs2[k] * y2factor, linestyle='--', color=colors[i])
@@ -206,27 +205,31 @@ def thresholdCurve(fiber, x, thrs, thrs2=None,
         else:
             ymin2 = min([np.nanmin(v) for v in thrs2.values()])
             ymax2 = max([np.nanmax(v) for v in thrs2.values()])
-            ymin2 = getPow10(ymin2 * y2factor ,'down')
-            ymax2 = getPow10(ymax2 * y2factor ,'up')
+            ymin2 = getPow10(ymin2 * y2factor, 'down')
+            ymax2 = getPow10(ymax2 * y2factor, 'up')
             ax2.set_ylim(ymin2, ymax2)
     return fig
 
 
 def strengthDurationCurve(fiber, durations, thrs, **kwargs):
-    return thresholdCurve(fiber, durations, thrs, xname='duration', xfactor=1e6, xunit='s', **kwargs)
+    return thresholdCurve(fiber, durations, thrs, xname='duration',
+                          xfactor=1e6, xunit='s', **kwargs)
+
 
 def strengthDistanceCurve(fiber, distances, thrs, **kwargs):
-    return thresholdCurve(fiber, distances, thrs, xname='distance', xfactor=1e3, xunit='m',
-                          plot_chr=False, **kwargs)
+    return thresholdCurve(fiber, distances, thrs, xname='distance',
+                          xfactor=1e3, xunit='m', plot_chr=False, **kwargs)
 
 
-def plotConvergenceResults(df, inkey, outkeys, rel_eps_thr_Ithr=0.05, rel_eps_thr=0.01, axesdirection='d',):
+def plotConvergenceResults(df, inkey, outkeys, rel_eps_thr_Ithr=0.05, rel_eps_thr=0.01,
+                           axesdirection='d'):
     ''' Plot output metrics of convergence study.
 
         :param df: dataframe with input values (parameter of interest) and output metrics
         :param inkey: key of the input parameter
         :param outkeys: keys of the output parameters
-        :param direction: direction of the x axes used also to find the threshold ('a' ascending, 'd' descending)
+        :param direction: direction of the x axes used also to find the threshold
+            ('a' ascending, 'd' descending)
         :param rel_eps_thr: relative error threshold for the output metrics
         :return: figure handle
     '''
@@ -257,16 +260,14 @@ def plotConvergenceResults(df, inkey, outkeys, rel_eps_thr_Ithr=0.05, rel_eps_th
         axes[i].plot(xin, xout, c='k')
         ymin, ymax, yconv = np.nanmin(xout), np.nanmax(xout), xout[-1]
         yptp, ydelta = ymax - ymin, 0.8 * yconv
-        #axes[i].set_ylim(
-        #            max(yconv - ydelta, ymin - 0.05 * yptp), min(yconv + ydelta, ymax + 0.05 * yptp))
         if ymax - yconv > yconv - ymin:
             ytopaxis = min(yconv + ydelta, ymax + 0.05 * yptp)
             axes[i].set_ylim(
-                    ymin - 0.08 * (ytopaxis - ymin), ytopaxis)
+                ymin - 0.08 * (ytopaxis - ymin), ytopaxis)
         else:
             ybottomaxis = max(yconv - ydelta, ymin - 0.05 * yptp)
             axes[i].set_ylim(
-                    ybottomaxis, ymax + 0.08 * (ymax - ybottomaxis))
+                ybottomaxis, ymax + 0.08 * (ymax - ybottomaxis))
 
         # Compute and plot relative error w.r.t. reference (last) value
         xref = xout[-1]
@@ -279,7 +280,7 @@ def plotConvergenceResults(df, inkey, outkeys, rel_eps_thr_Ithr=0.05, rel_eps_th
             rel_thr = rel_eps_thr_Ithr
         else:
             rel_thr = rel_eps_thr
-        while eps[k][j] <= rel_thr and j>0:
+        while eps[k][j] <= rel_thr and j > 0:
             j -= 1
         xin_thr[k] = xin[j + 1]
         axes[-1].axvline(xin_thr[k], linestyle='dashed', color=f'C{i}')
@@ -304,4 +305,23 @@ def plotConvergenceResults(df, inkey, outkeys, rel_eps_thr_Ithr=0.05, rel_eps_th
             ax.invert_xaxis()
     fig.tight_layout()
 
+    return fig
+
+
+def plotFieldDistribution(fiber, source, fs=12):
+    fig, ax = plt.subplots(figsize=(10, 2))
+    ax.set_title(f'Field distribution from {source}', fontsize=fs)
+    ax.set_xlabel('fiber coordinate (mm)', fontsize=fs)
+    ax.set_ylabel('Extracellular voltage (mV)', fontsize=fs)
+    field_dict = source.computeDistributedAmps(fiber)
+    for k, xcoords in fiber.getXCoords().items():
+        ax.plot(xcoords * 1e3, field_dict[k], '.', label=k)
+    ylims = ax.get_ylim()
+    if source.I < 0.:
+        ax.set_ylim(ylims[0], -0.05 * ylims[0])
+    else:
+        ax.set_ylim(-0.05 * ylims[1], ylims[1])
+    for item in ax.get_xticklabels() + ax.get_yticklabels():
+        item.set_fontsize(fs)
+    ax.legend(fontsize=fs, frameon=False)
     return fig

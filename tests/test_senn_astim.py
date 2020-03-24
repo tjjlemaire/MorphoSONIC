@@ -3,22 +3,16 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-14 15:08:09
+# @Last Modified time: 2020-03-19 18:29:28
 
-import os
 import numpy as np
-import csv
-import pandas as pd
-import matplotlib.pyplot as plt
 
-from PySONIC.neurons import getPointNeuron
 from PySONIC.core import PulsedProtocol
 from PySONIC.utils import logger, si_format
 from ExSONIC.test import TestFiber
 from ExSONIC.core import SonicFiber, myelinatedFiberReilly, unmyelinatedFiberSundt
 from ExSONIC.core.sources import *
-from ExSONIC.plt import SectionCompTimeSeries, strengthDurationCurve, strengthDistanceCurve
-from ExSONIC.utils import chronaxie
+from ExSONIC.plt import SectionCompTimeSeries, strengthDurationCurve
 
 
 class TestSennAstim(TestFiber):
@@ -71,7 +65,7 @@ class TestSennAstim(TestFiber):
     def gaussian(self, fiber, pp):
         ''' Run myelinated fiber ASTIM simulation with gaussian distribution source. '''
         # US source
-        source = GaussianAcousticSource(0., fiber.length() / 4., self.Fdrive)
+        source = GaussianAcousticSource(0., fiber.length / 4., self.Fdrive)
 
         # Titrate for a specific duration and simulate fiber at threshold US amplitude
         logger.info(f'Running titration for {si_format(pp.tstim)}s pulse')
@@ -118,7 +112,7 @@ class TestSennAstim(TestFiber):
         ''' Run SENN fiber ASTIM simulations with a flat external transducer. '''
         # US source
         diam = 19e-3  # transducer diameter (m)
-        source = PlanarDiskTransducerSource((0., 0., 'focus'), self.Fdrive, r=diam/2)
+        source = PlanarDiskTransducerSource((0., 0., 'focus'), self.Fdrive, r=diam / 2)
 
         # Titrate for a specific duration and simulate fiber at threshold particle velocity
         logger.info(f'Running titration for {si_format(pp.tstim)}s pulse')
@@ -151,6 +145,7 @@ class TestSennAstim(TestFiber):
         fiber = unmyelinatedFiberSundt(SonicFiber, a=self.a, fs=self.fs)
         pp = PulsedProtocol(10e-3, 3e-3)
         self.transducer(fiber, pp)
+
 
 if __name__ == '__main__':
     tester = TestSennAstim()

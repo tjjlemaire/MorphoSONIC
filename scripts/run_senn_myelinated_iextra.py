@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-15 20:33:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-05 18:58:57
+# @Last Modified time: 2020-03-23 14:57:58
 
 ''' Run simulations of an SENN fiber model with a specific point-neuron mechanism
     upon extracellular electrical stimulation. '''

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-14 19:02:33
+# @Last Modified time: 2020-03-19 18:29:33
 
 import os
 import numpy as np
@@ -75,7 +75,8 @@ class TestSennEstim(TestFiber):
         fiber.reset()
         durations = np.logspace(0, 4, 5) * 1e-6  # s
         pps = [PulsedProtocol(x, toffset) for x in durations]
-        psources = {k: ExtracellularCurrent((x0, z0), rho=rho_e, mode=k) for k in ['cathode', 'anode']}
+        psources = {k: ExtracellularCurrent((x0, z0), rho=rho_e, mode=k)
+                    for k in ['cathode', 'anode']}
         Ithrs = {k: np.array([np.abs(fiber.titrate(v, x)) for x in pps])  # A
                  for k, v in psources.items()}
         I0_ref = 0.36e-3  # A
@@ -129,12 +130,13 @@ class TestSennEstim(TestFiber):
         toffset = 3e-3     # s
 
         # Create cathodic and anodic extracellular current sources
-        psources = {k: ExtracellularCurrent((x0, z0), rho=rho_e, mode=k) for k in ['cathode', 'anode']}
+        psources = {k: ExtracellularCurrent((x0, z0), rho=rho_e, mode=k)
+                    for k in ['cathode', 'anode']}
 
         # Compute and plot strength-duration curve with both polarities
         durations = np.array([1, 5, 10, 50, 100, 500, 1000, 2000], dtype=float) * 1e-6  # s
         Ithrs = {k: np.array([np.abs(fiber.titrate(v, PulsedProtocol(x, toffset))) for x in durations])  # A
-                for k, v in psources.items()}
+                 for k, v in psources.items()}
         Qthrs = {k: v * durations for k, v in Ithrs.items()}  # C
 
         # Plot strength-duration curve
@@ -278,7 +280,8 @@ class TestSennEstim(TestFiber):
 
         # Compute and plot strength-duration curve for intracellular injection at central node
         durations = np.logspace(-5, 0, 10)  # s
-        Ithrs_sim = np.array([fiber.titrate(psource, PulsedProtocol(x, toffset)) for x in durations])  # A
+        Ithrs_sim = np.array([fiber.titrate(psource, PulsedProtocol(x, toffset))
+                              for x in durations])  # A
         Qthrs_sim = Ithrs_sim * durations  # C
 
         # Compute SD curves metrics
@@ -299,7 +302,7 @@ class TestSennEstim(TestFiber):
     def gaussian(self, fiber, pp):
         ''' Run myelinated fiber ESTIM simulation with gaussian distribution source. '''
         # US source
-        source = GaussianVoltageSource(0., fiber.length() / 10., mode='cathode')
+        source = GaussianVoltageSource(0., fiber.length / 10., mode='cathode')
 
         # Titrate for a specific duration and simulate fiber at threshold US amplitude
         logger.info(f'Running titration for {si_format(pp.tstim)}s pulse')

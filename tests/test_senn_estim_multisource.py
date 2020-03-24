@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-10-28 18:33:04
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-11-25 12:03:07
+# @Last Modified time: 2020-03-19 13:59:01
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -50,8 +50,8 @@ parray = PointSourceArray(psources, rel_amps)
 
 # Figure 1: extracellular potentials
 Ve = np.array([
-    p.computeNodesAmps(fiber, I * rel_amp) for p, rel_amp in zip(psources, rel_amps)])
-Ve_net = parray.computeNodesAmps(fiber, I)
+    p.computeDistributedAmps(fiber, I * rel_amp) for p, rel_amp in zip(psources, rel_amps)])
+Ve_net = parray.computeDistributedAmps(fiber, I)
 fig1, ax = plt.subplots()
 ax.set_title('Extracellular potential')
 ax.set_xlabel('# node')

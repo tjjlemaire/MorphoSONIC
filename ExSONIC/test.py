@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 11:34:09
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-14 16:07:17
+# @Last Modified time: 2020-03-06 09:20:21
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -109,7 +109,8 @@ class TestCompNode(TestComp):
         ax.set_title('effective membrane potential', fontsize=12)
         for k in cls.comp_keys:
             tplt = np.insert(data[k]['t'].values, 0, -tonset) * 1e3
-            axes[0].plot(tplt, np.insert(data[k]['Qm'].values, 0, data[k]['Qm'].values[0]) * 1e5, label=k)
+            axes[0].plot(tplt, np.insert(data[k]['Qm'].values, 0, data[k]['Qm'].values[0]) * 1e5,
+                         label=k)
             axes[1].plot(tplt, np.insert(data[k]['Vm'].values, 0, data[k]['Vm'].values[0]), label=k)
 
         # Plot stim patches on both graphs

@@ -3,13 +3,14 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-28 17:50:43
+# @Last Modified time: 2020-03-24 01:13:15
 
 import abc
 import numpy as np
 from scipy.optimize import brentq
+from scipy.signal import unit_impulse
 
-from PySONIC.utils import si_format, rotAroundPoint2D, StimObject, gaussian
+from PySONIC.utils import si_format, rotAroundPoint2D, StimObject, gaussian, isIterable
 from PySONIC.core.drives import *
 from .grids import getCircle2DGrid
 
@@ -25,7 +26,7 @@ class Source(StimObject):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def computeNodesAmps(self, fiber):
+    def computeDistributedAmps(self, fiber):
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -102,10 +103,8 @@ class NodeSource(XSource):
     def quickcode(self):
         return f'node{self.inode}'
 
-    def computeNodesAmps(self, fiber):
-        amps = np.zeros(fiber.nnodes)
-        amps[self.inode] = self.xvar
-        return amps
+    def computeDistributedAmps(self, fiber):
+        return {'node': unit_impulse(fiber.nnodes, self.inode) * self.xvar}
 
     def computeSourceAmp(self, fiber, A):
         return A
@@ -175,10 +174,9 @@ class GaussianSource(XSource):
     def quickcode(self):
         return f'sigma{self.sigma * 1e3:.3f}mm'
 
-    def computeNodesAmps(self, fiber):
-        xcoords = fiber.getNodeCoords()  # m
-        amps = gaussian(xcoords, mu=self.x0, sigma=self.sigma, A=self.xvar)
-        return amps
+    def computeDistributedAmps(self, fiber):
+        return {k: gaussian(v, mu=self.x0, sigma=self.sigma, A=self.xvar)
+                for k, v in fiber.getXCoords().items()}
 
     def computeSourceAmp(self, fiber, A):
         return A
@@ -205,7 +203,7 @@ class ExtracellularSource(XSource):
 
     @property
     def y(self):
-        if len(self.x) <= 2:
+        if self.nx <= 2:
             raise ValueError('Cannot return y-component for a 2D position (XZ)')
         return self._x[1]
 
@@ -216,6 +214,10 @@ class ExtracellularSource(XSource):
     @property
     def xz(self):
         return (self._x[0], self._x[-1])
+
+    @property
+    def nx(self):
+        return len(self.x)
 
     def strPos(self):
         d = self.inputs()["x"]
@@ -249,14 +251,30 @@ class ExtracellularSource(XSource):
     def quickcode(self):
         return self.zstr
 
-    def distance(self, x):
-        return np.linalg.norm(np.asarray(x) - np.asarray(self.x))
+    def vectorialDistance(self, x):
+        ''' Vectorial distance(s) to target point(s).
 
-    def distances(self, fiber):
-        return np.array([self.distance((item, 0.)) for item in fiber.getNodeCoords()])  # m
+            :param x: target point(s) location (m)
+            :return: vectorial distance(s) (m)
+        '''
+        return np.asarray(self.x) - np.asarray(x)
+
+    def euclidianDistance(self, x):
+        ''' Euclidian distance(s) to target point(s).
+
+            :param x: target point(s) location (m)
+            :return: Euclidian distance(s) (m)
+        '''
+        return np.linalg.norm(self.vectorialDistance(x), axis=-1)
+
+    def vDistances(self, fiber):
+        return {k: self.vectorialDistance(v) for k, v in fiber.getXZCoords().items()}  # m
+
+    def eDistances(self, fiber):
+        return {k: self.euclidianDistance(v) for k, v in fiber.getXCoords().items()}  # m
 
     def getMinNodeDistance(self, fiber):
-        return min(self.distances(fiber))  # m
+        return min(self.eDistances(fiber)['node'])  # m
 
 
 class CurrentSource(XSource):
@@ -357,8 +375,11 @@ class IntracellularCurrent(NodeSource, CurrentSource):
             s = f'{s}, {self.Istr()}'
         return f'{s})'
 
-    def computeNodesAmps(self, fiber):
-        return NodeSource.computeNodesAmps(self, fiber) * self.conv_factor
+    def computeDistributedAmps(self, fiber):
+        if not self.is_resolved:
+            raise ValueError('Cannot compute field distribution: unresolved source')
+        return {k: v * self.conv_factor
+                for k, v in NodeSource.computeDistributedAmps(self, fiber).items()}
 
     def filecodes(self):
         return {**NodeSource.filecodes(self), **CurrentSource.filecodes(self)}
@@ -386,12 +407,22 @@ class ExtracellularCurrent(ExtracellularSource, CurrentSource):
 
     @property
     def rho(self):
-        return self._rho
+        if all([x == self._rho[0] for x in self._rho]):
+            return self._rho[0]
+        else:
+            return self._rho
 
     @rho.setter
     def rho(self, value):
-        value = self.checkFloat('rho', value)
-        self.checkStrictlyPositive('rho', value)
+        if not isIterable(value):
+            value = tuple([value] * self.nx)
+        if len(value) != self.nx:
+            raise ValueError(f'rho must be either a scalar or a {self.nx}-elements vector like x')
+        value = [self.checkFloat('rho', v) for v in value]
+        for v in value:
+            self.checkStrictlyPositive('rho', v)
+        if self.nx == 3 and value[1] != value[2]:
+            raise ValueError('transverse resistivites must be equal')
         self._rho = value
 
     def __eq__(self, other):
@@ -403,7 +434,7 @@ class ExtracellularCurrent(ExtracellularSource, CurrentSource):
         return True
 
     def __repr__(self):
-        s = f'{ExtracellularSource.__repr__(self)[:-1]}, {self.mode}'
+        s = f'{ExtracellularSource.__repr__(self)[:-1]}, {self.strRho}, {self.mode}'
         if self.I is not None:
             s = f'{s}, {self.Istr()}'
         return f'{s})'
@@ -424,40 +455,66 @@ class ExtracellularCurrent(ExtracellularSource, CurrentSource):
             }
         }
 
+    @property
+    def strRho(self):
+        if isIterable(self.rho):
+            s = f'({",".join(f"{x:.2f}" for x in self.rho)})'
+        else:
+            s = f'{self.rho:.0f}'
+        return f'{s}{self.inputs()["rho"]["unit"]}'
+
     def filecodes(self):
         return {
             **ExtracellularSource.filecodes(self), **CurrentSource.filecodes(self),
-            'rho': f'{self.rho:.0f}{self.inputs()["rho"]["unit"]}'
+            'rho': self.strRho.replace(',', '_').replace('(', '').replace(')', '')
         }
 
+    def conductance(self, d):
+        ''' Compute the conductance resulting from integrating the medium's resistivity
+            along the electrode-target path.
 
-    def Vext(self, I, r):
+            :param d: vectorial distance(s) to target point(s) (m)
+            :return: integrated conductance (S)
+        '''
+        d = d.T
+        # square_S = (np.linalg.norm(d, axis=0) / self.rho)**2
+        square_S = d[0]**2 / self._rho[-1]**2
+        for dd, rho in zip(d[1:], self._rho[1:]):
+            square_S += dd**2 / (rho * self._rho[0])
+        return 4 * np.pi * np.sqrt(square_S) * 1e2  # S
+
+    def Vext(self, I, d):
         ''' Compute the extracellular electric potential generated by a given point-current source
             at a given distance in a homogenous, isotropic medium.
 
             :param I: point-source current amplitude (A)
-            :param r: euclidian distance(s) between the source and the point(s) of interest (m)
+            :param d: vectorial distance(s) to target point(s) (m)
             :return: extracellular potential(s) (mV)
         '''
-        return self.rho * I / (4 * np.pi * r) * 1e1  # mV
+        return I / self.conductance(d) * 1e3  # mV
 
-    def Iext(self, V, r):
+    def Iext(self, V, d):
         ''' Compute the point-current source amplitude that generates a given extracellular
             electric potential at a given distance in a homogenous, isotropic medium.
 
             :param V: electric potential (mV)
-            :param r: euclidian distance(s) between the source and the point(s) of interest (m)
+            :param d: vectorial distance(s) to target point(s) (m)
             :return: point-source current amplitude (A)
         '''
-        return 4 * np.pi * r * V / self.rho * 1e-1  # mV
+        return V * self.conductance(d) * 1e-3  # A
 
-    def computeNodesAmps(self, fiber):
-        ''' Compute extracellular potential value at all fiber nodes. '''
-        return self.Vext(self.I, self.distances(fiber))  # mV
+    def computeDistributedAmps(self, fiber):
+        ''' Compute extracellular potential value at all fiber sections. '''
+        if not self.is_resolved:
+            raise ValueError('Cannot compute field distribution: unresolved source')
+        return {k: self.Vext(self.I, d) for k, d in self.vDistances(fiber).items()}  # mV
 
     def computeSourceAmp(self, fiber, Ve):
-        ''' Compute the current needed to generate the extracellular potential value at closest node. '''
-        return self.Iext(Ve, self.getMinNodeDistance(fiber))  # A
+        ''' Compute the current needed to generate the extracellular potential value
+            at closest node. '''
+        xnodes = fiber.getXZCoords()['node']  # fiber nodes coordinates
+        i_closestnode = self.euclidianDistance(xnodes).argmin()  # index of closest fiber node
+        return self.Iext(Ve, self.vectorialDistance(xnodes[i_closestnode]))  # A
 
 
 class VoltageSource(XSource):
@@ -564,8 +621,9 @@ class GaussianVoltageSource(GaussianSource, VoltageSource):
     def copy(self):
         return self.__class__(self.x0, self.sigma, Ve=self.Ve, mode=self.mode)
 
-    def computeNodesAmps(self, fiber):
-        return GaussianSource.computeNodesAmps(self, fiber) * self.conv_factor
+    def computeDistributedAmps(self, fiber):
+        return {k: v * self.conv_factor
+                for k, v in GaussianSource.computeDistributedAmps(self, fiber)}
 
     def filecodes(self):
         return {**GaussianSource.filecodes(self), **VoltageSource.filecodes(self)}
@@ -663,8 +721,8 @@ class NodeAcousticSource(NodeSource, AcousticSource):
             s = f'{s}, {si_format(self.A, 1, space="")}Pa'
         return f'{s})'
 
-    def computeNodesAmps(self, fiber):
-        return NodeSource.computeNodesAmps(self, fiber) * self.conv_factor
+    def computeDistributedAmps(self, fiber):
+        return NodeSource.computeDistributedAmps(self, fiber)
 
     def filecodes(self):
         return {
@@ -694,9 +752,6 @@ class NodeAcousticSource(NodeSource, AcousticSource):
                 'precision': 2
             }
         }
-
-    def computeNodesAmps(self, fiber):
-        return NodeSource.computeNodesAmps(self, fiber)
 
     def computeMaxNodeAmp(self, fiber):
         return self.A
@@ -746,8 +801,8 @@ class GaussianAcousticSource(GaussianSource, AcousticSource):
             s = f'{s}, {si_format(self.A, 1, space="")}Pa'
         return f'{s})'
 
-    def computeNodesAmps(self, fiber):
-        return GaussianSource.computeNodesAmps(self, fiber) * self.conv_factor
+    def computeDistributedAmps(self, fiber):
+        return GaussianSource.computeDistributedAmps(self, fiber)
 
     def filecodes(self):
         codes = {**GaussianSource.filecodes(self), **AcousticSource.filecodes(self)}
@@ -778,12 +833,8 @@ class GaussianAcousticSource(GaussianSource, AcousticSource):
             }
         }
 
-    def computeNodesAmps(self, fiber):
-        return GaussianSource.computeNodesAmps(self, fiber)
-
     def computeMaxNodeAmp(self, fiber):
         return self.A
-
 
 
 class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
@@ -978,12 +1029,12 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
         '''
         d = self.f * self.r**2 / self.c - self.c / (4 * self.f)
         return max(d, self.min_focus)
-    
+
     def getFocalWidth(self, xmax, n):
-        ''' Compute the width of the beam at the focal distance (-6 dB focal diameter), 
+        ''' Compute the width of the beam at the focal distance (-6 dB focal diameter),
             we assume the beam centered in z=0 and symmetric with x and y.
 
-            param xmax: maximum x value of the interval used in the searching for the limit of the beam
+            param xmax: maximum x value of the interval used to search for the limit of the beam
             param n: number of evaluation points in the interval [0, xmax]
         '''
 
@@ -992,13 +1043,13 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
         amps = self.DPSMxy(xx, np.array([0]), self.z - self.getFocalDistance())
 
         # Compute the conversion of the amplitudes into decibels
-        ampsdB = 20 * np.log10(amps/amps[0])
+        ampsdB = 20 * np.log10(amps / amps[0])
 
         # Find the width of the x interval in which the reduction is less than 6 dB
         i = 0
         while ampsdB[i] > -6:
             i = i + 1
-        x_6dB = xx[i] - (xx[i] - xx[i-1]) * (ampsdB[i] + 6) / (ampsdB[i] - ampsdB[i-1])
+        x_6dB = xx[i] - (xx[i] - xx[i - 1]) * (ampsdB[i] + 6) / (ampsdB[i] - ampsdB[i - 1])
         return np.float(2 * x_6dB)
 
     def area(self):
@@ -1006,7 +1057,8 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
         return np.pi * self.r**2
 
     def relNormalAxisAmp(self, z):
-        ''' Compute the relative acoustic amplitude at a given coordinate along the transducer normal axis.
+        ''' Compute the relative acoustic amplitude at a given coordinate along
+            the transducer normal axis.
 
             :param z: coordinate on transducer normal axis (m)
             :return: acoustic amplitude per particle velocity (Pa.s/m)
@@ -1042,17 +1094,20 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
             :param x: x coordinate of the point for which compute the acustic amplitude (m)
             :param z: z coordinate of the point for which compute the acustic amplitude (m)
             :param xsource: x coordinates of the point sources (m)
-            :param ysource: y coordinates of the point sources, y perpendicular to x and parallel to the transducer surface (m)
+            :param ysource: y coordinates of the point sources, y perpendicular to x
+                and parallel to the transducer surface (m)
             :param meff: number of point sources actually used
             :return: acoustic amplitude (Pa)
         '''
-        j = complex(0, 1)                          # imaginary number
-        ds = self.area() / mact              # surface associated at each point source
+        j = complex(0, 1)        # imaginary number
+        ds = self.area() / mact  # surface associated at each point source
         deltax = xsource + self.x[0] * np.ones(mact) - x * np.ones(mact)
         deltay = ysource + self.y * np.ones(mact) - y * np.ones(mact)
         deltaz = (self.z - z) * np.ones(mact)
-        distance = np.sqrt(deltax**2 + deltay**2 + deltaz**2)      # distances of the point (x,z) to the point sources on the transducer surface
-        return np.abs(- j * self.rho * self.f * ds * self.u * sum( np.exp(j * self.kf * distance) / distance))
+        # distances of the point (x,z) to the point sources on the transducer surface
+        distances = np.sqrt(deltax**2 + deltay**2 + deltaz**2)
+        exp_sum = sum(np.exp(j * self.kf * distances) / distances)
+        return np.abs(-j * self.rho * self.f * ds * self.u * exp_sum)
 
     def DPSM2d(self, x, z, m=None, d='concentric'):
         ''' Compute acoustic amplitude in the 2D space xz, given the transducer normal particle
@@ -1112,7 +1167,7 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
                 results[i, j] = self.DPSM_point(x[i], y[j], z, xsource, ysource, mact)
         return results
 
-    def computeNodesAmps(self, fiber):
+    def computeDistributedAmps(self, fiber):
         ''' Compute acoustic amplitude value at all fiber nodes, given
             a transducer normal particle velocity.
 
@@ -1131,7 +1186,7 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
         return node_amps.ravel()   # Pa
 
     def computeMaxNodeAmp(self, fiber):
-        return max(self.computeNodesAmps(fiber))  # Pa
+        return max(self.computeDistributedAmps(fiber))  # Pa
 
     def computeSourceAmp(self, fiber, A):
         ''' Compute transducer particle velocity amplitude from target acoustic amplitude
@@ -1157,9 +1212,9 @@ class SourceArray:
     def strAmp(self, A):
         return ', '.join([p.strAmp(A * r) for p, r in zip(self.psources, self.rel_amps)])
 
-    def computeNodesAmps(self, fiber, A):
+    def computeDistributedAmps(self, fiber, A):
         amps = np.array([
-            p.computeNodesAmps(fiber, A * r) for p, r in zip(self.psources, self.rel_amps)])
+            p.computeDistributedAmps(fiber, A * r) for p, r in zip(self.psources, self.rel_amps)])
         return amps.sum(axis=0)
 
     def computeSourceAmp(self, fiber, A):
@@ -1173,12 +1228,14 @@ class SourceArray:
         Amin, Amax = min(source_amps) * 1e-3, max(source_amps) * 1e3
 
         # Search for source array amplitude that matches the target amplitude
-        Asource = brentq(lambda x: self.computeNodesAmps(fiber, x).max() - A, Amin, Amax, xtol=1e-16)
+        Asource = brentq(
+            lambda x: self.computeDistributedAmps(fiber, x).max() - A, Amin, Amax, xtol=1e-16)
         return Asource
 
     def filecodes(self, A):
         keys = self.psources[0].filecodes(A)
-        return {key: '_'.join([p.filecodes(A * r)[key] for p, r in zip(self.psources, self.rel_amps)])
+        return {key: '_'.join([p.filecodes(A * r)[key]
+                               for p, r in zip(self.psources, self.rel_amps)])
                 for key in keys}
 
     def strPos(self):

@@ -3,9 +3,8 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-17 12:19:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-28 17:39:12
+# @Last Modified time: 2020-03-06 09:14:28
 
-import abc
 import numpy as np
 
 from PySONIC.core import LogBatch, PulsedProtocol
@@ -31,6 +30,7 @@ class MPIBatch:
     def run_parallel(self, queue):
 
         global pickable_simfunc
+
         def pickable_simfunc(*args, **kwargs):
             return self.simfunc(*args, **kwargs)
 
@@ -183,7 +183,8 @@ class FiberConvergenceBatch(LogBatch):
             data, meta = fiber.simulate(source.updatedX(1.1 * Ithr), self.pp)
 
             # Filter out stimulation artefact from dataframe
-            data = {k: boundDataFrame(df, (self.pp.tstim, self.pp.ttotal)) for k, df in data.items()}
+            data = {k: boundDataFrame(df, (self.pp.tstim, self.pp.ttotal))
+                    for k, df in data.items()}
 
             # Compute CV and spike amplitude
             cv = fiber.getConductionVelocity(data, out='median')  # m/s
@@ -202,4 +203,3 @@ class FiberConvergenceBatch(LogBatch):
         out = super().run()
         logger.info('parameter sweep successfully completed')
         return out
-

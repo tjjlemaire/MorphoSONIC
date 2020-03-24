@@ -38,7 +38,7 @@ In this context, the charge casting of local membrane dynamics entails an import
 
 ### A custom connection scheme across NMODL and Python
 
-In order to work around that algorithmic discrepancy and provide more flexibility on the choice of the state variable governing intracellular coupling, we implemented a custom **definition of intracellular currents as a separate density mechanism**. That mechanism uses pointers that can be set to point to values of any state variable at the relevant section (either $v$ or a variable computed as part of another distributed membrane mechanism). It then computes the resulting intracellular current and normalizes it by the section's own membrane surface area in order to return a current density that is unit-consistent with other density mechanisms (such as ionic currents). 
+In order to work around that algorithmic discrepancy and provide more flexibility on the choice of the state variable governing intracellular coupling, we implemented a custom **definition of intracellular currents as a separate point process**. That point-process uses pointers that can be set to point to values of any state variable at the relevant section (either $v$ or a variable computed as part of another distributed membrane mechanism). It then computes the resulting intracellular current (in nA).
 
 In order to facilitate section-connection with various coupling variables in a user-friendly manner, a `SeriesConnector` class was implemented that closely mimics *NEURON*'s built-in "connect" function, also called from within the Python interface.
 

@@ -3,19 +3,16 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-20 18:30:43
+# @Last Modified time: 2020-03-06 09:02:02
 
 import os
 import abc
-from inspect import signature
 import numpy as np
-import pandas as pd
 
 from PySONIC.constants import *
-from PySONIC.core import Model, PointNeuron, NeuronalBilayerSonophore
-from PySONIC.utils import si_format, logger, logCache, filecode, simAndSave, getMeta
+from PySONIC.core import PointNeuron, NeuronalBilayerSonophore
+from PySONIC.utils import si_format, logger, logCache, filecode, simAndSave
 from PySONIC.threshold import threshold
-from PySONIC.postpro import prependDataFrame
 
 from ..utils import getNmodlDir, load_mechanisms
 from ..constants import *
@@ -45,7 +42,8 @@ class Node(NeuronModel):
 
         # Construct model section and set membrane mechanism
         if construct:
-            self.section = self.createSection(self.id)
+            self.section = self.createSection(
+                self.id, mech=self.mechname, states=self.pneuron.statesNames())
 
     def __repr__(self):
         return '{}({})'.format(self.__class__.__name__, self.pneuron)
@@ -71,55 +69,9 @@ class Node(NeuronModel):
     def setDrive(self, value):
         raise NotImplementedError
 
-    def setStimON(self, value):
-        ''' Set stimulation ON or OFF.
-
-            :param value: new stimulation state (0 = OFF, 1 = ON)
-            :return: new stimulation state
-        '''
-        self.section.setStimON(value)
-        return value
-
     @staticmethod
     def getNSpikes(data):
         return PointNeuron.getNSpikes(data)
-
-    @Model.logNSpikes
-    @Model.checkTitrate
-    @Model.addMeta
-    @Model.logDesc
-    def simulate(self, drive, pp, dt=None, atol=None):
-        ''' Set appropriate recording vectors, integrate and return output variables.
-
-            :param drive: drive object
-            :param pp: pulse protocol object
-            :param dt: integration time step for fixed time step method (s)
-            :param atol: absolute error tolerance for adaptive time step method (default = 1e-3)
-            :return: output dataframe
-        '''
-
-        # Set recording vectors
-        t = self.setTimeProbe()
-        stim = self.section.setStimProbe()
-        probes = self.section.setProbesDict()
-
-        # Set drive and integrate model
-        self.setDrive(drive)
-        self.integrate(pp, dt, atol)
-
-        # Store output in dataframe
-        data = pd.DataFrame({
-            't': t.to_array() * 1e-3,  # s
-            'stimstate': stim.to_array()
-        })
-        for k, v in probes.items():
-            data[k] = v.to_array()
-        data.loc[:,'Qm'] *= 1e-5  # C/m2
-
-        # Prepend initial conditions (prior to stimulation)
-        data = prependDataFrame(data)
-
-        return data
 
     @property
     def meta(self):

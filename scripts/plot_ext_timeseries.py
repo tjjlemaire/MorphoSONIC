@@ -3,9 +3,10 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 07:03:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-08-23 22:45:47
+# @Last Modified time: 2020-03-06 09:21:51
 
-''' Plot section-specific temporal profiles of specific simulation output variables for spatially-extended models. '''
+''' Plot section-specific temporal profiles of specific simulation output variables
+    for spatially-extended models. '''
 
 import matplotlib.pyplot as plt
 

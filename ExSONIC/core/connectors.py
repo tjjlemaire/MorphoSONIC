@@ -3,7 +3,8 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-19 22:08:06
+# @Last Modified time: 2020-03-06 09:06:17
+
 
 class SerialConnectionScheme:
 

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 14:38:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-19 14:50:31
+# @Last Modified time: 2020-03-20 11:25:23
 
 import os
 import pickle
@@ -12,11 +12,18 @@ import numpy as np
 from scipy.optimize import curve_fit
 from neuron import h
 
-from PySONIC.constants import *
-from PySONIC.utils import si_format, logger
+from PySONIC.utils import logger
 
 # global list of paths already loaded by load_mechanisms
 nrn_dll_loaded = []
+
+array_print_options = {
+    'precision': 2,
+    'suppress': True,
+    'linewidth': 150,
+    'sign': '+'
+}
+
 
 def load_mechanisms(path, modfile=None):
     ''' Rewrite of NEURON's native load_mechanisms method to ensure Windows and Linux compatibility.
@@ -84,7 +91,8 @@ def getNmodlDir():
 
 
 def chronaxie(durations, Ithrs):
-    ''' Return chronaxie, i.e. stimulus duration for which threshold current is twice the rheobase. '''
+    ''' Return chronaxie, i.e. stimulus duration for which threshold amplitude
+        is twice the rheobase. '''
     if np.all(Ithrs[np.logical_not(np.isnan(Ithrs))] < 0.):
         Ithrs = -Ithrs
     Irh = 2 * np.nanmin(Ithrs)   # rheobase current
@@ -143,5 +151,5 @@ def extractIndexesFromLabels(labels):
     try:
         indexed_labels = [int(s) for s in labels_wo_prefix]
         return prefix, indexed_labels
-    except ValueError as err:
+    except ValueError:
         return None

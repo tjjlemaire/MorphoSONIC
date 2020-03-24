@@ -3,15 +3,15 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-20 17:04:52
+# @Last Modified time: 2020-03-10 11:29:42
 
 import sys
-
-from PySONIC.neurons import getPointNeuron
+import inspect
 
 from .node import *
 from .ext_sonic_node import *
 from .senn import *
+from .mrg import *
 from .connectors import *
 from .pyhoc import *
 from .pymodl import *
@@ -21,6 +21,7 @@ from .sources import *
 from .fibers import *
 from .synapses import *
 from .network import *
+
 
 def getModelsDict():
     ''' Construct a dictionary of all model classes, indexed by simulation key. '''
@@ -33,6 +34,7 @@ def getModelsDict():
 
 
 models_dict = getModelsDict()
+
 
 def getModel(meta):
     ''' Return appropriate model object based on a dictionary of meta-information. '''

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-04 21:24:12
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-04 22:25:16
+# @Last Modified time: 2020-03-06 09:06:09
 
 import abc
 import numpy as np
@@ -86,7 +86,7 @@ class CircleGridConcentric(CircleGrid):
         radius = [0]
         angle = [0]
         nl = self.nlayers()      # number of concentric layers
-        d = self.r / (nl - 1/2)  # radial distance between layers
+        d = self.r / (nl - 1 / 2)  # radial distance between layers
         a = [0, 0]
         for i in range(nl - 1):
             ml = round(2 * np.pi * (i + 1))      # number of point sources in the layer
@@ -121,5 +121,5 @@ def getCircle2DGrid(r, m, dist_type):
     }
     try:
         return grid_classes[dist_type](r, m).generate()
-    except KeyError as err:
-        raise ValueError(f'Unknown distribution (available dispositions are: {list(grid_classses.keys())}')
+    except KeyError:
+        raise ValueError(f'Unknown distribution (candidates are: {list(grid_classes.keys())}')

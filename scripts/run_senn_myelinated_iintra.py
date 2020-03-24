@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-09-06 16:12:33
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-05 19:01:09
+# @Last Modified time: 2020-03-06 09:22:59
 
 ''' Run simulations of an SENN fiber model with a specific point-neuron mechanism
     upon intracellular electrical stimulation. '''
@@ -33,7 +33,8 @@ def main():
                     for rs in args['rs']:
                         for nodeL in args['nodeL']:
                             for d_ratio in args['d_ratio']:
-                                fiber = myelinatedFiber(IintraFiber, pneuron, fiberD, nnodes,
+                                fiber = myelinatedFiber(
+                                    IintraFiber, pneuron, fiberD, nnodes,
                                     rs=rs, nodeL=nodeL, d_ratio=d_ratio)
                                 for inode in args['inode']:
                                     if inode is None:

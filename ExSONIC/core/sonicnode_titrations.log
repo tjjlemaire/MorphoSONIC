@@ -116,3 +116,4 @@ titrate(SonicNode(32.0 nm, Sundt, fs=1.00), AcousticDrive(500.0kHz), PulsedProto
 titrate(SonicNode(32.0 nm, Sundt, fs=1.00), AcousticDrive(500.0kHz), PulsedProtocol(412.5ms, 10.0ms, 100.0Hz, 1.00), xfunc=None)	25625.0
 titrate(SonicNode(32.0 nm, Sundt, fs=1.00), AcousticDrive(500.0kHz), PulsedProtocol(554.1ms, 10.0ms, 100.0Hz, 1.00), xfunc=None)	25585.9375
 titrate(SonicNode(32.0 nm, Sundt, fs=1.00), AcousticDrive(500.0kHz), PulsedProtocol(744.4ms, 10.0ms, 100.0Hz, 1.00), xfunc=None)	25585.9375
+titrate(SonicNode(32.0 nm, CorticalRS, fs=1.00), AcousticDrive(500.0kHz), PulsedProtocol(100.0ms, 50.0ms, 100.0Hz, 1.00), xfunc=None)	38867.1875

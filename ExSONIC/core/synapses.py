@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-01-14 15:49:25
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-19 14:50:01
+# @Last Modified time: 2020-03-06 09:13:57
 
 import abc
 from neuron import h
@@ -117,4 +117,3 @@ class FDExp2Synapse(FExp2Synapse):
         syn.d2 = self.d2
         syn.tauD2 = self.tauD2
         return syn
-

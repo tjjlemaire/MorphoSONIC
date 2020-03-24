@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-18 14:42:52
+# @Last Modified time: 2020-03-06 09:26:57
 # -*- coding: utf-8 -*-
 # @Author: Theo Lemaire
 # @Date:   2017-06-13 09:40:02
@@ -15,9 +15,11 @@ from setuptools import setup
 
 readme_file = 'README.md'
 
+
 def readme():
     with open(readme_file, encoding="utf8") as f:
         return f.read()
+
 
 def description():
     with open(readme_file, encoding="utf8") as f:
@@ -42,10 +44,10 @@ setup(
     long_description=readme(),
     url='https://c4science.ch/diffusion/7145/',
     classifiers=[
-      'Development Status :: 4 - Beta',
-      'Intended Audience :: Science/Research',
-      'Programming Language :: Python :: 3',
-      'Topic :: Scientific/Engineering :: Physics'
+        'Development Status :: 4 - Beta',
+        'Intended Audience :: Science/Research',
+        'Programming Language :: Python :: 3',
+        'Topic :: Scientific/Engineering :: Physics'
     ],
     keywords=('SONIC NICE extended nerve axon morphology acoustic ultrasound ultrasonic \
             neuromodulation neurostimulation excitation computational model intramembrane \

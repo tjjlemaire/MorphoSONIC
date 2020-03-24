@@ -3,11 +3,10 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-18 21:14:43
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-05 18:55:38
+# @Last Modified time: 2020-03-06 09:15:12
 
 import matplotlib.pyplot as plt
 from PySONIC.parsers import *
-from PySONIC.utils import si_format
 
 from .plt import SectionGroupedTimeSeries, SectionCompTimeSeries
 
@@ -67,7 +66,8 @@ class MyelinatedFiberParser(SpatiallyExtendedParser):
 
     def __init__(self):
         super().__init__()
-        self.defaults.update({'nnodes': 11, 'fiberD': 20., 'neuron': 'FH', 'nodeL': 2.5, 'd_ratio': 0.7})
+        self.defaults.update({
+            'nnodes': 11, 'fiberD': 20., 'neuron': 'FH', 'nodeL': 2.5, 'd_ratio': 0.7})
         self.factors.update({'fiberD': 1e-6, 'nodeL': 1e-6})
         self.addNnodes()
         self.addFiberDiameter()
@@ -127,7 +127,7 @@ class EStimMyelinatedFiberParser(MyelinatedFiberParser, PWSimParser):
             help=f'Point-source current amplitude ({self.amp_unit})')
         self.add_argument(
             '--Arange', type=str, nargs='+',
-            help='Point-source current amplitude range {} ({})'.format(self.dist_str, self.amp_unit))
+            help=f'Point-source current amplitude range {self.dist_str} ({self.amp_unit})')
         self.to_parse['amp'] = self.parseAmplitude
 
     def parseAmplitude(self, args):

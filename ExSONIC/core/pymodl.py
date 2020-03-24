@@ -3,11 +3,10 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-03-18 21:17:03
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-07-17 15:08:17
+# @Last Modified time: 2020-03-06 09:08:01
 
 import logging
 import pprint
-import inspect
 import re
 from time import gmtime, strftime
 
@@ -264,7 +263,7 @@ class NmodlTranslator(PointNeuronTranslator):
         # Replace dictionary accessors (xxx['...']) by MOD translated states
         expr = self.translateDictAccessedStates(expr)
 
-        ## Add potential MOD parameters / constants if they were used in expression
+        # Add potential MOD parameters / constants if they were used in expression
         self.addToParameters(expr)
         self.addToConstants(expr)
 
@@ -377,13 +376,12 @@ class NmodlTranslator(PointNeuronTranslator):
                 # If function is part of protected function, replace it by its first argument
                 elif fname in self.protected_funcs:
                     rpl_var = fargs[0]
-                    logger.debug(f'{indent}{fname} function is protected -> replacing it by {rpl_var}')
+                    logger.debug(f'{indent}{fname} function is protected -> replaced by {rpl_var}')
                     expr = expr.replace(fcall, rpl_var)
 
                 # Otherwise, assume it is a formatting error, and keep it as a variable
                 else:
-                    # raise ValueError(f'{fname} not part of MOD library nor neuron class')
-                    logger.debug(f'{fname} not in MOD library or neuron class -> keeping as variable')
+                    logger.debug(f'{fname} not in MOD library or neuron class -> kept as variable')
                     expr = expr.replace(fcall, fname)
 
             # Get all function calls in new expression, and check if they are listed as "preserved"
@@ -408,7 +406,7 @@ class NmodlTranslator(PointNeuronTranslator):
         ''' Create the description (COMMENT) block of the MOD file. '''
         return '\n'.join([
             'COMMENT',
-            'Equations governing the effective membrane dynamics of a {}'.format(self.pclass.description()),
+            f'Equations governing the effective membrane dynamics of a {self.pclass.description()}',
             'upon electrical / ultrasonic stimulation, based on the SONIC model.',
             '',
             'Reference: Lemaire, T., Neufeld, E., Kuster, N., and Micera, S. (2019).',
@@ -424,7 +422,7 @@ class NmodlTranslator(PointNeuronTranslator):
     def constantsBlock(self):
         ''' Create the (CONSTANT) block of the MOD file. '''
         if len(self.constants) > 0:
-            block = [f'{k} = {v}' for k , v in self.constants.items()]
+            block = [f'{k} = {v}' for k, v in self.constants.items()]
             return 'CONSTANT {{{}{}\n}}'.format(self.tabreturn, self.tabreturn.join(block))
         else:
             return None
@@ -457,6 +455,8 @@ class NmodlTranslator(PointNeuronTranslator):
         ''' Create the STATE block of the MOD file. '''
         block = ['{} : {}'.format(self.translateState(name), desc)
                  for name, desc in self.pclass.states.items()]
+        if len(block) == 0:
+            return ''
         return 'STATE {{{}{}\n}}'.format(self.tabreturn, self.tabreturn.join(block))
 
     def assignedBlock(self):
@@ -494,14 +494,14 @@ class NmodlTranslator(PointNeuronTranslator):
             for prior in self.initial_priors[k]:
                 block.append('{} = {}'.format(prior['assigned'], prior['expr']))
             block.append('{} = {}'.format(k, self.sstates_dict[k]))
+        if len(block) == 0:
+            return ''
         return 'INITIAL {{{}{}\n}}'.format(self.tabreturn, self.tabreturn.join(block))
 
     def breakpointBlock(self):
         ''' Create the BREAKPOINT block of the MOD file. '''
-        block = [
-            'SOLVE states METHOD cnexp',
-            'Vm = V(Adrive * stimon, v)'
-        ]
+        block = ['SOLVE states METHOD cnexp'] if len(self.translated_states) > 0 else []
+        block.append('Vm = V(Adrive * stimon, v)')
         for k in self.pclass.currents().keys():
             block.append('{} = {}'.format(k, self.currents_dict[k]))
         return 'BREAKPOINT {{{}{}\n}}'.format(self.tabreturn, self.tabreturn.join(block))
@@ -509,6 +509,8 @@ class NmodlTranslator(PointNeuronTranslator):
     def derivativeBlock(self):
         ''' Create the DERIVATIVE block of the MOD file. '''
         block = ['{}\' = {}'.format(k, self.dstates_dict[k]) for k in self.translated_states]
+        if len(block) == 0:
+            return ''
         return 'DERIVATIVE states {{{}{}\n}}'.format(self.tabreturn, self.tabreturn.join(block))
 
     def allBlocks(self):

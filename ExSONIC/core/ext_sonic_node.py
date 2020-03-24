@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-20 18:27:56
+# @Last Modified time: 2020-03-09 20:07:31
 
 import os
 import numpy as np
@@ -13,7 +13,7 @@ from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import si_format, logger, logCache
 from PySONIC.threshold import threshold
 from PySONIC.constants import *
-from PySONIC.core import Model, PointNeuron
+from PySONIC.core import Model
 from PySONIC.postpro import detectSpikes, prependDataFrame
 
 from ..constants import *
@@ -24,7 +24,7 @@ from .connectors import SerialConnectionScheme
 class ExtendedSonicNode(SonicNode):
 
     simkey = 'nano_ext_SONIC'
-    secnames = ['sonophore', 'surroundings']
+    ids = ['sonophore', 'surroundings']
 
     def __init__(self, pneuron, rs, a=32e-9, fs=0.5, deff=100e-9):
 
@@ -38,7 +38,7 @@ class ExtendedSonicNode(SonicNode):
         self.fs = fs
 
         # Define Vm-based connection scheme
-        self.connection_scheme = SerialConnectionScheme(vref=f'Vm_{self.mechname}', rmin=1e2)
+        self.connection_scheme = SerialConnectionScheme(vref='Vm', rmin=1e2)
 
         # Construct model
         self.construct()
@@ -55,10 +55,6 @@ class ExtendedSonicNode(SonicNode):
             'rs': self.rs,
             'deff': self.deff
         }
-        # meta = super().meta
-        # meta['fs'] = self.fs
-        # meta['rs'] = self.rs
-        # meta['deff'] = self.deff
         meta['simkey'] = self.simkey
         return meta
 
@@ -81,7 +77,8 @@ class ExtendedSonicNode(SonicNode):
 
     def createSections(self):
         ''' Create morphological sections. '''
-        self.sections = {id: self.createSection(id) for id in self.secnames}
+        self.sections = {id: self.createSection(
+            id, mech=self.mechname, states=self.pneuron.statesNames()) for id in self.ids}
 
     def clear(self):
         del self.sections
@@ -97,7 +94,7 @@ class ExtendedSonicNode(SonicNode):
             :return: 3-tuple with sections common diameter and their respective lengths (um)
         '''
         logger.debug('radial geometry: depth = {}m, r1 = {}m, r2 = {}m'.format(
-                *si_format(np.array([depth, r1, r2]) * 1e-6, 2)))
+            *si_format(np.array([depth, r1, r2]) * 1e-6, 2)))
         d = np.power(4 * depth * r2**2 / np.log((r1 + r2) / r1), 1 / 3)  # um
         L1 = r1**2 / d  # um
         L2 = r2**2 / d - L1  # um
@@ -116,10 +113,9 @@ class ExtendedSonicNode(SonicNode):
         self.sections['surroundings'].L = L2  # um
 
     def setResistivity(self):
-        ''' Set sections axial resistivity, corrected to account for internodes and membrane capacitance
-            in the Q-based differentiation scheme. '''
+        ''' Set sections axial resistivity. '''
         for sec in self.sections.values():
-            sec.Ra = self.rs
+            sec.setResistivity(self.rs)
 
     def setTopology(self):
         self.sections['sonophore'].connect(self.sections['surroundings'])
@@ -139,6 +135,7 @@ class ExtendedSonicNode(SonicNode):
     @Model.logNSpikes
     @Model.checkTitrate
     @Model.addMeta
+    @Model.logDesc
     def simulate(self, drive, pp, dt=None, atol=None):
         ''' Set appropriate recording vectors, integrate and return output variables.
 
@@ -146,11 +143,9 @@ class ExtendedSonicNode(SonicNode):
             :param pp: pulse protocol object
             :param dt: integration time step (s)
         '''
-        logger.info(f'{self}: simulation @ {drive.desc}, {pp.desc}')
-
         # Set recording vectors
         t = self.setTimeProbe()
-        stim = self.sections[self.secnames[0]].setStimProbe()
+        stim = self.sections[self.ids[0]].setStimProbe()
         probes = {k: v.setProbesDict() for k, v in self.sections.items()}
 
         # Set stimulus amplitude and integrate model
@@ -166,7 +161,7 @@ class ExtendedSonicNode(SonicNode):
             })
             for k, v in probes[id].items():
                 data[id][k] = v.to_array()
-            data[id].loc[:,'Qm'] *= 1e-5  # C/m2
+            data[id].loc[:, 'Qm'] *= 1e-5  # C/m2
 
         # Prepend initial conditions (prior to stimulation)
         data = {id: prependDataFrame(df) for id, df in data.items()}
@@ -180,17 +175,16 @@ class ExtendedSonicNode(SonicNode):
             :param data: dataframe containing output time series
             :return: number of detected spikes
         '''
-        return detectSpikes(data['sonophore'])[0].size
+        return detectSpikes(data['surroundings'])[0].size
 
-    def isExcited(self, data):
+    @classmethod
+    def isExcited(cls, data):
         ''' Determine if neuron is excited from simulation output.
 
             :param data: dataframe containing output time series
             :return: boolean stating whether neuron is excited or not
         '''
-        nspikes_sonophore = detectSpikes(data['sonophore'])[0].size
-        nspikes_surroundings = detectSpikes(data['surroundings'])[0].size
-        return nspikes_start > 0 and nspikes_end > 0
+        return cls.getNSpikes(data) > 0
 
     @logCache(os.path.join(os.path.split(__file__)[0], 'nanoextsonic_titrations.log'))
     def titrate(self, drive, pp):
@@ -208,7 +202,7 @@ class ExtendedSonicNode(SonicNode):
             self.Arange, x0=ASTIM_AMP_INITIAL,
             eps_thr=ASTIM_ABS_CONV_THR, rel_eps_thr=1e0, precheck=True)
 
-    def filecodes(self, drive, pp, _):
+    def filecodes(self, drive, pp, *_):
         # Get parent codes and supress irrelevant entries
         codes = self.nbls.filecodes(drive, pp, self.fs, 'NEURON', None)
         del codes['method']
@@ -217,15 +211,6 @@ class ExtendedSonicNode(SonicNode):
             'deff': f'deff{(self.deff * 1e9):.0f}nm'
         })
         return codes
-
-    @staticmethod
-    def isExcited(data):
-        ''' Determine if neuron is excited from simulation output.
-
-            :param data: dataframe containing output time series
-            :return: boolean stating whether neuron is excited or not
-        '''
-        return PointNeuron.getNSpikes(data['sonophore']) > 0
 
     @staticmethod
     def inputs():
@@ -238,4 +223,3 @@ class ExtendedSonicNode(SonicNode):
                 'precision': 0
             }
         }
-

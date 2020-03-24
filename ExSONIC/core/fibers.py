@@ -3,26 +3,58 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-11-27 18:03:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-28 17:47:21
+# @Last Modified time: 2020-03-23 16:30:23
 
 ''' Constructor functions for different types of fibers. '''
 
 import os
 import numpy as np
-import pandas as pd
-import csv
 
 from PySONIC.neurons import getPointNeuron
-from PySONIC.utils import logger, si_format
-from PySONIC.postpro import boundDataFrame
-from PySONIC.core import PulsedProtocol
+from PySONIC.utils import logger, isWithin, bounds
+from PySONIC.core import PulsedProtocol, Lookup
 
 from .senn import IintraFiber, IextraFiber, SonicFiber
 from .sources import *
-from ..batches import FiberConvergenceBatch, StrengthDurationBatch
+from ..batches import StrengthDurationBatch
 
 
-def myelinatedFiber(fiber_class, pneuron, fiberD, nnodes, rs, nodeL, d_ratio, inter_ratio=100., **kwargs):
+# MRG lookup table from McIntyre 2002
+mrg_lkp = Lookup(
+    refs={
+        'fiberD': np.array([5.7, 7.3, 8.7, 10.0, 11.5, 12.8, 14.0, 15.0, 16.0]) * 1e-6},
+    tables={
+        'nodeD': np.array([1.9, 2.4, 2.8, 3.3, 3.7, 4.2, 4.7, 5.0, 5.5]) * 1e-6,
+        'interD': np.array([3.4, 4.6, 5.8, 6.9, 8.1, 9.2, 10.4, 11.5, 12.7]) * 1e-6,
+        'interL': np.array([500., 750., 1000., 1150., 1250., 1350., 1400., 1450., 1500.]) * 1e-6,
+        'flutL': np.array([35., 38., 40., 46., 50., 54., 56., 58., 60.]) * 1e-6,
+        'nlayers': np.array([80, 100, 110, 120, 130, 135, 140, 145, 150])},
+    interp_method='linear', extrapolate=True)
+
+
+def mrgFiber(fiber_class, pneuron, fiberD, nnodes, rs, **kwargs):
+    ''' Create a double-cable myelinated fiber model.
+
+        :param fiber_class: class of fiber to be instanced
+        :param pneuron: point-neuron model object
+        :param fiberD: fiber outer diameter (m)
+        :param nnodes: number of nodes
+        :param rs: axoplasmic resistivity (Ohm.cm)
+        :param kwargs: other keyword arguments
+        :return: myelinated fiber object
+    '''
+    # Check validity of fiber diameter
+    fiberD = isWithin('fiber diameter', fiberD, (5e-6, 20e-6))
+
+    # Interpolate fiber geometrical parameters from fiber diameter
+    nodeD, interD, interL, flutL, nlayers = list(mrg_lkp.project('fiberD', fiberD).tables.values())
+
+    # Create fiber model instance
+    return fiber_class(pneuron, nnodes, rs, fiberD, nodeD, interD, interL, flutL, nlayers, **kwargs)
+
+
+def myelinatedFiber(fiber_class, pneuron, fiberD, nnodes, rs, nodeL, d_ratio,
+                    inter_ratio=100., **kwargs):
     ''' Create a single-cable myelinated fiber model.
 
         :param fiber_class: class of fiber to be instanced
@@ -74,7 +106,7 @@ def unmyelinatedFiber(fiber_class, pneuron, fiberD, rs, fiberL=5e-3, maxNodeL=No
     if fiberL <= 3e-3:
         logger.warning('fiber length is below the convergence threshold')
     if maxNodeL is None:
-        nodelength_lin = fiberD * 16.3 + 9.1e-6  #um
+        nodelength_lin = fiberD * 16.3 + 9.1e-6  # um
         maxNodeL = min(nodelength_lin, 22e-6)
     if maxNodeL <= 0. or maxNodeL > fiberL:
         raise ValueError('maximum node length must be in [0, fiberL]')
@@ -114,6 +146,7 @@ def myelinatedFiberReilly(fiber_class, fiberD=20e-6, **kwargs):
     d_ratio = 0.7                   # axon / fiber diameter ratio (from McNeal 1976)
     return myelinatedFiber(fiber_class, pneuron, fiberD, nnodes, rs, nodeL, d_ratio, **kwargs)
 
+
 def myelinatedFiberSweeney(fiber_class, fiberD=10e-6, **kwargs):
     '''  Create typical myelinated fiber model, using parameters from Sweeney 1987.
 
@@ -134,7 +167,7 @@ def myelinatedFiberSweeney(fiber_class, fiberD=10e-6, **kwargs):
     return myelinatedFiber(fiber_class, pneuron, fiberD, nnodes, rs, nodeL, d_ratio, **kwargs)
 
 
-def unmyelinatedFiberSundt(fiber_class, fiberD=0.8e-6, fiberL = 5e-3, **kwargs):
+def unmyelinatedFiberSundt(fiber_class, fiberD=0.8e-6, fiberL=5e-3, **kwargs):
     ''' Create typical unmyelinated fiber model, using parameters from Sundt 2015.
 
         :param fiber_class: class of fiber to be instanced
@@ -150,6 +183,7 @@ def unmyelinatedFiberSundt(fiber_class, fiberD=0.8e-6, fiberL = 5e-3, **kwargs):
     rs = 100.                          # axoplasm resistivity, from Sundt 2015 (Ohm.cm)
     return unmyelinatedFiber(fiber_class, pneuron, fiberD, rs, fiberL, **kwargs)
 
+
 # Fiber factory functions
 fiber_factories = {
     'reilly': myelinatedFiberReilly,
@@ -157,11 +191,12 @@ fiber_factories = {
     'sundt': unmyelinatedFiberSundt
 }
 
+
 def getFiberFactory(fiberType):
     ''' Get fiber factory. '''
     try:
         return fiber_factories[fiberType]
-    except KeyError as err:
+    except KeyError:
         raise ValueError(f'Unknown fiber type: "{fiberType}"')
 
 
@@ -173,7 +208,7 @@ def strengthDuration(fiberType, fiberClass, fiberD, tstim_range, toffset=20e-3, 
 
     # Get fiber factory
     fiber_factory = getFiberFactory(fiberType)
-    
+
     logger.info(f'creating model with fiberD = {fiberD * 1e6:.2f} um ...')
 
     if fiberClass == 'intracellular_electrical_stim':
@@ -188,7 +223,7 @@ def strengthDuration(fiberType, fiberClass, fiberD, tstim_range, toffset=20e-3, 
 
     elif fiberClass == 'acoustic_single_node':
         fiber = fiber_factory(SonicFiber, fiberD=fiberD, a=a, fs=fs)
-        source = NodeAcousticSource(fiber.nnodes//2, Fdrive)
+        source = NodeAcousticSource(fiber.nnodes // 2, Fdrive)
         out_key = 'Athr (Pa)'
 
     elif fiberClass == 'acoustic_gaussian':
@@ -207,7 +242,7 @@ def strengthDuration(fiberType, fiberClass, fiberD, tstim_range, toffset=20e-3, 
 
     # Create SD batch
     sd_batch = StrengthDurationBatch(
-            out_key, source, fiber, tstim_range, toffset, root=outdir, convert_func=convert_func)
+        out_key, source, fiber, tstim_range, toffset, root=outdir, convert_func=convert_func)
 
     # Run batch
     df = sd_batch.run()
@@ -231,7 +266,8 @@ def currentDistance(fiberType, fiberD, tstim, n_cur, cur_min, cur_max, n_z, z_mi
 
     # Get filecode
     filecodes = fiber.filecodes(psource, 1, pp)
-    for k in ['nnodes', 'nodeD', 'rs', 'nodeL', 'interD', 'interL', 'I', 'A', 'inode', 'nature', 'toffset', 'PRF', 'DC']:
+    for k in ['nnodes', 'nodeD', 'rs', 'nodeL', 'interD', 'interL', 'I', 'A',
+              'inode', 'nature', 'toffset', 'PRF', 'DC']:
         if k in filecodes:
             del filecodes[k]
     filecodes['fiberD'] = f'fiberD{(fiberD * 1e6):.2f}um'
@@ -254,7 +290,7 @@ def currentDistance(fiberType, fiberD, tstim, n_cur, cur_min, cur_max, n_z, z_mi
                     psource = ExtracellularCurrent((0, z), I, mode='anode')
                 elif I < 0:
                     psource = ExtracellularCurrent((0, z), I, mode='cathode')
-                data, meta= fiber.simulate(psource, pp)
+                data, meta = fiber.simulate(psource, pp)
                 ExcitationMatrix[j][i] = fiber.isExcited(data)
         # Save results
         np.savetxt(fpath, ExcitationMatrix)
@@ -263,4 +299,3 @@ def currentDistance(fiberType, fiberD, tstim, n_cur, cur_min, cur_max, n_z, z_mi
     ExcitationMatrix = np.loadtxt(fpath)
 
     return ExcitationMatrix
-

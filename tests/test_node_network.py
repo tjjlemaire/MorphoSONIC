@@ -3,12 +3,9 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-01-13 19:51:33
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-01-17 18:37:55
+# @Last Modified time: 2020-03-06 09:23:32
 
 import logging
-import numpy as np
-import matplotlib.pyplot as plt
-from neuron import h
 
 from PySONIC.core import PulsedProtocol
 from PySONIC.neurons import getPointNeuron
@@ -122,9 +119,6 @@ class TestNodeNetwork(TestBase):
         self.simulate(nodes, amps, connect)
 
 
-
 if __name__ == '__main__':
-
     tester = TestNodeNetwork()
     tester.main()
-
