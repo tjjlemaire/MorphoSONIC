@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-03-24 16:18:41
+# @Last Modified time: 2020-03-25 20:38:16
 
 import numpy as np
 import pandas as pd
@@ -340,26 +340,46 @@ def plotFieldDistribution(fiber, source, fs=12):
     return fig
 
 
-def plotMRGLookups(fiberD_range=None, fs=12):
+def plotMRGLookups(fiberD_range=None, interp_methods=None, fs=12):
     ''' Plot MRG morphological parameters interpolated over a fiber diameter range. '''
+
+    # Define diameters ranges
     ref_diams = mrg_lkp.refs['fiberD']
     if fiberD_range is None:
         fiberD_range = bounds(ref_diams)
     diams = np.linspace(*fiberD_range, 100)
-    interp_mrg_lkp = mrg_lkp.project('fiberD', diams)
+
+    # Define interpolation methods
+    if interp_methods is None:
+        interp_methods = mrg_lkp.interp_choices
+
+    # Define factor function
+    factor = lambda k: 1e0 if k == 'nlayers' else 1e6
+
+    # Create figure backbone
     nouts = len(mrg_lkp.outputs)
     fig, axes = plt.subplots(1, nouts, figsize=(nouts * 3, 2.5))
-    label = f'{mrg_lkp.interp_method} method'
-    for ax, (k, v) in zip(axes, interp_mrg_lkp.items()):
-        factor = 1e0 if k == 'nlayers' else 1e6
+    for ax, k in zip(axes, mrg_lkp.keys()):
         yunit = '' if k == 'nlayers' else '(um)'
         ax.set_xlabel('fiber diameter (um)', fontsize=fs)
         ax.set_ylabel(f'{k} {yunit}', fontsize=fs)
-        ax.plot(diams * 1e6, v * factor, label=label)
-        ax.plot(ref_diams * 1e6, mrg_lkp[k] * factor, '.', c='k')
+        ax.plot(ref_diams * 1e6, mrg_lkp[k] * factor(k), '.', c='k')
         for item in ax.get_xticklabels() + ax.get_yticklabels():
             item.set_fontsize(fs)
-        ax.legend(frameon=False)
+
+    # Interpolate over fiber range with each method and plot resulting profiles
+    default_method = mrg_lkp.interp_method
+    for interp_method in interp_methods:
+        mrg_lkp.interp_method = interp_method
+        interp_mrg_lkp = mrg_lkp.project('fiberD', diams)
+        label = f'{interp_method} method'
+        for ax, (k, v) in zip(axes, interp_mrg_lkp.items()):
+            ax.plot(diams * 1e6, v * factor(k), label=label)
+
+    # Set lookup interpolation method back to default
+    mrg_lkp.interp_method = default_method
+
+    axes[0].legend(frameon=False)
     title = fig.suptitle(f'MRG morphological parameters', fontsize=fs)
     fig.tight_layout()
     title.set_y(title._y + 0.03)

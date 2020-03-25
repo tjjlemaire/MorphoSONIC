@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-03-24 01:13:15
+# @Last Modified time: 2020-03-25 13:02:54
 
 import abc
 import numpy as np
@@ -249,7 +249,7 @@ class ExtracellularSource(XSource):
 
     @property
     def quickcode(self):
-        return self.zstr
+        return f'x{self.strPos()}'
 
     def vectorialDistance(self, x):
         ''' Vectorial distance(s) to target point(s).

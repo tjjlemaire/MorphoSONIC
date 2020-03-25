@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-03-24 03:38:41
+# @Last Modified time: 2020-03-25 12:49:52
 
 import abc
 from neuron import h
@@ -664,6 +664,13 @@ class FiberNeuronModel(NeuronModel):
             'simkey': self.simkey,
             'neuron': self.pneuron.name
         }
+
+    @property
+    def quickcode(self):
+        return '_'.join([
+            *self.corecodes.values(),
+            f'fiberD{self.fiberD * 1e6:.2f}um'
+        ])
 
     def getPltVars(self, *args, **kwargs):
         return self.pneuron.getPltVars(*args, **kwargs)

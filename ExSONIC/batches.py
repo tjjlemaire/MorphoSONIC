@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-17 12:19:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-03-06 09:14:28
+# @Last Modified time: 2020-03-25 13:20:35
 
 import numpy as np
 
@@ -64,7 +64,7 @@ class StrengthDurationBatch(LogBatch):
             :param durations: array of pulse durations
             :param toffset: constant stimulus offset
             :param root: root for IO operations
-            :return: array of threshold acoustic amplitudes for each pulse duration
+            :return: array of threshold amplitudes for each pulse duration
         '''
         self.out_keys = [out_key]
         if convert_func is None:
@@ -104,6 +104,58 @@ class StrengthDurationBatch(LogBatch):
 
     def compute(self, t):
         xthr = self.fiber.titrate(self.source, PulsedProtocol(t, self.offset))
+        return [self.convert_func(xthr)]
+
+
+class StrengthDistanceBatch(LogBatch):
+    ''' Interface to a strength-distance batch '''
+
+    in_key = 'distance'
+    suffix = 'strengthdistance'
+    unit = 'm'
+
+    def __init__(self, out_key, source, fiber, pp, distances, root='.', convert_func=None):
+        ''' Construtor.
+
+            :param out_key: string defining the unique batch output key
+            :param source: source object
+            :param fiber: fiber model
+            :param pp: pulsed protocol object
+            :param distances: array of source-fiber distances
+            :param root: root for IO operations
+            :return: array of threshold amplitudes for each source-fiber distance
+        '''
+        self.out_keys = [out_key]
+        if convert_func is None:
+            self.convert_func = lambda x: x
+        else:
+            self.convert_func = convert_func
+        self.source = source
+        self.fiber = fiber
+        self.pp = pp
+        super().__init__(distances, root=root)
+
+    @property
+    def out_keys(self):
+        return self._out_keys
+
+    @out_keys.setter
+    def out_keys(self, value):
+        self._out_keys = value
+
+    def sourcecode(self):
+        return f'source_x{self.source.x[0] * 1e3:.1f}mm'
+
+    def corecode(self):
+        return f'{self.fiber.quickcode}_source_{self.sourcecode()}'
+
+    def run(self):
+        logger.info(f'Computing SD curve for {self.fiber} with {self.source}')
+        return super().run()
+
+    def compute(self, d):
+        self.source.x = (0., d)
+        xthr = self.fiber.titrate(self.source, self.pp)
         return [self.convert_func(xthr)]
 
 

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-03-24 03:39:11
+# @Last Modified time: 2020-03-25 12:49:59
 
 import numpy as np
 
@@ -190,13 +190,6 @@ class SennFiber(FiberNeuronModel):
     @property
     def is_myelinated(self):
         return self.interL > 0.
-
-    @property
-    def quickcode(self):
-        return '_'.join([
-            *self.corecodes.values(),
-            f'fiberD{self.fiberD * 1e6:.2f}um'
-        ])
 
 
 class EStimFiber(SennFiber):

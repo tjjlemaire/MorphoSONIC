@@ -1,17 +1,20 @@
-TITLE Motor Axon Node channels, cleaned  up
+TITLE MRG model nodal membrane dynamics
 
-: 3/20
-: Theo Lemaire
-:
-: Fast Na+, Persistant Na+, Slow K+, and Leakage currents
-: responsible for nodal action potential
-: Iterative equations H-H notation rest = -80 mV
-:
-: This model is described in detail in:
-:
-: McIntyre CC, Richardson AG, and Grill WM. Modeling the excitability of
-: mammalian nerve fibers: influence of afterpotentials on the recovery
-: cycle. Journal of Neurophysiology 87:995-1006, 2002.
+COMMENT
+Equations governing the nodal membrane dynamics of a motor axon fiber, based on the MRG model.
+
+This mod file is based on the original AXNODE.mod file found on ModelDB
+(https://senselab.med.yale.edu/ModelDB/showmodel.cshtml?model=3810),
+but the equations have been cleaned up to facilitate readibility.
+
+Reference: McIntyre CC, Richardson AG, and Grill WM. Modeling the excitability
+of mammalian nerve fibers: influence of afterpotentials on the recovery cycle.
+Journal of Neurophysiology 87:995-1006, 2002.
+
+@Author: Theo Lemaire, EPFL
+@Date: 2020-03-25
+@Email: theo.lemaire@epfl.ch
+ENDCOMMENT
 
 INDEPENDENT {t FROM 0 TO 1 WITH 1 (ms)}
 
