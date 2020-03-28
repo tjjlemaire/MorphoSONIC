@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-03-06 09:02:02
+# @Last Modified time: 2020-03-27 23:38:17
 
 import os
 import abc
@@ -59,10 +59,6 @@ class Node(NeuronModel):
         A0 = self.section(0.5).area() * 1e-12  # section area (m2)
         A = self.pneuron.area                  # neuron membrane area (m2)
         return A0 / A
-
-    @abc.abstractmethod
-    def setPyLookup(self, *args, **kwargs):
-        raise NotImplementedError
 
     @property
     @abc.abstractmethod

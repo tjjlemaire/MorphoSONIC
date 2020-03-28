@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-03-25 12:49:52
+# @Last Modified time: 2020-03-27 23:37:37
 
 import abc
 from neuron import h
@@ -201,6 +201,10 @@ class NeuronModel(metaclass=abc.ABCMeta):
             self.cvode.re_init()
         else:
             h.fcurrent()
+
+    @abc.abstractmethod
+    def setPyLookup(self, *args, **kwargs):
+        raise NotImplementedError
 
     def setModLookup(self, *args, **kwargs):
         ''' Get the appropriate model 2D lookup and translate it to Hoc. '''

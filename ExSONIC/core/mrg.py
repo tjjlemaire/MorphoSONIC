@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-27 23:08:23
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-03-24 13:35:38
+# @Last Modified time: 2020-03-28 14:07:27
 
 import numpy as np
 from neuron import h
@@ -50,8 +50,11 @@ class MRGFiber(FiberNeuronModel):
     C_inter = 2.                         # internodal axolammelar capacitance
     C_myelin_per_lamella_membrane = 0.1  # myelin capacitance per lamella
 
+    # Possible choices of correction level for correct extracellular coupling
+    correction_choices = ('myelin', 'axoplasm')
+
     def __init__(self, pneuron, nnodes, rs, fiberD, nodeD, interD, interL, flutL, nlayers,
-                 correction_level='myelin'):
+                 correction_level=None):
         ''' Constructor.
 
             :param pneuron: point-neuron model object
@@ -63,8 +66,8 @@ class MRGFiber(FiberNeuronModel):
             :param interL: internodal distance (m)
             :param flutL: main paranodal segment length (m)
             :param nlayers: number of myelin lamellae
-            :param correction_level: level at which model properties are corrected
-                ('myelin' or 'intra')
+            :param correction_level: level at which model properties are adjusted to ensure correct
+                myelin representation with the extracellular mechanism ('myelin' or 'axoplasm')
         '''
         # Assign attributes
         self.pneuron = pneuron
@@ -205,6 +208,18 @@ class MRGFiber(FiberNeuronModel):
         return self.interD
 
     @property
+    def correction_level(self):
+        return self._correction_level
+
+    @correction_level.setter
+    def correction_level(self, value):
+        if value is None:
+            value = self.correction_choices[0]
+        if not isinstance(value, str) or value not in self.correction_choices:
+            raise ValueError(f'correction_level choices are : ({self.correction_choices})')
+        self._correction_level = value
+
+    @property
     def mysaIDs(self):
         return [f'MYSA{i}' for i in range(self.nMYSA)]
 
@@ -326,18 +341,10 @@ class MRGFiber(FiberNeuronModel):
     def construct(self):
         ''' Create and connect node sections with assigned membrane dynamics. '''
         self.createSections()
-        if self.correction_level == 'myelin':
-            # Assign normal intracellular geometry and adapted myelin transverse parameters
-            self.setNormalGeometry()
-            self.setNormalResistivity()
-            self.setNormalInterBiophysics()
-            self.setAdaptedExtracellular()
-        else:
-            # Assign adapted intracellular geometry and normal myelin transverse parameters
-            self.setAdaptedGeometry()
-            self.setAdaptedResistivity()
-            self.setAdaptedInterBiophysics()
-            self.setNormalExtracellular()
+        self.setGeometry()
+        self.setResistivity()
+        self.setInterBiophysics()
+        self.setExtracellular()
         self.setTopology()
 
     def clear(self):
@@ -364,96 +371,91 @@ class MRGFiber(FiberNeuronModel):
             'STIN': self.stins
         }
 
-    def setNormalGeometry(self):
-        ''' Set sections geometry, assigning their real diameter to all internodal sections.
-            This will then require to adapt the myyelin properties on a per secton basis.
+    def get(self, sectype, pname):
+        ''' Retrieve the value of a parameter for a specific section type.
+
+            :param sectype: section type ('node', 'MYSA', 'FLUT' or 'STIN')
+            :param pname: name of the parameter (e.g. 'L', 'D')
+            :return: parameter value
         '''
-        logger.debug('setting normal sections geometry')
-        for sectype, secdict in self.sections.items():
-            d, L = getattr(self, f'{sectype.lower()}D'), getattr(self, f'{sectype.lower()}L')
-            for sec in secdict.values():
-                sec.setGeometry(d, L)
+        return getattr(self, f'{sectype.lower()}{pname}')
 
-    def setAdaptedGeometry(self):
-        ''' Set adapted sections geometry.
+    def diameterRatio(self, sectype):
+        ''' Return the ratio between a section's type diameter and the fiber outer diameter. '''
+        return self.get(sectype, 'D') / self.fiberD
 
-            Note that all internodal sections are created here with a diameter corresponding
-            to the fiber's diameter (which differs from their actual diameter), in order to
-            to ensure a consistent myelin representation with the extracellular mechanism.
+    def setGeometry(self):
+        ''' Set sections geometry.
 
-            This means that the intenstive electrical properties of these sections (resistivity,
-            membrane capacitance per unit area and membrane conductance per unit area) must be
-            corrected in order to obtain the corrected axial and transmembrane dynamics.
+            .. note:: if the axoplasm correction level is selected, all internodal sections
+            are created with a diameter corresponding to the fiber's outer diameter (which
+            differs from their actual diameter).
         '''
-        logger.debug('setting adapted sections geometry')
+        logger.debug('setting sections geometry')
         for sec in self.nodes.values():
             sec.setGeometry(self.nodeD, self.nodeL)
         for sectype, secdict in self.inters.items():
-            L = getattr(self, f'{sectype.lower()}L')
+            d, L = self.get(sectype, 'D'), self.get(sectype, 'L')
+            if self.correction_level == 'axoplasm':
+                d = self.fiberD
             for sec in secdict.values():
-                sec.setGeometry(self.fiberD, L)
+                sec.setGeometry(d, L)
 
-    def setNormalResistivity(self):
-        ''' Assign normal sections axial resistivity. '''
-        logger.debug('setting normal sections resistivity')
-        for sec in self.seclist:
-            sec.setResistivity(self.rhoa)
+    def setResistivity(self):
+        ''' Assign sections axial resistivity.
 
-    def setAdaptedResistivity(self):
-        ''' Assign adapted sections axial resistivity, correcting internodal values
-            to account for the difference between assigned and actual diameters.
+            .. note:: if the axoplasm correction level is selected, internodal sections
+            resistivities are divided by the squared ratio of the section's real diameter
+            divided by its assigned diameter (i.e. the fiber's outer diameter), to ensure
+            correct sections resistances per unit length.
         '''
-        logger.debug('setting adapted sections resistivity')
-        correction_factor = lambda d: (self.fiberD / d)**2
+        logger.debug('setting sections resistivity')
         for sec in self.nodes.values():
             sec.setResistivity(self.rhoa)
         for sectype, secdict in self.inters.items():
-            d = getattr(self, f'{sectype.lower()}D')
+            rhoa = self.rhoa
+            if self.correction_level == 'axoplasm':
+                rhoa /= self.diameterRatio(sectype)**2
             for sec in secdict.values():
-                sec.setResistivity(self.rhoa * correction_factor(d))
+                sec.setResistivity(rhoa)
 
-    def setNormalInterBiophysics(self):
-        ''' Assign normal biophysics to internodal sections. '''
-        logger.debug('setting normal internodal biophysics')
+    def setInterBiophysics(self):
+        ''' Assign biophysics to internodal sections.
+
+            .. note:: if the axoplasm correction level is selected, internodal sections
+            leakage conductance and capacitance per unit area are multiplied by the ratio
+            of the section's real diameter divided by its assigned diameter (i.e. the
+            fiber's outer diameter), to ensure correct sections extensive membrane properties.
+        '''
+        logger.debug('setting internodal biophysics')
         for sectype, secdict in self.inters.items():
             g = getattr(self, f'g_{sectype.lower()}')
+            if self.correction_level == 'axoplasm':
+                for sec in secdict.values():
+                    sec.cm *= self.diameterRatio(sectype)
+                g *= self.diameterRatio(sectype)
             for sec in secdict.values():
                 sec.insertPassiveMech(g, self.pneuron.Vm0)
 
-    def setAdaptedInterBiophysics(self):
-        ''' Assign biophysics of internodal sections, correcting internodal values to account
-            for the difference between assigned and actual diameters.
+    def setExtracellular(self):
+        ''' Set the sections' extracellular mechanisms.
+
+            .. note:: if the myelin correction level is selected, internodal sections
+            myelin conductance and capacitance per unit area are divided by the ratio
+            of the section's diameter divided by the fiber's outer diameter, to ensure
+            correct myelin extensive membrane properties.
         '''
-        logger.debug('setting adapted internodal biophysics')
-        correction_factor = lambda d: d / self.fiberD
-        for sectype, secdict in self.inters.items():
-            g, d = getattr(self, f'g_{sectype.lower()}'), getattr(self, f'{sectype.lower()}D')
-            for sec in secdict.values():
-                sec.cm *= correction_factor(d)
-                sec.insertPassiveMech(g * correction_factor(d), self.pneuron.Vm0)
-                sec.insertPassiveMech(g, self.pneuron.Vm0)
-
-    def setNormalExtracellular(self):
-        logger.debug('setting normal extracellular mechanisms')
+        logger.debug('setting extracellular mechanisms')
         for sec in self.nodes.values():
             sec.insertVext(xr=self.Rp_node)
         for sectype, secdict in self.inters.items():
-            Rp = getattr(self, f'Rp_{sectype.lower()}')
+            xr = getattr(self, f'Rp_{sectype.lower()}')
+            xc, xg = self.C_myelin, self.g_myelin
+            if self.correction_level == 'myelin':
+                xc /= self.diameterRatio(sectype)
+                xg /= self.diameterRatio(sectype)
             for sec in secdict.values():
-                sec.insertVext(xr=Rp, xc=self.C_myelin, xg=self.g_myelin)
-
-    def setAdaptedExtracellular(self):
-        logger.debug('setting adapted extracellular mechanisms')
-        for sec in self.nodes.values():
-            sec.insertVext(xr=self.Rp_node)
-        correction_factor = lambda d: self.fiberD / d
-        for sectype, secdict in self.inters.items():
-            Rp, d = getattr(self, f'Rp_{sectype.lower()}'), getattr(self, f'{sectype.lower()}D')
-            for sec in secdict.values():
-                sec.insertVext(
-                    xr=Rp,
-                    xc=self.C_myelin * correction_factor(d),
-                    xg=self.g_myelin * correction_factor(d))
+                sec.insertVext(xr=xr, xc=xc, xg=xg)
 
     def connect(self, k1, i1, k2, i2):
         self.sections[k2][f'{k2}{i2:d}'].connect(self.sections[k1][f'{k1}{i1:d}'])
