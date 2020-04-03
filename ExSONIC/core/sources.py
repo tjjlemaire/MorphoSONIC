@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-03-25 13:02:54
+# @Last Modified time: 2020-04-03 19:30:18
 
 import abc
 import numpy as np
@@ -12,7 +12,9 @@ from scipy.signal import unit_impulse
 
 from PySONIC.utils import si_format, rotAroundPoint2D, StimObject, gaussian, isIterable
 from PySONIC.core.drives import *
+
 from .grids import getCircle2DGrid
+from ..constants import *
 
 
 class Source(StimObject):
@@ -37,8 +39,14 @@ class Source(StimObject):
     def is_searchable(self):
         return True
 
+    @property
+    def is_cathodal(self):
+        return False
+
 
 class XSource(Source):
+
+    xvar_precheck = False
 
     @property
     @abc.abstractmethod
@@ -64,49 +72,59 @@ class XSource(Source):
         return self.xvar is not None
 
 
-class NodeSource(XSource):
+class SectionSource(XSource):
 
-    def __init__(self, inode):
+    def __init__(self, sec_id):
         ''' Constructor.
 
-            :param inode: node index
+            :param sec_id: section ID
         '''
-        self.inode = inode
+        self.sec_id = sec_id
 
     @property
-    def inode(self):
-        return self._inode
+    def sec_id(self):
+        return self._sec_id
 
-    @inode.setter
-    def inode(self, value):
-        value = self.checkInt('inode', value)
-        self.checkPositiveOrNull('inode', value)
-        self._inode = value
+    @sec_id.setter
+    def sec_id(self, value):
+        if not isinstance(value, str):
+            raise ValueError('section ID must be a string')
+        self._sec_id = value
 
     @staticmethod
     def inputs():
         return {
-            'inode': {
-                'desc': 'node index',
-                'label': 'i_node',
+            'sec_id': {
+                'desc': 'section ID',
+                'label': 'ID',
                 'unit': ''
             }
         }
 
     def __repr__(self):
-        return f'{self.__class__.__name__}(node {self.inode})'
+        return f'{self.__class__.__name__}({self.sec_id})'
 
     def filecodes(self):
-        return {'inode': f'node{self.inode}'}
+        return {'sec_id': self.sec_id}
 
     @property
     def quickcode(self):
-        return f'node{self.inode}'
+        return self.sec_id
 
-    def computeDistributedAmps(self, fiber):
-        return {'node': unit_impulse(fiber.nnodes, self.inode) * self.xvar}
+    def computeDistributedAmps(self, model):
+        d = {}
+        match = False
+        for sectype, secdict in model.sections.items():
+            d[sectype] = np.zeros(len(secdict))
+            if self.sec_id in secdict.keys():
+                i = list(secdict.keys()).index(self.sec_id)
+                d[sectype][i] = self.xvar
+                match = True
+        if not match:
+            raise ValueError(f'{self.sec_id} section ID not found in {model}')
+        return d
 
-    def computeSourceAmp(self, fiber, A):
+    def computeSourceAmp(self, model, A):
         return A
 
 
@@ -353,48 +371,54 @@ class CurrentSource(XSource):
         self.I = value
 
 
-class IntracellularCurrent(NodeSource, CurrentSource):
+class IntracellularCurrent(SectionSource, CurrentSource):
 
     conv_factor = 1e9  # A to nA
+    key = 'Iintra'
 
-    def __init__(self, inode, I=None, mode='anode'):
-        NodeSource.__init__(self, inode)
+    def __init__(self, sec_id, I=None, mode='anode'):
+        SectionSource.__init__(self, sec_id)
         CurrentSource.__init__(self, I, mode)
 
     def __eq__(self, other):
         if not isinstance(other, self.__class__):
             return False
-        for k in ['inode', 'mode', 'I']:
+        for k in ['sec_id', 'mode', 'I']:
             if getattr(self, k) != getattr(other, k):
                 return False
         return True
 
     def __repr__(self):
-        s = f'{NodeSource.__repr__(self)[:-1]}, {self.mode}'
+        s = f'{SectionSource.__repr__(self)[:-1]}, {self.mode}'
         if self.I is not None:
             s = f'{s}, {self.Istr()}'
         return f'{s})'
 
-    def computeDistributedAmps(self, fiber):
+    def computeDistributedAmps(self, model):
         if not self.is_resolved:
             raise ValueError('Cannot compute field distribution: unresolved source')
         return {k: v * self.conv_factor
-                for k, v in NodeSource.computeDistributedAmps(self, fiber).items()}
+                for k, v in SectionSource.computeDistributedAmps(self, model).items()}
 
     def filecodes(self):
-        return {**NodeSource.filecodes(self), **CurrentSource.filecodes(self)}
+        return {**SectionSource.filecodes(self), **CurrentSource.filecodes(self)}
 
     def copy(self):
-        return self.__class__(self.inode, self.I, mode=self.mode)
+        return self.__class__(self.sec_id, self.I, mode=self.mode)
 
     @staticmethod
     def inputs():
-        return {**NodeSource.inputs(), **CurrentSource.inputs()}
+        return {**SectionSource.inputs(), **CurrentSource.inputs()}
+
+    @property
+    def quickcode(self):
+        return f'{self.key}_{SectionSource.quickcode.fget(self)}'
 
 
 class ExtracellularCurrent(ExtracellularSource, CurrentSource):
 
     conv_factor = 1e3  # A to mA
+    key = 'Iextra'
 
     def __init__(self, x, I=None, mode='cathode', rho=300.0):
         ''' Initialization.
@@ -515,6 +539,10 @@ class ExtracellularCurrent(ExtracellularSource, CurrentSource):
         xnodes = fiber.getXZCoords()['node']  # fiber nodes coordinates
         i_closestnode = self.euclidianDistance(xnodes).argmin()  # index of closest fiber node
         return self.Iext(Ve, self.vectorialDistance(xnodes[i_closestnode]))  # A
+
+    @property
+    def quickcode(self):
+        return f'{self.key}_{ExtracellularSource.quickcode.fget(self)}'
 
 
 class VoltageSource(XSource):
@@ -677,14 +705,14 @@ class AcousticSource(XSource):
         return f'f{si_format(self.f, 0, space="")}{self.inputs()["f"]["unit"]}'
 
 
-class NodeAcousticSource(NodeSource, AcousticSource):
+class SectionAcousticSource(SectionSource, AcousticSource):
 
-    def __init__(self, inode, f, A=None):
+    def __init__(self, sec_id, f, A=None):
         ''' Constructor.
 
             :param A: Acoustic amplitude (Pa)
         '''
-        NodeSource.__init__(self, inode)
+        SectionSource.__init__(self, sec_id)
         AcousticSource.__init__(self, f)
         self.A = A
 
@@ -710,23 +738,23 @@ class NodeAcousticSource(NodeSource, AcousticSource):
     def __eq__(self, other):
         if not isinstance(other, self.__class__):
             return False
-        for k in ['inode', 'f', 'A']:
+        for k in ['sec_id', 'f', 'A']:
             if getattr(self, k) != getattr(other, k):
                 return False
         return True
 
     def __repr__(self):
-        s = f'{NodeSource.__repr__(self)[:-1]}, {si_format(self.f, 1, space="")}Hz'
+        s = f'{SectionSource.__repr__(self)[:-1]}, {si_format(self.f, 1, space="")}Hz'
         if self.A is not None:
             s = f'{s}, {si_format(self.A, 1, space="")}Pa'
         return f'{s})'
 
     def computeDistributedAmps(self, fiber):
-        return NodeSource.computeDistributedAmps(self, fiber)
+        return SectionSource.computeDistributedAmps(self, fiber)
 
     def filecodes(self):
         return {
-            **NodeSource.filecodes(self), **AcousticSource.filecodes(self),
+            **SectionSource.filecodes(self), **AcousticSource.filecodes(self),
             'A': f'{(self.A * self.conv_factor):.2f}kPa'
         }
 
@@ -734,16 +762,16 @@ class NodeAcousticSource(NodeSource, AcousticSource):
     def quickcode(self):
         return '_'.join([
             AcousticSource.quickcode.fget(self),
-            NodeSource.quickcode.fget(self)
+            SectionSource.quickcode.fget(self)
         ])
 
     def copy(self):
-        return self.__class__(self.inode, self.f, A=self.A)
+        return self.__class__(self.sec_id, self.f, A=self.A)
 
     @staticmethod
     def inputs():
         return {
-            **NodeSource.inputs(), **AcousticSource.inputs(),
+            **SectionSource.inputs(), **AcousticSource.inputs(),
             'A': {
                 'desc': 'US pressure amplitude',
                 'label': 'A',

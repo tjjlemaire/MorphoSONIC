@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-01-17 11:59:50
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-03-06 09:26:39
+# @Last Modified time: 2020-04-02 16:36:32
 
 import logging
 import numpy as np
@@ -15,7 +15,7 @@ from PySONIC.neurons import getPointNeuron
 from PySONIC.core import PulsedProtocol
 
 from ExSONIC.core.synapses import *
-from ExSONIC.core.node import IintraNode
+from ExSONIC.core.node import Node
 
 logger.setLevel(logging.INFO)
 
@@ -31,7 +31,7 @@ def getSynapseData(syn_model, sf, syn_delay=1., tstop=4.):
     stim.interval = 1e3 / sf
 
     # Define output cell: RS node
-    node = IintraNode(getPointNeuron('RS'))
+    node = Node(getPointNeuron('RS'))
 
     # Attach synapse model to output cell
     syn = syn_model.attach(node)

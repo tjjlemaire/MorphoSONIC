@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-10-28 18:33:04
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-03-19 13:59:01
+# @Last Modified time: 2020-04-02 18:27:08
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -11,18 +11,14 @@ import matplotlib.pyplot as plt
 from PySONIC.core import PulsedProtocol
 from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import logger, si_format
-from ExSONIC.core import IextraFiber, myelinatedFiber, ExtracellularCurrent, PointSourceArray
+from ExSONIC.core import SennFiber, ExtracellularCurrent, PointSourceArray
 from ExSONIC.plt import SectionCompTimeSeries
 
 
 # Fiber model parameters
-pneuron = getPointNeuron('FH')  # FrankenHaeuser-Huxley membrane equations
-fiberD = 20e-6                  # fiber diameter (m)
-nnodes = 21                     # number of nodes
-rho_a = 110.0                   # axoplasm resistivity (Ohm.cm, from McNeal 1976)
-d_ratio = 0.7                   # axon / fiber diameter ratio (from McNeal 1976)
-nodeL = 2.5e-6                  # node length (m, from McNeal 1976)
-fiber = myelinatedFiber(IextraFiber, pneuron, fiberD, nnodes, rs=rho_a, nodeL=nodeL, d_ratio=d_ratio)
+fiberD = 20e-6  # fiber diameter (m)
+nnodes = 21     # number of nodes
+fiber = SennFiber(fiberD, nnodes)
 xnodes = fiber.getNodeCoords()
 inodes = np.arange(fiber.nnodes) + 1
 
@@ -77,7 +73,7 @@ ax.legend(frameon=False)
 
 # Fiber simulations
 data, meta = fiber.simulate(parray, I, pp)
-fig3 = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
+fig3 = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.nodeIDs).render()
 
 # TODO:
 # - try to see if unidirectional activation an also be reached also with unique polarity across sources

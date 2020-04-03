@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-01-13 19:51:33
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-03-06 09:23:32
+# @Last Modified time: 2020-04-02 16:40:39
 
 import logging
 
@@ -13,7 +13,7 @@ from PySONIC.test import TestBase
 from PySONIC.utils import logger
 
 from ExSONIC.plt import SectionCompTimeSeries, SectionGroupedTimeSeries
-from ExSONIC.core.node import IintraNode, SonicNode, DrivenSonicNode
+from ExSONIC.core.node import Node, DrivenNode
 from ExSONIC.core.synapses import Exp2Synapse, FExp2Synapse, FDExp2Synapse
 from ExSONIC.core.network import NodeCollection, NodeNetwork
 from ExSONIC.parsers import TestNodeNetworkParser
@@ -81,6 +81,10 @@ class TestNodeNetwork(TestBase):
         DC = 1.0       # (-)
         self.pp = PulsedProtocol(tstim, toffset, PRF, DC)
 
+        # Sonophore parameters
+        self.a = 32e-9
+        self.fs = 1.0
+
         # US stimulation parameters
         self.Fdrive = 500e3  # Hz
         self.Adrive = 30e3  # Pa
@@ -101,19 +105,17 @@ class TestNodeNetwork(TestBase):
         # SectionCompTimeSeries([(data, meta)], 'FR', system.ids).render()
 
     def test_nostim(self, connect):
-        nodes = {k: IintraNode(v)
-                 for k, v in self.pneurons.items()}
+        nodes = {k: Node(v) for k, v in self.pneurons.items()}
         amps = self.idrives
         self.simulate(nodes, amps, connect)
 
     def test_nodrive(self, connect):
-        nodes = {k: SonicNode(v, Fdrive=self.Fdrive)
-                 for k, v in self.pneurons.items()}
+        nodes = {k: Node(v, a=self.a, fs=self.fs) for k, v in self.pneurons.items()}
         amps = {k: self.Adrive for k in self.pneurons.keys()}
         self.simulate(nodes, amps, connect)
 
     def test_full(self, connect):
-        nodes = {k: DrivenSonicNode(v, self.idrives[k], Fdrive=self.Fdrive)
+        nodes = {k: DrivenNode(v, self.idrives[k], Fdrive=self.Fdrive)
                  for k, v in self.pneurons.items()}
         amps = {k: self.Adrive for k in self.pneurons.keys()}
         self.simulate(nodes, amps, connect)

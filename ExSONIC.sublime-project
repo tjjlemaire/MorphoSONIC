@@ -24,7 +24,7 @@
 				"*.c",
 				"*.sh",
 				"*.pkl",
-				"*.log",
+				// "*.log",
 				"*.tmp"
 			],
 			"folder_exclude_patterns":

@@ -3,14 +3,14 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2017-02-13 18:16:09
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-03-06 09:22:21
+# @Last Modified time: 2020-04-02 16:40:03
 
 ''' Run A-STIM simulations of a specific point-neuron. '''
 
 from PySONIC.core import Batch, NeuronalBilayerSonophore
 from PySONIC.utils import logger
 from PySONIC.parsers import AStimParser
-from ExSONIC.core import SonicNode
+from ExSONIC.core import Node
 
 
 def main():
@@ -29,7 +29,7 @@ def main():
     for a in args['radius']:
         for pneuron in args['neuron']:
             for fs in args['fs']:
-                node = SonicNode(pneuron, a=a, fs=fs)
+                node = Node(pneuron, a=a, fs=fs)
                 batch = Batch(node.simAndSave if args['save'] else node.simulate, queue)
                 output += batch(loglevel=args['loglevel'])
 

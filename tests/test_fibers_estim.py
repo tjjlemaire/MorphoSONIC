@@ -3,11 +3,9 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-03-19 18:29:33
+# @Last Modified time: 2020-04-03 19:34:48
 
-import os
 import numpy as np
-import matplotlib.pyplot as plt
 
 from PySONIC.core import PulsedProtocol
 from PySONIC.utils import logger, si_format
@@ -17,7 +15,7 @@ from ExSONIC.plt import SectionCompTimeSeries, strengthDurationCurve
 from ExSONIC.utils import chronaxie
 
 
-class TestSennEstim(TestFiber):
+class TestFiberEstim(TestFiber):
 
     def test_Reilly1985(self, is_profiled=False):
         ''' Run SENN fiber simulation with identical parameters as in Reilly 1985, Fig2.,
@@ -37,7 +35,9 @@ class TestSennEstim(TestFiber):
         logger.info('Test: SENN myelinated fiber model validation against Reilly 1985 data')
 
         # Fiber model (20 um diameter)
-        fiber = myelinatedFiberReilly(IextraFiber, fiberD=20e-6)
+        fiberD = 20e-6  # m
+        nnodes = 21
+        fiber = SennFiber(fiberD, nnodes)
 
         # Electrode and stimulation parameters (from Reilly 1985)
         rho_e = 300.0      # resistivity of external medium (Ohm.cm, from McNeal 1976)
@@ -69,7 +69,7 @@ class TestSennEstim(TestFiber):
         }
 
         # Plot membrane potential traces for specific duration at threshold current
-        fig1 = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
+        SectionCompTimeSeries([(data, meta)], 'Vm', fiber.nodeIDs).render()
 
         # Compute and plot strength-duration curve with both polarities
         fiber.reset()
@@ -83,7 +83,7 @@ class TestSennEstim(TestFiber):
         Ithrs['cathode ref'] = np.array([96.3, 9.44, 1.89, 1.00, 1.00]) * I0_ref  # A
 
         # Plot strength-duration curve
-        fig2 = strengthDurationCurve(fiber, durations, Ithrs, yfactor=1e3, scale='log')
+        strengthDurationCurve(fiber, durations, Ithrs, yfactor=1e3, scale='log')
 
         # Compare output metrics to reference
         SDcurve_sim_metrics = {  # Output metrics
@@ -120,13 +120,14 @@ class TestSennEstim(TestFiber):
         logger.info('Test: SENN myelinated fiber model validation against Reilly 1987 data')
 
         # Fiber model (10 um diameter)
-        fiber = myelinatedFiberReilly(IextraFiber, fiberD=10e-6)
+        fiberD = 10e-6  # m
+        nnodes = 21
+        fiber = SennFiber(fiberD, nnodes)
 
         # Electrode and stimulation parameters (from Reilly 1987)
         rho_e = 300.0      # resistivity of external medium (Ohm.cm, from McNeal 1976)
         z0 = fiber.interL  # point-electrode to fiber distance (m, 1 internode length)
         x0 = 0.            # point-electrode located above central node (m)
-        tstim = 100e-6     # s
         toffset = 3e-3     # s
 
         # Create cathodic and anodic extracellular current sources
@@ -140,7 +141,7 @@ class TestSennEstim(TestFiber):
         Qthrs = {k: v * durations for k, v in Ithrs.items()}  # C
 
         # Plot strength-duration curve
-        fig = strengthDurationCurve(fiber, durations, Ithrs, yfactor=1e3, scale='log')
+        strengthDurationCurve(fiber, durations, Ithrs, yfactor=1e3, scale='log')
 
         # Compare output metrics to reference
         i10us, i1ms = 2, 6
@@ -173,7 +174,9 @@ class TestSennEstim(TestFiber):
         logger.info('Test: SENN myelinated fiber model validation against Sweeney 1987 data')
 
         # Fiber model (10 um diameter)
-        fiber = myelinatedFiberSweeney(IintraFiber, fiberD=10e-6)
+        fiberD = 10e-6  # m
+        nnodes = 19
+        fiber = SweeneyFiber(fiberD, nnodes)
 
         # Intracellular stimulation parameters
         tstim = 10e-6   # s
@@ -181,7 +184,7 @@ class TestSennEstim(TestFiber):
         pp = PulsedProtocol(tstim, toffset)
 
         # Create extracellular current source
-        psource = IntracellularCurrent(0, mode='anode')
+        psource = IntracellularCurrent('node0', mode='anode')
 
         # Titrate for a specific duration and simulate fiber at threshold current
         logger.info(f'Running titration for {si_format(tstim)}s pulse')
@@ -200,20 +203,20 @@ class TestSennEstim(TestFiber):
         }
 
         # Plot membrane potential traces for specific duration at threshold current
-        fig1 = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
+        SectionCompTimeSeries([(data, meta)], 'Vm', fiber.nodeIDs).render()
 
         # Reset fiber model to avoid NEURON integration errors
         fiber.reset()
 
         # Compute and plot strength-duration curve for intracellular injection at central node
-        psource = IntracellularCurrent(fiber.nnodes // 2, mode='anode')
+        psource = IntracellularCurrent(fiber.central_ID, mode='anode')
         durations = np.array([10, 20, 40, 60, 80, 100, 150, 200, 250, 300, 400, 500], dtype=float) * 1e-6  # s
         Ithrs_ref = np.array([4.4, 2.8, 1.95, 1.6, 1.45, 1.4, 1.30, 1.25, 1.25, 1.25, 1.25, 1.25]) * 1e-9  # A
         Ithrs_sim = np.array([fiber.titrate(psource, PulsedProtocol(x, toffset)) for x in durations])  # A
         Qthrs_sim = Ithrs_sim * durations  # C
 
         # Plot strength-duration curve
-        fig2 = strengthDurationCurve(fiber, durations, {'ref': Ithrs_ref, 'sim': Ithrs_sim}, yfactor=1e9, scale='lin')
+        strengthDurationCurve(fiber, durations, {'ref': Ithrs_ref, 'sim': Ithrs_sim}, yfactor=1e9, scale='lin')
 
         # Compare output metrics to reference
         SDcurve_sim_metrics = {  # Output metrics
@@ -242,28 +245,29 @@ class TestSennEstim(TestFiber):
         logger.info('Test: SENN unmyelinated fiber model validation against Sundt 2015 data')
 
         # Unmyelinated fiber model (0.8 um diameter)
-        fiber = unmyelinatedFiberSundt(IintraFiber, fiberD=0.8e-6)
+        fiberD = 0.8e-6  # m
+        fiber = UnmyelinatedFiber(fiberD)
 
         # Stimulation parameters
         tstim = 1e-3     # s
         toffset = 10e-3  # s
         pp = PulsedProtocol(tstim, toffset)
-        psource = IntracellularCurrent(fiber.nnodes // 2)
+        psource = IntracellularCurrent(fiber.central_ID)
         I = 0.2e-9  # A
 
         # Simulate fiber
         data, meta = fiber.simulate(psource.updatedX(I), pp)
 
         # Discard data from end nodes
-        npad = 2
-        fiber.ids = fiber.ids[npad:-npad]
-        data = {k: data[k] for k in fiber.ids}
+        # npad = 2
+        # ids = fiber.nodeIDs[npad:-npad]
+        # data = {k: data[k] for k in ids}
 
         # Assess excitation
         logger.info('fiber is {}excited'.format({True: '', False: 'not '}[fiber.isExcited(data)]))
 
         # Plot membrane potential traces for specific duration at threshold current
-        fig = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
+        SectionCompTimeSeries([(data, meta)], 'Vm', fiber.nodeIDs).render()
 
         # Compare output metrics to reference
         pulse_ref_metrics = {     # Reference metrics (from Sundt 2015 ModelDB files)
@@ -291,13 +295,12 @@ class TestSennEstim(TestFiber):
         }
 
         # Plot strength-duration curve
-        fig2 = strengthDurationCurve(fiber, durations, {'sim': Ithrs_sim}, yfactor=1e9, scale='log')
+        strengthDurationCurve(fiber, durations, {'sim': Ithrs_sim}, yfactor=1e9, scale='log')
 
         logger.info(f'Comparing metrics for {si_format(pp.tstim)}s intracellular anodic pulse')
         self.logOutputMetrics(pulse_sim_metrics, pulse_ref_metrics)
         logger.info(f'Computing strength-duration curve metrics')
         self.logOutputMetrics(SDcurve_sim_metrics)
-
 
     def gaussian(self, fiber, pp):
         ''' Run myelinated fiber ESTIM simulation with gaussian distribution source. '''
@@ -317,7 +320,7 @@ class TestSennEstim(TestFiber):
         }
 
         # Plot membrane potential and membrane charge density traces
-        fig1 = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
+        SectionCompTimeSeries([(data, meta)], 'Vm', fiber.nodeIDs).render()
 
         # # Comparative SD curve
         # durations = np.logspace(-5, -3, 20)  # s
@@ -335,17 +338,17 @@ class TestSennEstim(TestFiber):
 
     def test_gaussian1(self, is_profiled=False):
         logger.info('Test: gaussian distribution source on myelinated fiber')
-        fiber = myelinatedFiberReilly(IextraFiber)
+        fiber = SennFiber(20e-6, 21)
         pp = PulsedProtocol(10e-3, 3e-3)
         return self.gaussian(fiber, pp)
 
     def test_gaussian2(self, is_profiled=False):
         logger.info('Test: gaussian distribution source on unmyelinated fiber')
-        fiber = unmyelinatedFiberSundt(IextraFiber)
+        fiber = UnmyelinatedFiber(0.8e-6)
         pp = PulsedProtocol(10e-3, 3e-3)
         return self.gaussian(fiber, pp)
 
 
 if __name__ == '__main__':
-    tester = TestSennEstim()
+    tester = TestFiberEstim()
     tester.main()

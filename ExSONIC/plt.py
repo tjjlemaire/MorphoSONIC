@@ -3,11 +3,12 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-03-27 23:32:09
+# @Last Modified time: 2020-04-03 12:24:20
 
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from scipy import signal
 
 from PySONIC.plt import GroupedTimeSeries, CompTimeSeries
 from PySONIC.utils import logger, si_format, getPow10
@@ -382,4 +383,55 @@ def plotMRGLookups(fiberD_range=None, interp_methods=None, fs=12):
     title = fig.suptitle(f'MRG morphological parameters', fontsize=fs)
     fig.tight_layout()
     title.set_y(title._y + 0.03)
+    return fig
+
+
+def plotFiberDiameterDistributions(n=50, fs=12):
+    ''' Plot the diameter distribution of different types of peripheral fibers. '''
+    fibers_dict = {
+        'Aα': {
+            'bounds': (13, 20),
+            'myelinated': True,
+            'implemented': True,
+            'label': 'myelinated'
+        },
+        'Aβ': {
+            'bounds': (6, 12),
+            'myelinated': True,
+            'implemented': True
+        },
+        'Aδ': {
+            'bounds': (1, 5),
+            'myelinated': True,
+            'implemented': False
+        },
+        'C': {
+            'bounds': (0.2, 1.5),
+            'myelinated': False,
+            'implemented': True,
+            'label': 'unmyelinated'
+        }
+    }
+
+    fig, ax = plt.subplots(figsize=(9, 2.5))
+    ax.set_yticks([])
+    ax.set_ylim(0, 1.2)
+    ax.set_xlabel('diameter (um)', fontsize=fs)
+    for item in ax.get_xticklabels():
+        item.set_fontsize(fs)
+    for key in ['top', 'left', 'right']:
+        ax.spines[key].set_visible(False)
+    g = signal.gaussian(n, std=8)
+    for k, d in fibers_dict.items():
+        drange = np.linspace(*d['bounds'], n)
+        color = 'royalblue' if d['myelinated'] else 'orangered'
+        label = d.get('label', None)
+        ax.plot(drange, g, color, linewidth=2.5, label=label)
+        ax.text(np.mean(d['bounds']), 1.07, k, color=color, size=fs + 2, weight='bold',
+                horizontalalignment='center')
+        if d['implemented']:
+            ax.fill_between(drange, 0, g, color=color, alpha=0.5)
+    ax.legend(fontsize=fs, frameon=False, bbox_to_anchor=(.9, 1), loc='upper left')
+    fig.tight_layout()
+
     return fig

@@ -3,14 +3,14 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2017-08-24 11:55:07
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-03-06 09:22:31
+# @Last Modified time: 2020-04-02 16:33:35
 
 ''' Run E-STIM simulations of a specific point-neuron. '''
 
 from PySONIC.core import Batch, PointNeuron
 from PySONIC.utils import logger
 from PySONIC.parsers import EStimParser
-from ExSONIC.core import IintraNode
+from ExSONIC.core import Node
 
 
 def main():
@@ -26,7 +26,7 @@ def main():
     queue = PointNeuron.simQueue(*parser.parseSimInputs(args), outputdir=args['outputdir'])
     output = []
     for pneuron in args['neuron']:
-        node = IintraNode(pneuron)
+        node = Node(pneuron)
         batch = Batch(node.simAndSave if args['save'] else node.simulate, queue)
         output += batch(loglevel=args['loglevel'], mpi=args['mpi'])
 

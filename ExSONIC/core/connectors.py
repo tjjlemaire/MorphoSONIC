@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-03-06 09:06:17
+# @Last Modified time: 2020-04-03 14:41:19
 
 
 class SerialConnectionScheme:
@@ -17,3 +17,8 @@ class SerialConnectionScheme:
         if self.rmin is not None:
             s = f'{s}, rmin={self.rmin:.2e} Ohm.cm2'
         return f'{s})'
+
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+        return self.vref == other.vref and self.rmin == other.rmin

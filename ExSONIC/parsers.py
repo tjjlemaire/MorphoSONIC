@@ -3,20 +3,21 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-18 21:14:43
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-03-06 09:15:12
+# @Last Modified time: 2020-04-03 20:26:21
 
 import matplotlib.pyplot as plt
 from PySONIC.parsers import *
 
 from .plt import SectionGroupedTimeSeries, SectionCompTimeSeries
+from .core import models_dict
 
 
 class SpatiallyExtendedParser(Parser):
 
     def __init__(self):
         super().__init__()
-        self.defaults.update({'rs': 110.0})
-        self.factors.update({'rs': 1e0})
+        # self.defaults.update({'rs': 110.0})
+        # self.factors.update({'rs': 1e0})
         self.addResistivity()
         self.addSection()
 
@@ -28,11 +29,15 @@ class SpatiallyExtendedParser(Parser):
         self.add_argument(
             '--section', nargs='+', type=str, help='Section of interest for plot')
 
+    def addSectionID(self):
+        self.add_argument(
+            '--secid', nargs='+', type=str, help='Section ID')
+
     def parse(self, args=None):
         if args is None:
             args = super().parse()
-        for key in ['rs']:
-            args[key] = self.parse2array(args, key, factor=self.factors[key])
+        # for key in ['rs']:
+        #     args[key] = self.parse2array(args, key, factor=self.factors[key])
         return args
 
     @staticmethod
@@ -62,56 +67,54 @@ class SpatiallyExtendedParser(Parser):
         plt.show()
 
 
-class MyelinatedFiberParser(SpatiallyExtendedParser):
+class FiberParser(SpatiallyExtendedParser):
 
     def __init__(self):
         super().__init__()
-        self.defaults.update({
-            'nnodes': 11, 'fiberD': 20., 'neuron': 'FH', 'nodeL': 2.5, 'd_ratio': 0.7})
-        self.factors.update({'fiberD': 1e-6, 'nodeL': 1e-6})
-        self.addNnodes()
+        self.defaults.update({'type': 'senn', 'fiberD': 20., 'nnodes': 21})
+        self.factors.update({'fiberD': 1e-6})
+        self.addType()
         self.addFiberDiameter()
-        self.addNodeLength()
-        self.addDiameterRatio()
+        self.addNnodes()
 
-    def addNnodes(self):
+    def addResistivity(self):
+        pass
+
+    def addType(self):
         self.add_argument(
-            '--nnodes', nargs='+', type=int, help='Number of nodes of Ranvier')
+            '--type', nargs='+', type=str, help='Fiber model type')
 
     def addFiberDiameter(self):
         self.add_argument(
             '-d', '--fiberD', nargs='+', type=float, help='Fiber diameter (um)')
 
-    def addNodeLength(self):
+    def addNnodes(self):
         self.add_argument(
-            '-w', '--nodeL', nargs='+', type=float, help='Node length (um)')
-
-    def addDiameterRatio(self):
-        self.add_argument(
-            '--d_ratio', nargs='+', type=float, help='Axon to fiber diameter ratio')
-
-    def parse(self, args=None):
-        args = super().parse(args=args)
-        for key in ['fiberD', 'nodeL']:
-            if len(args[key]) > 1 or args[key][0] is not None:
-                args[key] = self.parse2array(args, key, factor=self.factors[key])
-        return args
-
-    @staticmethod
-    def parseSimInputs(args):
-        return SpatiallyExtendedParser.parseSimInputs(args)
+            '--nnodes', nargs='+', type=int, help='Number of nodes of Ranvier')
 
     def parsePlot(self, args, output):
         if args['section'] == ['all']:
             args['section'] = [f'node{i}' for i in range(args['nnodes'][0])]
         return SpatiallyExtendedParser.parsePlot(args, output)
 
+    @staticmethod
+    def parseSimInputs(args):
+        return SpatiallyExtendedParser.parseSimInputs(args)
 
-class EStimMyelinatedFiberParser(MyelinatedFiberParser, PWSimParser):
+    def parse(self, args=None):
+        args = super().parse(args=args)
+        args['type'] = [models_dict[model_key] for model_key in args['type']]
+        for key in ['fiberD']:
+            if len(args[key]) > 1 or args[key][0] is not None:
+                args[key] = self.parse2array(args, key, factor=self.factors[key])
+        return args
+
+
+class EStimFiberParser(FiberParser, PWSimParser):
 
     def __init__(self):
         PWSimParser.__init__(self)
-        MyelinatedFiberParser.__init__(self)
+        FiberParser.__init__(self)
         self.defaults.update({'tstim': 0.1, 'toffset': 3.})
         self.allowed.update({'mode': ['cathode', 'anode']})
         self.addElectrodeMode()
@@ -134,7 +137,7 @@ class EStimMyelinatedFiberParser(MyelinatedFiberParser, PWSimParser):
         return EStimParser.parseAmplitude(self, args)
 
     def parse(self):
-        args = MyelinatedFiberParser.parse(self, args=PWSimParser.parse(self))
+        args = FiberParser.parse(self, args=PWSimParser.parse(self))
         if isIterable(args['mode']):
             args['mode'] = args['mode'][0]
         return args
@@ -144,10 +147,10 @@ class EStimMyelinatedFiberParser(MyelinatedFiberParser, PWSimParser):
         return PWSimParser.parseSimInputs(args) + SpatiallyExtendedParser.parseSimInputs(args)
 
     def parsePlot(self, *args):
-        return MyelinatedFiberParser.parsePlot(self, *args)
+        return FiberParser.parsePlot(self, *args)
 
 
-class IextraMyelinatedFiberParser(EStimMyelinatedFiberParser):
+class IextraFiberParser(EStimFiberParser):
 
     amp_unit = 'mA'
 
@@ -171,19 +174,15 @@ class IextraMyelinatedFiberParser(EStimMyelinatedFiberParser):
         return args
 
 
-class IintraMyelinatedFiberParser(EStimMyelinatedFiberParser):
+class IintraFiberParser(EStimFiberParser):
 
     amp_unit = 'nA'
 
     def __init__(self):
         super().__init__()
-        self.defaults.update({'inode': None, 'mode': 'anode', 'amp': 2.0})
+        self.defaults.update({'secid': None, 'mode': 'anode', 'amp': 2.0})
         self.factors.update({'amp': 1e-9})
-        self.addNodeIClamp()
-
-    def addNodeIClamp(self):
-        self.add_argument(
-            '--inode', nargs='+', type=int, help='Node index for current clamp')
+        self.addSectionID()
 
 
 class SpatiallyExtendedAStimParser(SpatiallyExtendedParser, AStimParser):
@@ -208,11 +207,11 @@ class SpatiallyExtendedAStimParser(SpatiallyExtendedParser, AStimParser):
         return SpatiallyExtendedParser.parsePlot(*args)
 
 
-class AStimMyelinatedFiberParser(MyelinatedFiberParser, AStimParser):
+class AStimFiberParser(FiberParser, AStimParser):
 
     def __init__(self):
         AStimParser.__init__(self)
-        MyelinatedFiberParser.__init__(self)
+        FiberParser.__init__(self)
         for x in [self.defaults, self.allowed, self.to_parse]:
             x.pop('method')
         self.defaults.update({'tstim': 0.1, 'toffset': 3.})
@@ -222,24 +221,25 @@ class AStimMyelinatedFiberParser(MyelinatedFiberParser, AStimParser):
         return AStimParser.parseSimInputs(args) + SpatiallyExtendedParser.parseSimInputs(args)
 
     def parsePlot(self, *args):
-        return MyelinatedFiberParser.parsePlot(self, *args)
+        return FiberParser.parsePlot(self, *args)
 
 
-class NodeAStimMyelinatedFiberParser(AStimMyelinatedFiberParser):
+class SectionAStimFiberParser(AStimFiberParser):
 
     amp_unit = 'kPa'
 
     def __init__(self):
         super().__init__()
-        self.defaults.update({'inode': None})
-        self.addNodeStim()
-
-    def addNodeStim(self):
-        self.add_argument(
-            '--inode', nargs='+', type=int, help='Node index for acoustic source')
+        self.defaults.update({'sec_id': None})
+        self.addSectionID()
 
     def parseAmplitude(self, args):
         return AStimParser.parseAmplitude(self, args)
+
+    def parse(self):
+        args = super().parse()
+        args['secid'] = [args['secid']]
+        return args
 
 
 class ExtSonicNodeAStimParser(SpatiallyExtendedAStimParser):

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-03-27 23:37:37
+# @Last Modified time: 2020-04-03 21:13:34
 
 import abc
 from neuron import h
@@ -15,12 +15,23 @@ from PySONIC.core import Model, PointNeuron
 from PySONIC.postpro import detectSpikes, prependDataFrame
 from PySONIC.utils import logger, si_format, plural, filecode, simAndSave, isIterable
 from PySONIC.constants import *
+from PySONIC.threshold import threshold, titrate, getStartPoint
 
 from .pyhoc import *
+from .sources import *
+from ..utils import array_print_options
+from ..constants import *
 
 
 class NeuronModel(metaclass=abc.ABCMeta):
+    ''' Generic interface for NEURON models. '''
 
+    tscale = 'ms'                 # relevant temporal scale of the model
+    mA_to_nA = 1e6                # conversion factor
+    section_class = MechQSection  # default type of NEURON section
+    is_constructed = False
+
+    # integration methods
     int_methods = {
         0: 'backward Euler method',
         1: 'Crank-Nicholson method',
@@ -29,13 +40,36 @@ class NeuronModel(metaclass=abc.ABCMeta):
         4: 'DASPK (Differential Algebraic Solver with Preconditioned Krylov) method'
     }
 
-    def setCelsius(self, celsius=None):
-        if celsius is None:
-            try:
-                celsius = self.pneuron.celsius
-            except AttributeError:
-                raise ValueError('celsius value not provided and not found in PointNeuron class')
-        h.celsius = celsius
+    def set(self, attrkey, value):
+        ''' Set attribute if not existing or different, and reset model if already constructed. '''
+        realkey = f'_{attrkey}'
+        if not hasattr(self, realkey) or value != getattr(self, realkey):
+            setattr(self, realkey, value)
+            if self.is_constructed:
+                logger.debug(f'resetting model with {attrkey} = {value}')
+                self.reset()
+
+    @property
+    @abc.abstractmethod
+    def simkey(self):
+        ''' Keyword used to characterize stimulation modality. '''
+        raise NotImplementedError
+
+    @property
+    @abc.abstractmethod
+    def meta(self):
+        raise NotImplementedError
+
+    @property
+    def modelcodes(self):
+        return {
+            'simkey': self.simkey,
+            'neuron': self.pneuron.name
+        }
+
+    @property
+    def modelcode(self):
+        return '_'.join(self.modelcodes.values())
 
     @property
     def pneuron(self):
@@ -45,7 +79,7 @@ class NeuronModel(metaclass=abc.ABCMeta):
     def pneuron(self, value):
         if not isinstance(value, PointNeuron):
             raise TypeError(f'{value} is not a valid PointNeuron instance')
-        self._pneuron = value
+        self.set('pneuron', value)
 
     @property
     def modfile(self):
@@ -85,22 +119,52 @@ class NeuronModel(metaclass=abc.ABCMeta):
         '''
         return cls.axialResistancePerUnitLength(rho, *args, **kwargs) * L * 1e2  # Ohm
 
-    def createSection(self, id, mech=None, states=None, Cm0=None):
+    def setCelsius(self, celsius=None):
+        if celsius is None:
+            try:
+                celsius = self.pneuron.celsius
+            except AttributeError:
+                raise ValueError('celsius value not provided and not found in PointNeuron class')
+        h.celsius = celsius
+
+    @property
+    @abc.abstractmethod
+    def seclist(self):
+        raise NotImplementedError
+
+    @property
+    def nsections(self):
+        return len(self.seclist)
+
+    @abc.abstractmethod
+    def construct(self):
+        ''' Create, specify and connect morphological model sections. '''
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def clear(self):
+        ''' Clear all model sections and drive objects. '''
+        raise NotImplementedError
+
+    def reset(self):
+        ''' Delete and re-construct all model sections. '''
+        self.clear()
+        self.construct()
+
+    def createSection(self, id, *args, mech=None, states=None, Cm0=None):
         ''' Create a model section with a given id. '''
         if Cm0 is None:
             Cm0 = self.pneuron.Cm0 * 1e2  # uF/cm2
-        args = []
-        if hasattr(self, 'connection_scheme'):
-            section_class = CustomConnectMechQSection
-            args.append(self.connection_scheme)
-        else:
-            section_class = MechQSection
-        return section_class(
-            *args, mechname=mech, states=states, name=id, cell=self, Cm0=Cm0)
+        args = [x for x in args if x is not None]
+        return self.section_class(*args, mechname=mech, states=states, name=id, cell=self, Cm0=Cm0)
 
     def initToSteadyState(self):
         ''' Initialize model variables to pre-stimulus resting state values. '''
-        h.finitialize(self.pneuron.Qm0 * 1e5)  # nC/cm2
+        if issubclass(self.section_class, QSection):
+            x0 = self.pneuron.Qm0 * 1e5  # nC/cm2
+        else:
+            x0 = self.pneuron.Vm0  # mV
+        h.finitialize(x0)
 
     def setTimeProbe(self):
         ''' Set time probe. '''
@@ -112,8 +176,29 @@ class NeuronModel(metaclass=abc.ABCMeta):
             :param value: new stimulation state (0 = OFF, 1 = ON)
             :return: new stimulation state
         '''
-        self.section.setStimON(value)
+        for sec in self.seclist:
+            sec.setStimON(value)
+        for drive in self.drives:
+            drive.toggle(value)
         return value
+
+    def toggleStim(self):
+        ''' Toggle stim state (ON -> OFF or OFF -> ON) and set appropriate next toggle event. '''
+        # OFF -> ON at pulse onset
+        if self.stimon == 0:
+            self.stimon = self.setStimON(1)
+            self.cvode.event(min(self.tstim, h.t + self.Ton), self.toggleStim)
+        # ON -> OFF at pulse offset
+        else:
+            self.stimon = self.setStimON(0)
+            if (h.t + self.Toff) < self.tstim - h.dt:
+                self.cvode.event(h.t + self.Toff, self.toggleStim)
+
+        # Re-initialize cvode if active
+        if self.cvode.active():
+            self.cvode.re_init()
+        else:
+            h.fcurrent()
 
     def getIntegrationMethod(self):
         ''' Get the method used by NEURON for the numerical integration of the system. '''
@@ -184,27 +269,13 @@ class NeuronModel(metaclass=abc.ABCMeta):
 
         return 0
 
-    def toggleStim(self):
-        ''' Toggle stim state (ON -> OFF or OFF -> ON) and set appropriate next toggle event. '''
-        # OFF -> ON at pulse onset
-        if self.stimon == 0:
-            self.stimon = self.setStimON(1)
-            self.cvode.event(min(self.tstim, h.t + self.Ton), self.toggleStim)
-        # ON -> OFF at pulse offset
-        else:
-            self.stimon = self.setStimON(0)
-            if (h.t + self.Toff) < self.tstim - h.dt:
-                self.cvode.event(h.t + self.Toff, self.toggleStim)
-
-        # Re-initialize cvode if active
-        if self.cvode.active():
-            self.cvode.re_init()
-        else:
-            h.fcurrent()
-
-    @abc.abstractmethod
-    def setPyLookup(self, *args, **kwargs):
-        raise NotImplementedError
+    def setPyLookup(self):
+        ''' Set the appropriate model 2D lookup. '''
+        if not hasattr(self, 'pylkp') or self.pylkp is None:
+            self.pylkp = self.pneuron.getLookup()
+            self.pylkp.refs['A'] = np.array([0.])
+            for k, v in self.pylkp.items():
+                self.pylkp[k] = np.array([v])
 
     def setModLookup(self, *args, **kwargs):
         ''' Get the appropriate model 2D lookup and translate it to Hoc. '''
@@ -225,20 +296,6 @@ class NeuronModel(metaclass=abc.ABCMeta):
             self.lkp[taux] = Matrix(self.pylkp[taux] * 1e3)  # ms
         for xinf in self.pneuron.xinf_list:
             self.lkp[xinf] = Matrix(self.pylkp[xinf])  # (-)
-
-    def setFuncTables(self, *args, **kwargs):
-        ''' Set neuron-specific interpolation tables along the charge dimension,
-            and link them to FUNCTION_TABLEs in the MOD file of the corresponding
-            membrane mechanism.
-        '''
-        logger.debug(f'loading {self.mechname} membrane dynamics lookup tables')
-
-        # Set Lookup
-        self.setModLookup(*args, **kwargs)
-
-        # Assign hoc matrices to 2D interpolation tables in membrane mechanism
-        for k, v in self.lkp.items():
-            self.setFuncTable(self.mechname, k, v, self.Aref, self.Qref)
 
     @staticmethod
     def setFuncTable(mechname, fname, matrix, xref, yref):
@@ -262,6 +319,20 @@ class NeuronModel(metaclass=abc.ABCMeta):
 
         # Call function and return
         return fillTable(matrix._ref_x[0][0], nx, xref._ref_x[0], ny, yref._ref_x[0])
+
+    def setFuncTables(self, *args, **kwargs):
+        ''' Set neuron-specific interpolation tables along the charge dimension,
+            and link them to FUNCTION_TABLEs in the MOD file of the corresponding
+            membrane mechanism.
+        '''
+        logger.debug(f'loading {self.mechname} membrane dynamics lookup tables')
+
+        # Set Lookup
+        self.setModLookup(*args, **kwargs)
+
+        # Assign hoc matrices to 2D interpolation tables in membrane mechanism
+        for k, v in self.lkp.items():
+            self.setFuncTable(self.mechname, k, v, self.Aref, self.Qref)
 
     @Model.logNSpikes
     @Model.checkTitrate
@@ -299,17 +370,66 @@ class NeuronModel(metaclass=abc.ABCMeta):
 
         return data
 
+    @property
+    def titrationFunc(self):
+        return self.pneuron.titrationFunc
 
-class FiberNeuronModel(NeuronModel):
+    def titrate(self, *args, **kwargs):
+        return titrate(self, *args, **kwargs)
 
-    tscale = 'ms'  # relevant temporal scale of the model
-    mA_to_nA = 1e6  # conversion factor
+    def getPltVars(self, *args, **kwargs):
+        return self.pneuron.getPltVars(*args, **kwargs)
+
+    @property
+    def pltScheme(self):
+        return self.pneuron.pltScheme
 
     @property
     @abc.abstractmethod
-    def simkey(self):
-        ''' Keyword used to characterize stimulation modality. '''
+    def filecodes(self, *args):
         raise NotImplementedError
+
+    def filecode(self, *args):
+        return filecode(self, *args)
+
+    def simAndSave(self, *args, **kwargs):
+        return simAndSave(self, *args, **kwargs)
+
+
+class SpatiallyExtendedNeuronModel(NeuronModel):
+    ''' Generic interface for spatially-extended NEURON models. '''
+
+    # Boolean stating whether to use equivalent currents for imposed extracellular voltage fields
+    use_equivalent_currents = False
+
+    @abc.abstractstaticmethod
+    def getMetaArgs(meta):
+        raise NotImplementedError
+
+    @classmethod
+    def initFromMeta(cls, meta):
+        args, kwargs = cls.getMetaArgs(meta)
+        return cls(*args, **kwargs)
+
+    @staticmethod
+    def inputs():
+        return {
+            'section': {
+                'desc': 'section',
+                'label': 'section',
+                'unit': '',
+                'factor': 1e0,
+                'precision': 0
+            }
+        }
+
+    def filecodes(self, source, pp, _):
+        return {
+            **self.modelcodes,
+            **source.filecodes(),
+            'nature': pp.nature,
+            **pp.filecodes
+        }
 
     @property
     def rs(self):
@@ -319,101 +439,40 @@ class FiberNeuronModel(NeuronModel):
     def rs(self, value):
         if value <= 0:
             raise ValueError('longitudinal resistivity must be positive')
-        self._rs = value
+        self.set('rs', value)
 
-    @property
-    def nnodes(self):
-        return self._nnodes
-
-    @nnodes.setter
-    def nnodes(self, value):
-        if value % 2 == 0:
-            raise ValueError('number of nodes must be odd')
-        self._nnodes = value
-
-    @property
-    def nodeD(self):
-        return self._nodeD
-
-    @nodeD.setter
-    def nodeD(self, value):
-        if value <= 0:
-            raise ValueError('node diameter must be positive')
-        self._nodeD = value
-
-    @property
-    def interD(self):
-        return self._interD
-
-    @interD.setter
-    def interD(self, value):
-        if value <= 0:
-            raise ValueError('internode diameter must be positive')
-        self._interD = value
-
-    @property
-    def interL(self):
-        return self._interL
-
-    @interL.setter
-    def interL(self, value):
-        if value < 0:
-            raise ValueError('internode length must be positive or null')
-        self._interL = value
-
-    @property
-    def nodeIDs(self):
-        return [f'node{i}' for i in range(self.nnodes)]
+    def str_resistivity(self):
+        return f'rs = {si_format(self.rs)}Ohm.cm'
 
     @property
     @abc.abstractmethod
     def refsection(self):
-        raise NotImplementedError
-
-    @property
-    @abc.abstractmethod
-    def length(self):
+        ''' Model reference section (used mainly to monitor stimon parameter). '''
         raise NotImplementedError
 
     @property
     def sectypes(self):
         return list(self.sections.keys())
 
-    def getXCoords(self):
-        return {k: getattr(self, f'get{k.title()}Coords')() for k in self.sections.keys()}
+    @abc.abstractmethod
+    def createSections(self):
+        ''' Create morphological sections. '''
+        raise NotImplementedError
 
-    @property
-    def z(self):
-        return 0.
+    @abc.abstractmethod
+    def setGeometry(self):
+        ''' Set sections geometry. '''
+        raise NotImplementedError
 
-    def getXZCoords(self):
-        return {k: np.vstack((v, np.ones(v.size) * self.z)).T
-                for k, v in self.getXCoords().items()}  # m
+    @abc.abstractmethod
+    def setResistivity(self):
+        ''' Set sections axial resistivity. '''
+        raise NotImplementedError
 
-    @property
-    def drives(self):
-        if not hasattr(self, '_drives'):
-            self._drives = []
-        return self._drives
-
-    @drives.setter
-    def drives(self, value):
-        if not isIterable(value):
-            raise ValueError('drives must be an iterable')
-        for item in value:
-            if not hasattr(item, 'toggle'):
-                raise ValueError(f'drive {item} has no toggle method')
-        self._drives = value
-
-    def setStimON(self, value):
-        for sec in self.seclist:
-            sec.setStimON(value)
-        for drive in self.drives:
-            drive.toggle(value)
-        return value
-
-    def setOtherProbes(self):
-        return {}
+    @abc.abstractmethod
+    def setTopology(self):
+        ''' Connect morphological sections. '''
+        raise NotImplementedError
 
     def getSectionsDetails(self):
         ''' Get details about the model's sections. '''
@@ -431,6 +490,112 @@ class FiberNeuronModel(NeuronModel):
     def logSectionsDetails(self):
         return f'sections details:\n{self.getSectionsDetails().to_markdown()}'
 
+    @property
+    @abc.abstractmethod
+    def nonlinear_sections(self):
+        ''' Sections that contain nonlinear dynamics. '''
+        raise NotImplementedError
+
+    @property
+    def drives(self):
+        if not hasattr(self, '_drives'):
+            self._drives = []
+        return self._drives
+
+    @drives.setter
+    def drives(self, value):
+        if not isIterable(value):
+            raise ValueError('drives must be an iterable')
+        for item in value:
+            if not hasattr(item, 'toggle'):
+                raise ValueError(f'drive {item} has no toggle method')
+        self._drives = value
+
+    def setOtherProbes(self):
+        return {}
+
+    def desc(self, meta):
+        return f'{self}: simulation @ {meta["source"]}, {meta["pp"].desc}'
+
+    def connect(self, k1, i1, k2, i2):
+        ''' Connect two sections referenced by their type and index.
+
+            :param k1: type of parent section
+            :param i1: index of parent section in subtype dictionary
+            :param k2: type of child section
+            :param i2: index of child section in subtype dictionary
+        '''
+        self.sections[k2][f'{k2}{i2:d}'].connect(self.sections[k1][f'{k1}{i1:d}'])
+
+    def setIClamps(self, Iinj_dict):
+        ''' Set distributed intracellular current clamps. '''
+        logger.debug(f'Intracellular currents:')
+        with np.printoptions(**array_print_options):
+            for k, Iinj in Iinj_dict.items():
+                logger.debug(f'{k}: Iinj = {Iinj} nA')
+        iclamps = []
+        for k, Iinj in Iinj_dict.items():
+            iclamps += [IClamp(sec, I) for sec, I in zip(self.sections[k].values(), Iinj)]
+        return iclamps
+
+    def toInjectedCurrents(self, Ve):
+        ''' Convert extracellular potential array into equivalent injected currents.
+
+            :param Ve: model-sized vector of extracellular potentials (mV)
+            :return: model-sized vector of intracellular injected currents (nA)
+        '''
+        raise NotImplementedError
+
+    def setVext(self, Ve_dict):
+        ''' Set distributed extracellular voltages. '''
+        logger.debug(f'Extracellular potentials:')
+        with np.printoptions(**array_print_options):
+            for k, Ve in Ve_dict.items():
+                logger.debug(f'{k}: Ve = {Ve} mV')
+        if self.use_equivalent_currents:
+            # Variant 1: inject equivalent intracellular currents
+            return self.setIClamps(self.toInjectedCurrents(Ve_dict))
+        else:
+            # Variant 2: insert extracellular mechanisms for a more realistic depiction
+            # of the extracellular field
+            emechs = []
+            for k, Ve in Ve_dict.items():
+                emechs += [ExtField(sec, v) for sec, v in zip(self.sections[k].values(), Ve)]
+            return emechs
+
+    @property
+    def drive_funcs(self):
+        return {
+            IntracellularCurrent: self.setIClamps,
+            ExtracellularCurrent: self.setVext
+        }
+
+    def setDrives(self, source):
+        ''' Set distributed stimulus amplitudes. '''
+        self.drives = []
+        amps_dict = source.computeDistributedAmps(self)
+        match = False
+        for source_class, drive_func in self.drive_funcs.items():
+            if isinstance(source, source_class):
+                self.drives = drive_func(amps_dict)
+                match = True
+        if not match:
+            raise ValueError(f'Unknown source type: {source}')
+
+    @property
+    def Aranges(self):
+        return {
+            IntracellularCurrent: IINJ_RANGE,
+            ExtracellularCurrent: VEXT_RANGE
+        }
+
+    def getArange(self, source):
+        ''' Get the stimulus amplitude range allowed at the fiber level. '''
+        for source_class, Arange in self.Aranges.items():
+            if isinstance(source, source_class):
+                return [source.computeSourceAmp(self, x) for x in Arange]
+        raise ValueError(f'Unknown source type: {source}')
+
     @Model.checkTitrate
     @Model.addMeta
     @Model.logDesc
@@ -446,7 +611,7 @@ class FiberNeuronModel(NeuronModel):
         # Set recording vectors
         t = self.setTimeProbe()
         stim = self.refsection.setStimProbe()
-        node_probes = {k: v.setProbesDict() for k, v in self.nodes.items()}
+        full_probes = {k: v.setProbesDict() for k, v in self.nonlinear_sections.items()}
         other_probes = self.setOtherProbes()
 
         # Set distributed drives
@@ -456,21 +621,25 @@ class FiberNeuronModel(NeuronModel):
         self.integrate(pp, dt, atol)
 
         # Store output in dataframes
+        t = t.to_array() * 1e-3  # s
+        stim = stim.to_array()
         data = {}
-        for id in self.nodes.keys():
+
+        # Full states data for sections with nonlinear mechanisms
+        for id, probes in full_probes.items():
             data[id] = pd.DataFrame({
-                't': t.to_array() * 1e-3,  # s
-                'stimstate': stim.to_array()
+                't': t,
+                'stimstate': stim,
+                **{k: v.to_array() for k, v in probes.items()}
             })
-            for k, v in node_probes[id].items():
-                data[id][k] = v.to_array()
             data[id].loc[:, 'Qm'] *= 1e-5  # C/m2
 
-        for sectype, secdict in other_probes.items():
-            for k, v in secdict.items():
+        # Voltage data only for other sections
+        for sectype, probes_dict in other_probes.items():
+            for k, v in probes_dict.items():
                 data[k] = pd.DataFrame({
-                    't': t.to_array() * 1e-3,  # s
-                    'stimstate': stim.to_array(),
+                    't': t,
+                    'stimstate': stim,
                     'Vm': v['Vm'].to_array()})
 
         # Prepend initial conditions (prior to stimulation)
@@ -479,12 +648,12 @@ class FiberNeuronModel(NeuronModel):
         return data
 
     def getSpikesTimings(self, data, zcross=True, spikematch='majority'):
-        ''' Return an array containing occurence times of spikes detected on a collection of nodes.
+        ''' Return an array containing occurence times of spikes detected on a collection of sections.
 
             :param data: simulation output dataframe
             :param zcross: boolean stating whether to use ascending zero-crossings preceding peaks
                 as temporal reference for spike occurence timings
-            :return: dictionary of spike occurence times (s) per node.
+            :return: dictionary of spike occurence times (s) per section.
         '''
         tspikes = {}
         nspikes = np.zeros(len(data.items()))
@@ -520,7 +689,7 @@ class FiberNeuronModel(NeuronModel):
 
         if spikematch == 'strict':
             # Assert consistency of spikes propagation
-            assert np.all(nspikes == nspikes[0]), 'Inconsistent number of spikes in different nodes'
+            assert np.all(nspikes == nspikes[0]), 'Inconsistent spike number across sections'
             if nspikes[0] == 0:
                 logger.warning('no spikes detected')
                 return None
@@ -531,8 +700,213 @@ class FiberNeuronModel(NeuronModel):
 
         return pd.DataFrame(tspikes)
 
+    def getSpikeAmp(self, data, ids=None, key='Vm', out='range'):
+        # By default, consider all sections with nonlinear dynamics
+        if ids is None:
+            ids = list(self.nonlinear_sections.keys())
+        amps = np.array([np.ptp(data[id][key].values) for id in ids])
+        if out == 'range':
+            return amps.min(), amps.max()
+        elif out == 'median':
+            return np.median(amps)
+        elif out == 'mean':
+            return np.mean(amps)
+        else:
+            raise AttributeError(f'invalid out option: {out}')
+
+    def titrationFunc(self, data):
+        return self.isExcited(data)
+
+    def getStartPoint(self, Arange):
+        scale = 'lin' if Arange[0] == 0 else 'log'
+        return getStartPoint(Arange, x=0.2, scale=scale)
+
+    def getAbsConvThr(self, Arange):
+        return np.abs(Arange[1] - Arange[0]) / 1e4
+
+    def titrate(self, source, pp):
+        ''' Use a binary search to determine the threshold amplitude needed to obtain
+            neural excitation for a given pulsing protocol.
+
+            :param source: source object
+            :param pp: pulsed protocol object
+            :return: determined threshold amplitude
+        '''
+        Arange = self.getArange(source)
+        xthr = threshold(
+            lambda x: self.titrationFunc(
+                self.simulate(source.updatedX(-x if source.is_cathodal else x), pp)[0]),
+            Arange,
+            x0=self.getStartPoint(Arange),
+            eps_thr=self.getAbsConvThr(Arange),
+            rel_eps_thr=1e-2,
+            precheck=source.xvar_precheck)
+        if source.is_cathodal:
+            xthr = -xthr
+        return xthr
+
+
+class FiberNeuronModel(SpatiallyExtendedNeuronModel):
+    ''' Generic interface for fiber (single or double cable) NEURON models. '''
+
+    # Boolean stating whether to use equivalent currents for imposed extracellular voltage fields
+    use_equivalent_currents = True
+
+    def copy(self):
+        other = self.__class__(self.fiberD, self.nnodes)
+        other.rs = self.rs
+        other.pneuron = self.pneuron
+        return other
+
+    @property
+    def fiberD(self):
+        return self._fiberD
+
+    @fiberD.setter
+    def fiberD(self, value):
+        if value <= 0:
+            raise ValueError('fiber diameter must be positive')
+        self.set('fiberD', value)
+
+    @property
+    def nnodes(self):
+        ''' Number of nodes. '''
+        return self._nnodes
+
+    @nnodes.setter
+    def nnodes(self, value):
+        if value % 2 == 0:
+            raise ValueError('number of nodes must be odd')
+        self.set('nnodes', value)
+
+    @property
+    def central_ID(self):
+        return f'node{self.nnodes // 2}'
+
+    @property
+    def ninters(self):
+        ''' Number of (abstract) internodal sections. '''
+        return self.nnodes - 1
+
+    @property
+    def nodeD(self):
+        return self._nodeD
+
+    @nodeD.setter
+    def nodeD(self, value):
+        if value <= 0:
+            raise ValueError('node diameter must be positive')
+        self.set('nodeD', value)
+
+    @property
+    def nodeL(self):
+        return self._nodeL
+
+    @nodeL.setter
+    def nodeL(self, value):
+        if value <= 0:
+            raise ValueError('node length must be positive')
+        self.set('nodeL', value)
+
+    @property
+    def interD(self):
+        return self._interD
+
+    @interD.setter
+    def interD(self, value):
+        if value <= 0:
+            raise ValueError('internode diameter must be positive')
+        self.set('interD', value)
+
+    @property
+    def interL(self):
+        return self._interL
+
+    @interL.setter
+    def interL(self, value):
+        if value < 0:
+            raise ValueError('internode length must be positive or null')
+        self.set('interL', value)
+
+    @property
+    def rhoa(self):
+        ''' Axoplasmic resistivity (Ohm.cm) '''
+        return self.rs
+
+    @property
+    def R_node(self):
+        ''' Node intracellular axial resistance (Ohm). '''
+        return self.axialResistance(self.rhoa, self.nodeL, self.nodeD)
+
+    @property
+    def nodeIDs(self):
+        ''' IDs of the model nodes sections. '''
+        return [f'node{i}' for i in range(self.nnodes)]
+
+    @property
     @abc.abstractmethod
-    def isNormalDistance(self, d):
+    def length(self):
+        raise NotImplementedError
+
+    @property
+    @abc.abstractmethod
+    def is_myelinated(self):
+        raise NotImplementedError
+
+    @property
+    def refsection(self):
+        return self.nodes[self.nodeIDs[0]]
+
+    @property
+    def nonlinear_sections(self):
+        return self.nodes
+
+    @property
+    def nodelist(self):
+        return list(self.nodes.values())
+
+    def str_geometry(self):
+        return f'fiberD = {si_format(self.fiberD, 1)}m'
+
+    def str_nodes(self):
+        return f'{self.nnodes} node{plural(self.nnodes)}'
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}({self.str_geometry()}, {self.str_nodes()})'
+
+    @property
+    def meta(self):
+        return {
+            'simkey': self.simkey,
+            'fiberD': self.fiberD,
+            'nnodes': self.nnodes
+        }
+
+    @staticmethod
+    def getMetaArgs(meta):
+        return [meta['fiberD'], meta['nnodes']], {}
+
+    @property
+    def modelcodes(self):
+        return {
+            'simkey': self.simkey,
+            'fiberD': f'fiberD{(self.fiberD * 1e6):.1f}um',
+            'nnodes': f'{self.nnodes}node{plural(self.nnodes)}',
+        }
+
+    def getXCoords(self):
+        return {k: getattr(self, f'get{k.title()}Coords')() for k in self.sections.keys()}
+
+    @property
+    def z(self):
+        return 0.
+
+    def getXZCoords(self):
+        return {k: np.vstack((v, np.ones(v.size) * self.z)).T
+                for k, v in self.getXCoords().items()}  # m
+
+    @abc.abstractmethod
+    def isInternodalDistance(self, d):
         raise NotImplementedError
 
     def getConductionVelocity(self, data, ids=None, out='median'):
@@ -564,7 +938,7 @@ class FiberNeuronModel(NeuronModel):
         distances, delays = [], []  # (nnodes - 1)
         for i in range(len(ids) - 1):
             d = xcoords[i] - xcoords[i - 1]
-            if self.isNormalDistance(d):
+            if self.isInternodalDistance(d):
                 distances.append(d)
                 dt = np.abs(tspikes.values[0][i] - tspikes.values[0][i - 1])
                 delays.append(dt)   # node-to-node delay
@@ -582,32 +956,6 @@ class FiberNeuronModel(NeuronModel):
         else:
             raise AttributeError(f'invalid out option: {out}')
 
-    def getSpikeAmp(self, data, ids=None, key='Vm', out='range'):
-        # By default, consider all fiber nodes
-        if ids is None:
-            ids = self.nodeIDs.copy()
-        amps = np.array([np.ptp(data[id][key].values) for id in ids])
-        if out == 'range':
-            return amps.min(), amps.max()
-        elif out == 'median':
-            return np.median(amps)
-        elif out == 'mean':
-            return np.mean(amps)
-        else:
-            raise AttributeError(f'invalid out option: {out}')
-
-    def desc(self, meta):
-        return f'{self}: simulation @ {meta["source"]}, {meta["pp"].desc}'
-
-    @property
-    def nodelist(self):
-        return list(self.nodes.values())
-
-    @property
-    @abc.abstractmethod
-    def seclist(self):
-        raise NotImplementedError
-
     def isExcited(self, data):
         ''' Determine if neuron is excited from simulation output.
 
@@ -618,77 +966,7 @@ class FiberNeuronModel(NeuronModel):
         nspikes_end = detectSpikes(data[self.nodeIDs[-1]])[0].size
         return nspikes_start > 0 and nspikes_end > 0
 
-    def filecodes(self, source, pp, _):
-        return {
-            **self.modelcodes,
-            **source.filecodes(),
-            'nature': pp.nature,
-            **pp.filecodes
-        }
 
-    def filecode(self, *args):
-        return filecode(self, *args)
-
-    def simAndSave(self, *args, **kwargs):
-        return simAndSave(self, *args, **kwargs)
-
-    @staticmethod
-    def inputs():
-        return {
-            'section': {
-                'desc': 'section',
-                'label': 'section',
-                'unit': '',
-                'factor': 1e0,
-                'precision': 0
-            }
-        }
-
-    def str_biophysics(self):
-        return f'{self.pneuron.name} neuron'
-
-    def str_nodes(self):
-        return f'{self.nnodes} node{plural(self.nnodes)}'
-
-    def str_resistivity(self):
-        return f'rs = {si_format(self.rs)}Ohm.cm'
-
-    def __repr__(self):
-        ''' Explicit naming of the model instance. '''
-        return '{}({})'.format(self.__class__.__name__, ', '.join([
-            self.str_biophysics(),
-            self.str_nodes(),
-            self.str_resistivity(),
-            self.str_geometry()
-        ]))
-
-    @property
-    def corecodes(self):
-        return {
-            'simkey': self.simkey,
-            'neuron': self.pneuron.name
-        }
-
-    @property
-    def quickcode(self):
-        return '_'.join([
-            *self.corecodes.values(),
-            f'fiberD{self.fiberD * 1e6:.2f}um'
-        ])
-
-    def getPltVars(self, *args, **kwargs):
-        return self.pneuron.getPltVars(*args, **kwargs)
-
-    @property
-    def pltScheme(self):
-        return self.pneuron.pltScheme
-
-    @abc.abstractmethod
-    def setDrives(self, source):
-        ''' Set distributed stimulus amplitudes. '''
-        raise NotImplementedError
-
-    @abc.abstractmethod
     def titrate(self, source, pp):
         ''' Use a binary search to determine the threshold amplitude needed to obtain
             neural excitation for a given pulsing protocol.
@@ -697,19 +975,15 @@ class FiberNeuronModel(NeuronModel):
             :param pp: pulsed protocol object
             :return: determined threshold amplitude
         '''
-        raise NotImplementedError
-
-    def getArange(self, source):
-        return [source.computeSourceAmp(self, x) for x in self.A_range]
-
-    def getAstart(self, source):
-        return source.computeSourceAmp(self, self.A_start)
-
-    def titrationFunc(self, *args):
-        data, _ = self.simulate(*args)
-        return self.isExcited(data)
-
-    def reset(self):
-        ''' delete and re-construct all model sections. '''
-        self.clear()
-        self.construct()
+        Arange = self.getArange(source)
+        xthr = threshold(
+            lambda x: self.titrationFunc(
+                self.simulate(source.updatedX(-x if source.is_cathodal else x), pp)[0]),
+            Arange,
+            x0=self.getStartPoint(Arange),
+            eps_thr=self.getAbsConvThr(Arange),
+            rel_eps_thr=1e-2,
+            precheck=source.xvar_precheck)
+        if source.is_cathodal:
+            xthr = -xthr
+        return xthr

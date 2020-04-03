@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-17 12:19:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-03-25 13:20:35
+# @Last Modified time: 2020-04-03 19:46:35
 
 import numpy as np
 
@@ -86,17 +86,12 @@ class StrengthDurationBatch(LogBatch):
 
     def sourcecode(self):
         code = self.source.quickcode
-        if 'inode' in self.source.inputs():
-            istart = code.index('node')
-            code_node = code[istart:]
-            inode = int(code[istart + 4:])
-            if inode == self.fiber.nnodes // 2:
-                code_node = 'centralnode'
-            code = code[:istart] + code_node
+        if hasattr(self.source, 'sec_id') and self.source.sec_id == self.fiber.central_ID:
+            code = code.replace(self.source.sec_id, 'centralnode')
         return code
 
     def corecode(self):
-        return f'{self.fiber.quickcode}_source_{self.sourcecode()}'
+        return f'{self.fiber.modelcode}_{self.sourcecode()}'
 
     def run(self):
         logger.info(f'Computing SD curve for {self.fiber} with {self.source}')
@@ -144,10 +139,10 @@ class StrengthDistanceBatch(LogBatch):
         self._out_keys = value
 
     def sourcecode(self):
-        return f'source_x{self.source.x[0] * 1e3:.1f}mm'
+        return f'{self.source.key}_x{self.source.x[0] * 1e3:.1f}mm'
 
     def corecode(self):
-        return f'{self.fiber.quickcode}_source_{self.sourcecode()}'
+        return f'{self.fiber.modelcode}_{self.sourcecode()}'
 
     def run(self):
         logger.info(f'Computing SD curve for {self.fiber} with {self.source}')
@@ -193,9 +188,7 @@ class FiberConvergenceBatch(LogBatch):
     def fibercode(self):
         ''' String fully describing the fiber object. '''
         codes = self.getFiber(self.inputs[0]).modelcodes
-        for k in ['nnodes', 'interL', 'interD', 'nodeL']:
-            if k in codes:
-                del codes[k]
+        del codes['nnodes']
         return '_'.join(codes.values())
 
     def corecode(self):
@@ -224,7 +217,7 @@ class FiberConvergenceBatch(LogBatch):
         source = self.source_func(fiber)
 
         # Perform titration to find threshold excitation amplitude
-        logger.info(f'Running titration with intracellular current injected at node {source.inode}')
+        logger.info(f'Running titration with intracellular current injected at {source.sec_id}')
         Ithr = fiber.titrate(source, self.pp)  # A
 
         if not np.isnan(Ithr):

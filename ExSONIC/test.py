@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 11:34:09
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-03-06 09:20:21
+# @Last Modified time: 2020-04-03 19:30:36
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -11,7 +11,7 @@ import matplotlib.gridspec as gridspec
 
 from PySONIC.core import NeuronalBilayerSonophore, PulsedProtocol, AcousticDrive, ElectricDrive
 from PySONIC.test import TestBase
-from PySONIC.neurons import getNeuronsDict, getPointNeuron
+from PySONIC.neurons import getNeuronsDict
 from PySONIC.plt import GroupedTimeSeries
 from PySONIC.utils import logger, si_format, pow10_format, isIterable
 
@@ -73,6 +73,10 @@ class TestComp(TestBase):
 
 class TestCompNode(TestComp):
 
+    fiber_mechs = ['FHnode', 'SWnode', 'MRGnode', 'SUseg']
+    fiber_pp = PulsedProtocol(100e-6, 3e-3)
+    cortical_pp = PulsedProtocol(100e-3, 50e-3)
+
     @staticmethod
     def getNeurons():
         pneurons = {}
@@ -121,41 +125,39 @@ class TestCompNode(TestComp):
         cls.plotTcompHistogram(axes[2], tcomp)
 
         # Add figure title
+        if isIterable(comp_title):
+            comp_title = ' - '.join(comp_title)
         fig.suptitle(comp_title, fontsize=18)
 
         return fig
 
     def test_ESTIM(self, is_profiled=False):
         for name, pneuron in self.getNeurons().items():
-            if pneuron.name == 'FH':
-                Astim = 1e4      # mA/m2
-                tstim = 0.12e-3  # s
-                toffset = 3e-3   # s
+            if pneuron.name in self.fiber_mechs:
+                Astim = 1e4     # mA/m2
+                pp = self.fiber_pp
             else:
-                Astim = 20.0  # mA/m2
-                tstim = 100e-3   # s
-                toffset = 50e-3  # s
+                Astim = 20.0     # mA/m2
+                pp = self.cortical_pp
             ELdrive = ElectricDrive(Astim)
-            pp = PulsedProtocol(tstim, toffset)
             fig = self.compare(pneuron, ELdrive, pp)
 
     def test_ASTIM(self, is_profiled=False):
         a = 32e-9        # nm
         Fdrive = 500e3   # kHz
-        tstim = 100e-3   # s
-        toffset = 50e-3  # s
-        pp = PulsedProtocol(tstim, toffset)
         for name, pneuron in self.getNeurons().items():
-            if pneuron.name == 'FH':
+            if pneuron.name in self.fiber_mechs:
                 Adrive = 300e3  # kPa
+                pp = self.fiber_pp
             else:
                 Adrive = 100e3  # kPa
+                pp = self.cortical_pp
             USdrive = AcousticDrive(Fdrive, Adrive)
             fig = self.compare(pneuron, USdrive, pp, a=a)
 
 
 class TestNodePythonVsNeuron(TestCompNode):
-    ''' Run Node (ESTIM) and SonicNode (ASTIM) simulations and compare results with those obtained
+    ''' Run Node ESTIM and ASTIM simulations and compare results with those obtained
         with pure-Python implementations (PointNeuron and NeuronalBilayerSonophore classes). '''
 
     comp_keys = ['Python', 'NEURON']
@@ -166,11 +168,10 @@ class TestNodePythonVsNeuron(TestCompNode):
 
         # Initialize Python and NEURON models
         if a is not None:
-            nrn_model = SonicNode(pneuron, a=a)
             py_model = NeuronalBilayerSonophore(a, pneuron)
         else:
-            nrn_model = IintraNode(pneuron)
             py_model = pneuron
+        nrn_model = Node(pneuron, a=a)
 
         # Run NEURON and Python simulations
         data, meta = {}, {}
@@ -179,7 +180,7 @@ class TestNodePythonVsNeuron(TestCompNode):
         tcomp = {k: v['tcomp'] for k, v in meta.items()}
 
         comp_title = (
-            f'{nrn_model.str_biophysics()}, {drive.desc}, {pp.desc}',
+            f'{nrn_model}, {drive.desc}, {pp.desc}',
             'adaptive time step' if dt is None else f'dt = ${pow10_format(dt * 1e3)}$ ms')
 
         return data, meta, tcomp, comp_title
@@ -188,10 +189,10 @@ class TestNodePythonVsNeuron(TestCompNode):
 class TestCompExtended(TestComp):
 
     @classmethod
-    def compare(cls, pneuron, diam, rho, nnodes, Istim, pp):
+    def compare(cls, *args, **kwargs):
 
         # Run simulations
-        data, meta, tcomp, comp_title = cls.runSims(pneuron, diam, rho, nnodes, Istim, pp)
+        data, meta, tcomp, comp_title = cls.runSims(*args, **kwargs)
 
         # Extract ref time and stim state
         ref_key = list(data[cls.def_key].keys())[0]
@@ -217,6 +218,7 @@ class TestCompExtended(TestComp):
                 ax.plot(tplt, np.insert(df[k]['Vm'].values, 0, df[k]['Vm'].values[0]), label=k)
 
         # Plot stim patches on both graphs
+        pp = args[-1]
         tbounds = (-tonset, pp.tstim + pp.toffset)
         cls.plotStimPatches(axes[:-1], tbounds, tpatch_on, tpatch_off)
 
@@ -224,13 +226,15 @@ class TestCompExtended(TestComp):
         cls.plotTcompHistogram(axes[2], tcomp)
 
         # Add figure title
+        if isIterable(comp_title):
+            comp_title = ' - '.join(comp_title)
         fig.suptitle(comp_title, fontsize=18)
 
         return fig
 
 
 class TestConnectClassicVsCustom(TestCompExtended):
-    ''' Run IinjSennFiber simulations with a fiber object in which sections are connected using either
+    ''' Run simulations with a fiber object in which sections are connected using either
         NEURON's classic built-in scheme or a custom-made scheme, and compare results.
     '''
 
@@ -239,46 +243,45 @@ class TestConnectClassicVsCustom(TestCompExtended):
 
     def test_senn(self, is_profiled=False):
 
-        # Fiber model parameters
-        pneuron = getPointNeuron('FH')  # frog myelinated node membrane equations
-        fiberD = 10e-6                  # fiber diameter (m)
-        rho_a = 100.                    # axoplasm resistivity (Ohm.cm)
-        nnodes = 3
+        # Fiber model
+        fiber = SennFiber(10e-6, 3)
 
         # Intracellular stimulation parameters
         Istim = None
-        tstim = 1e-3   # s
-        toffset = 3e-3  # s
-        fig = self.compare(pneuron, fiberD, rho_a, nnodes, Istim, PulsedProtocol(tstim, toffset))
+        pp = PulsedProtocol(1e-3, 3e-3)
+
+        return self.compare(fiber, Istim, pp)
 
     @classmethod
-    def runSims(cls, pneuron, diam, rho, nnodes, Istim, pp):
+    def runSims(cls, fiber, Istim, pp):
 
         # Create fiber objects with both classic and custom connection schemes
-        fiber = {
-            'classic': myelinatedFiber(IintraFiber, pneuron, diam, nnodes, rs=rho),
-            'custom': myelinatedFiber(IintraFiber, pneuron, diam, nnodes, rs=rho),
+        fibers = {
+            'classic': fiber.copy(),
+            'custom': fiber.copy()
         }
-        fiber['custom'].connector = SeriesConnector(vref='v', rmin=None)
-        for f in fiber.values():
-            f.reset()
+        fibers['classic'].connection_scheme = None
+
+        # for k, f in fibers.items():
+        #     print(k, f.connection_scheme, type(f.refsection), f.refsection.Ra)
 
         # Create extracellular current source
-        psource = IntracellularCurrent(0, mode='anode')
+        source = IntracellularCurrent('node0', mode='anode')
 
         # Titrate classic model for a specific duration
         if Istim is None:
             logger.info(f'Running titration for {si_format(pp.tstim)}s pulse')
-            Istim = fiber[cls.def_key].titrate(psource, pp)  # A
+            Istim = fibers[cls.def_key].titrate(source, pp)  # A
+            source.I = Istim
 
         # Simulate both fiber models above threshold current
         data, meta = {}, {}
-        for k, f in fiber.items():
-            data[k], meta[k] = f.simulate(psource, Istim, pp)
+        for k, f in fibers.items():
+            data[k], meta[k] = f.simulate(source, pp)
         tcomp = {k: v['tcomp'] for k, v in meta.items()}
 
         comp_title = '{}, I = {}A, {}s'.format(
-            fiber[cls.def_key].str_biophysics(),
+            fibers[cls.def_key],
             *si_format([Istim, pp.tstim], space=' '))
 
         return data, meta, tcomp, comp_title

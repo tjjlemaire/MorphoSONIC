@@ -20,17 +20,17 @@ This mechanism is useful for simulating the stimulation with extracellular elect
       |  xraxial[0]  |              |              |
 /`----o----'\/\/`----o----'\/\/`----o----'\/\/`----o----'\ vext[0]            periaxonal space
       |              |              |              |
-     ---            ---            ---            --- 
-    |   |          |   |          |   |    xc[0] |   | xg[0]                  myelin 
+     ---            ---            ---            ---
+    |   |          |   |          |   |    xc[0] |   | xg[0]                  myelin
      ---            ---            ---            ---
       |  xraxial[1]  |              |              |
 /`----o----'\/\/`----o----'\/\/`----o----'\/\/`----o----'\ vext[1]            adjacent extracellular space
       |              |              |              |
-     ---            ---            ---            ---     
+     ---            ---            ---            ---
     |   |          |   |          |   |          |   | xg[1]
-    |  ---         |  ---         |  ---   xc[1] |  ---  
+    |  ---         |  ---         |  ---   xc[1] |  ---
     |   -          |   -          |   -          |   - e_extracellular
-     ---            ---            ---            ---     
+     ---            ---            ---            ---
       |              |              |              |
 -------------------------------------------------------- ground
 ```

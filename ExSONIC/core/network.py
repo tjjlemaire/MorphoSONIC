@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-01-13 20:15:35
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-19 14:54:09
+# @Last Modified time: 2020-04-02 16:12:14
 
 import pandas as pd
 from neuron import h
@@ -14,7 +14,7 @@ from PySONIC.utils import si_prefixes, filecode, simAndSave
 from PySONIC.postpro import prependDataFrame
 
 from .pyhoc import *
-from .node import IintraNode, SonicNode, DrivenSonicNode
+from .node import Node, DrivenNode
 from .synapses import *
 
 
@@ -28,9 +28,9 @@ class NodeCollection:
     titration_var = None
 
     node_constructor_dict = {
-        'ESTIM': (IintraNode, [] , []),
-        'ASTIM': (SonicNode, [], ['a', 'Fdrive', 'fs']),
-        'DASTIM': (DrivenSonicNode, ['Idrive'], ['a', 'Fdrive', 'fs']),
+        'ESTIM': (Node, [], []),
+        'ASTIM': (Node, [], ['a', 'Fdrive', 'fs']),
+        'DASTIM': (DrivenNode, ['Idrive'], ['a', 'Fdrive', 'fs']),
     }
 
     def __init__(self, nodes):
@@ -216,7 +216,7 @@ class NodeCollection:
         return simAndSave(self, *args, **kwargs)
 
 
-class NodeNetwork( NodeCollection):
+class NodeNetwork(NodeCollection):
 
     simkey = 'node_network'
 

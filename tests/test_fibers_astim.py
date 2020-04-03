@@ -3,19 +3,19 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-03-19 18:29:28
+# @Last Modified time: 2020-04-03 20:18:50
 
 import numpy as np
 
 from PySONIC.core import PulsedProtocol
 from PySONIC.utils import logger, si_format
 from ExSONIC.test import TestFiber
-from ExSONIC.core import SonicFiber, myelinatedFiberReilly, unmyelinatedFiberSundt
+from ExSONIC.core import SennFiber, UnmyelinatedFiber
 from ExSONIC.core.sources import *
 from ExSONIC.plt import SectionCompTimeSeries, strengthDurationCurve
 
 
-class TestSennAstim(TestFiber):
+class TestFiberAstim(TestFiber):
 
     a = 32e-9       # sonophore diameter (m)
     fs = 1          # sonophore membrane coverage (-)
@@ -23,13 +23,15 @@ class TestSennAstim(TestFiber):
 
     def test_node(self, is_profiled=False):
         ''' Run myelinated fiber ASTIM simulation with node source. '''
-        logger.info('Test: node source on myelinated fiber')
+        logger.info('Test: local source on myelinated fiber node')
 
         # Myelinated fiber model
-        fiber = myelinatedFiberReilly(SonicFiber, a=self.a, fs=self.fs)
+        fiberD = 20e-6  # m
+        nnodes = 21
+        fiber = SennFiber(fiberD, nnodes, a=self.a, fs=self.fs)
 
         # US stimulation parameters
-        psource = NodeAcousticSource(fiber.nnodes // 2, self.Fdrive)
+        psource = SectionAcousticSource(fiber.central_ID, self.Fdrive)
         pp = PulsedProtocol(3e-3, 3e-3)
 
         # Titrate for a specific duration and simulate fiber at threshold US amplitude
@@ -45,8 +47,8 @@ class TestSennAstim(TestFiber):
         }
 
         # Plot membrane potential and membrane charge density traces
-        fig1 = SectionCompTimeSeries([(data, meta)], 'Qm', fiber.ids).render()
-        fig2 = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
+        SectionCompTimeSeries([(data, meta)], 'Qm', fiber.nodeIDs).render()
+        SectionCompTimeSeries([(data, meta)], 'Vm', fiber.nodeIDs).render()
 
         # Comparative SD curve
         durations = np.logspace(-5, -3, 20)  # s
@@ -55,7 +57,7 @@ class TestSennAstim(TestFiber):
         Athrs = np.array([fiber.titrate(psource, pp) for pp in pps])
 
         # Plot strength-duration curve
-        fig3 = strengthDurationCurve(
+        strengthDurationCurve(
             fiber, durations, {'myelinated': Athrs}, scale='log',
             yname='amplitude', yfactor=1e-3, yunit='Pa', plot_chr=False)
 
@@ -80,7 +82,7 @@ class TestSennAstim(TestFiber):
         }
 
         # Plot membrane potential and membrane charge density traces
-        fig1 = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
+        fig1 = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.nodeIDs).render()
 
         # # Comparative SD curve
         # durations = np.logspace(-5, -3, 20)  # s
@@ -98,13 +100,13 @@ class TestSennAstim(TestFiber):
 
     def test_gaussian1(self, is_profiled=False):
         logger.info('Test: gaussian distribution source on myelinated fiber')
-        fiber = myelinatedFiberReilly(SonicFiber, a=self.a, fs=self.fs)
+        fiber = SennFiber(20e-6, 21, a=self.a, fs=self.fs)
         pp = PulsedProtocol(3e-3, 3e-3)
         return self.gaussian(fiber, pp)
 
     def test_gaussian2(self, is_profiled=False):
         logger.info('Test: gaussian distribution source on unmyelinated fiber')
-        fiber = unmyelinatedFiberSundt(SonicFiber, a=self.a, fs=self.fs)
+        fiber = UnmyelinatedFiber(0.8e-6, a=self.a, fs=self.fs)
         pp = PulsedProtocol(10e-3, 3e-3)
         return self.gaussian(fiber, pp)
 
@@ -129,24 +131,24 @@ class TestSennAstim(TestFiber):
         }
 
         # Plot membrane potential traces for specific duration at threshold current
-        fig = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.ids).render()
+        fig = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.nodeIDs).render()
 
         # Log output metrics
         self.logOutputMetrics(sim_metrics)
 
     def test_transducer1(self, is_profiled=False):
         logger.info('Test: transducer source on myelinated fiber')
-        fiber = myelinatedFiberReilly(SonicFiber, a=self.a, fs=self.fs)
+        fiber = SennFiber(20e-6, 21, a=self.a, fs=self.fs)
         pp = PulsedProtocol(100e-6, 3e-3)
         self.transducer(fiber, pp)
 
     def test_transducer2(self, is_profiled=False):
         logger.info('Test: transducer source on unmyelinated fiber')
-        fiber = unmyelinatedFiberSundt(SonicFiber, a=self.a, fs=self.fs)
+        fiber = UnmyelinatedFiber(0.8e-6, a=self.a, fs=self.fs)
         pp = PulsedProtocol(10e-3, 3e-3)
         self.transducer(fiber, pp)
 
 
 if __name__ == '__main__':
-    tester = TestSennAstim()
+    tester = TestFiberAstim()
     tester.main()

@@ -1,7 +1,7 @@
-TITLE sundt membrane mechanism
+TITLE FH membrane mechanism
 
 COMMENT
-Equations governing the effective membrane dynamics of a Unmyelinated C-fiber model.
+Equations governing the effective membrane dynamics of a Xenopus myelinated fiber node
 upon electrical / ultrasonic stimulation, based on the SONIC model.
 
 Reference: Lemaire, T., Neufeld, E., Kuster, N., and Micera, S. (2019).
@@ -9,16 +9,24 @@ Understanding ultrasound neuromodulation using a computationally efficient
 and interpretable model of intramembrane cavitation. J. Neural Eng.
 
 @Author: Theo Lemaire, EPFL
-@Date: 2019-11-22
+@Date: 2019-07-05
 @Email: theo.lemaire@epfl.ch
 ENDCOMMENT
+
+CONSTANT {
+   Z_Na = 1
+   FARADAY = 96485.3
+   Rg = 8.31342
+   Z_K = 1
+}
 
 INDEPENDENT {t FROM 0 TO 1 WITH 1 (ms)}
 
 NEURON {
-   SUFFIX sundtauto
-   NONSPECIFIC_CURRENT iNa : Sodium current.  Gating formalism from Migliore 1995, using 3rd power for m to reproduce 1 ms AP half-width
+   SUFFIX FHnodeauto
+   NONSPECIFIC_CURRENT iNa : Sodium current
    NONSPECIFIC_CURRENT iKd : delayed-rectifier Potassium current
+   NONSPECIFIC_CURRENT iP : non-specific delayed current
    NONSPECIFIC_CURRENT iLeak : non-specific leakage current
    RANGE Adrive, Vm : section specific
    RANGE stimon     : common to all sections (but set as RANGE to be accessible from caller)
@@ -27,19 +35,23 @@ NEURON {
 PARAMETER {
    stimon       : Stimulation state
    Adrive (kPa) : Stimulation amplitude
-   gNabar = 0.04 (S/cm2)
-   ENa = 55.0 (mV)
-   gKdbar = 0.04 (S/cm2)
-   EK = -90.0 (mV)
-   gLeak = 0.0001 (S/cm2)
-   ELeak = -60.069215464991295 (mV)
+   pNabar = 8e-09 (10 m/ms)
+   Nai = 0.01374 (M)
+   Nao = 0.1145 (M)
+   T = 293.15 ()
+   pKbar = 1.2e-09 (10 m/ms)
+   Ki = 0.12 (M)
+   Ko = 0.0025 (M)
+   pPbar = 5.4e-10 (10 m/ms)
+   gLeak = 0.03003 (S/cm2)
+   ELeak = -69.974 (mV)
 }
 
 STATE {
    m : iNa activation gate
    h : iNa inactivation gate
-   n : iKd activation gate
-   l : iKd inactivation gate
+   n : iKd gate
+   p : iP gate
 }
 
 ASSIGNED {
@@ -47,6 +59,7 @@ ASSIGNED {
    Vm (mV)
    iNa (mA/cm2)
    iKd (mA/cm2)
+   iP (mA/cm2)
    iLeak (mA/cm2)
 }
 
@@ -57,21 +70,34 @@ FUNCTION_TABLE alphah(A(kPa), Q(nC/cm2)) (/ms)
 FUNCTION_TABLE betah(A(kPa), Q(nC/cm2)) (/ms)
 FUNCTION_TABLE alphan(A(kPa), Q(nC/cm2)) (/ms)
 FUNCTION_TABLE betan(A(kPa), Q(nC/cm2)) (/ms)
-FUNCTION_TABLE alphal(A(kPa), Q(nC/cm2)) (/ms)
-FUNCTION_TABLE betal(A(kPa), Q(nC/cm2)) (/ms)
+FUNCTION_TABLE alphap(A(kPa), Q(nC/cm2)) (/ms)
+FUNCTION_TABLE betap(A(kPa), Q(nC/cm2)) (/ms)
+
+FUNCTION efun(x) {
+    efun = x / (exp(x) - 1)
+}
+
+FUNCTION ghkDrive(Vm, Z_ion, Cion_in, Cion_out, T) {
+    LOCAL x, eCin, eCout
+    x = Z_ion * FARADAY * Vm / (Rg * T) * 1e-3
+    eCin = Cion_in * efun(-x)
+    eCout = Cion_out * efun(x)
+    ghkDrive = FARADAY * (eCin - eCout) * 1e6
+}
 
 INITIAL {
    m = alpham(Adrive * stimon, v) / (alpham(Adrive * stimon, v) + betam(Adrive * stimon, v))
    h = alphah(Adrive * stimon, v) / (alphah(Adrive * stimon, v) + betah(Adrive * stimon, v))
    n = alphan(Adrive * stimon, v) / (alphan(Adrive * stimon, v) + betan(Adrive * stimon, v))
-   l = alphal(Adrive * stimon, v) / (alphal(Adrive * stimon, v) + betal(Adrive * stimon, v))
+   p = alphap(Adrive * stimon, v) / (alphap(Adrive * stimon, v) + betap(Adrive * stimon, v))
 }
 
 BREAKPOINT {
    SOLVE states METHOD cnexp
    Vm = V(Adrive * stimon, v)
-   iNa = gNabar * m * m * m * h * (Vm - ENa)
-   iKd = gKdbar * n * n * n * l * (Vm - EK)
+   iNa = pNabar * m * m * h * ghkDrive(Vm, Z_Na, Nai, Nao, T)
+   iKd = pKbar * n * n * ghkDrive(Vm, Z_K, Ki, Ko, T)
+   iP = pPbar * p * p * ghkDrive(Vm, Z_Na, Nai, Nao, T)
    iLeak = gLeak * (Vm - ELeak)
 }
 
@@ -79,5 +105,5 @@ DERIVATIVE states {
    m' = alpham(Adrive * stimon, v) * (1 - m) - betam(Adrive * stimon, v) * m
    h' = alphah(Adrive * stimon, v) * (1 - h) - betah(Adrive * stimon, v) * h
    n' = alphan(Adrive * stimon, v) * (1 - n) - betan(Adrive * stimon, v) * n
-   l' = alphal(Adrive * stimon, v) * (1 - l) - betal(Adrive * stimon, v) * l
+   p' = alphap(Adrive * stimon, v) * (1 - p) - betap(Adrive * stimon, v) * p
 }

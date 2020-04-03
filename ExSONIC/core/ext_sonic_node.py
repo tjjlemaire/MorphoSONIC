@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-03-09 20:07:31
+# @Last Modified time: 2020-04-03 18:00:46
 
 import os
 import numpy as np
@@ -17,30 +17,22 @@ from PySONIC.core import Model
 from PySONIC.postpro import detectSpikes, prependDataFrame
 
 from ..constants import *
-from .node import SonicNode
+from .node import Node
 from .connectors import SerialConnectionScheme
 
 
-class ExtendedSonicNode(SonicNode):
+class ExtendedSonicNode(Node):
 
     simkey = 'nano_ext_SONIC'
     ids = ['sonophore', 'surroundings']
 
     def __init__(self, pneuron, rs, a=32e-9, fs=0.5, deff=100e-9):
-
-        # Assign attributes
         self.rs = rs  # Ohm.cm
         self.deff = deff  # m
         assert fs < 1., 'fs must be lower than 1'
-
-        # Initialize parent class wihtout constructing sections
         super().__init__(pneuron, id=None, a=a, fs=1., construct=False)
         self.fs = fs
-
-        # Define Vm-based connection scheme
         self.connection_scheme = SerialConnectionScheme(vref='Vm', rmin=1e2)
-
-        # Construct model
         self.construct()
 
     def __repr__(self):

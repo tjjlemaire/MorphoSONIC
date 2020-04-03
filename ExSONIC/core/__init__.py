@@ -3,13 +3,14 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-03-10 11:29:42
+# @Last Modified time: 2020-04-03 20:47:10
 
 import sys
 import inspect
 
+from .sonic import *
 from .node import *
-from .ext_sonic_node import *
+from .radial_model import *
 from .senn import *
 from .mrg import *
 from .connectors import *
@@ -42,4 +43,4 @@ def getModel(meta):
     try:
         return models_dict[simkey].initFromMeta(meta['model'])
     except KeyError:
-        raise ValueError(f'Unknown model type:{simkey}')
+        raise ValueError(f'Unknown model type: {simkey}')

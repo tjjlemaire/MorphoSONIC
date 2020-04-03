@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-03-23 14:00:08
+# @Last Modified time: 2020-04-03 16:50:07
 # @Author: Theo Lemaire
 # @Date:   2018-08-21 19:48:04
 # @Last Modified by:   Theo Lemaire
@@ -16,6 +16,7 @@ from neuron import h, hclass
 
 from PySONIC.utils import logger
 from ..utils import load_mechanisms, getNmodlDir
+from ..constants import *
 
 
 load_mechanisms(getNmodlDir())
@@ -61,10 +62,16 @@ class Matrix(hclass(h.Matrix)):
 
 
 class IClamp(hclass(h.IClamp)):
-    ''' IClamp object that allows setting parameters on creation. '''
+    ''' IClamp object that takes section with default relative position as input
+        and allows setting parameters on creation.
+    '''
 
-    def __init__(self, segment, amplitude):
-        super().__init__(segment)
+    def __new__(cls, section, amplitude, x=0.5):
+        ''' Instanciation. '''
+        return super(IClamp, cls).__new__(cls, section(x))
+
+    def __init__(self, section, amplitude, x=0.5):
+        super().__init__(section)
         self.delay = 0  # we want to exert control over amp starting at 0 ms
         self.dur = 1e9  # dur must be long enough to span all our changes
         self.amp = 0.  # initially, we set the amplitude to zero
@@ -478,6 +485,8 @@ class CustomConnectMechQSection(MechQSection):
     def connect(self, parent):
         ''' Connect to a parent section in series to enable trans-sectional axial current. '''
         for sec in [parent, self]:
+            if sec.has_ext_mech:
+                raise NotImplementedError
             if sec.iax is None:
                 sec.iax = sec.attachIax()
 
@@ -489,11 +498,12 @@ class CustomConnectMechQSection(MechQSection):
         parent.iax.set_Vother(1, self.getVrefValue(x=0.5))
         self.iax.set_Vother(0, parent.getVrefValue(x=0.5))
 
+    def insertPassiveMech(self, g, Erev):
+        raise NotImplementedError
+
 
 class Iax(hclass(h.Iax)):
     ''' Axial current point process object that allows setting parameters on creation. '''
-
-    MAX_CON = 2
 
     def __new__(cls, sec, _):
         ''' Instanciation. '''
@@ -517,6 +527,6 @@ class Iax(hclass(h.Iax)):
 
         # While section not connected: assign infinite resistance and local membrane potential
         # to (nonexistent) neighboring sectionss
-        for i in range(self.MAX_CON):
+        for i in range(MAX_CUSTOM_CON):
             self.Rother[i] = 1e10    # Ohm
             self.set_Vother(i, sec.getVrefValue(x=0.5))
