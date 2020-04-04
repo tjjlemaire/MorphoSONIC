@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-03-06 09:26:57
+# @Last Modified time: 2020-04-04 16:47:56
 # -*- coding: utf-8 -*-
 # @Author: Theo Lemaire
 # @Date:   2017-06-13 09:40:02
@@ -11,6 +11,7 @@
 # @Last Modified by:   Theo Lemaire
 # @Last Modified time: 2018-08-30 10:44:35
 
+import os
 from setuptools import setup
 
 readme_file = 'README.md'
@@ -37,6 +38,10 @@ def description():
     return ''.join(lines).strip('\n')
 
 
+def getFiles(path):
+    return [f'{path}/{x}' for x in os.listdir(path)]
+
+
 setup(
     name='ExSONIC',
     version='1.0',
@@ -56,7 +61,7 @@ setup(
     author_email='theo.lemaire@epfl.ch',
     license='MIT',
     packages=['ExSONIC'],
-    scripts=[],
+    scripts=getFiles('scripts') + getFiles('tests') + getFiles('examples'),
     install_requires=[
         'numpy>=1.10',
         'matplotlib>=2'
