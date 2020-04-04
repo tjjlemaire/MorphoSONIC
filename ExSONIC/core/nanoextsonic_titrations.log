@@ -1,1 +1,0 @@
-titrate(ExtendedSonicNode(32.0 nm, CorticalRS, fs=0.5, rs=1.10e+02 Ohm.cm, deff=100 nm), AcousticDrive(500.0kHz), PulsedProtocol(100.0ms, 50.0ms, 100.0Hz, 1.00))	37343.75

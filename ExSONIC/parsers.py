@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-18 21:14:43
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-03 20:26:21
+# @Last Modified time: 2020-04-04 15:08:07
 
 import matplotlib.pyplot as plt
 from PySONIC.parsers import *
@@ -16,9 +16,6 @@ class SpatiallyExtendedParser(Parser):
 
     def __init__(self):
         super().__init__()
-        # self.defaults.update({'rs': 110.0})
-        # self.factors.update({'rs': 1e0})
-        self.addResistivity()
         self.addSection()
 
     def addResistivity(self):
@@ -36,8 +33,6 @@ class SpatiallyExtendedParser(Parser):
     def parse(self, args=None):
         if args is None:
             args = super().parse()
-        # for key in ['rs']:
-        #     args[key] = self.parse2array(args, key, factor=self.factors[key])
         return args
 
     @staticmethod
@@ -185,28 +180,6 @@ class IintraFiberParser(EStimFiberParser):
         self.addSectionID()
 
 
-class SpatiallyExtendedAStimParser(SpatiallyExtendedParser, AStimParser):
-
-    def __init__(self):
-        AStimParser.__init__(self)
-        SpatiallyExtendedParser.__init__(self)
-        for x in [self.defaults, self.allowed, self.to_parse]:
-            x.pop('method')
-
-    def parse(self):
-        args = SpatiallyExtendedParser.parse(self, args=AStimParser.parse(self))
-        del args['method']
-        return args
-
-    @staticmethod
-    def parseSimInputs(args):
-        return [args['freq']] + PWSimParser.parseSimInputs(args) + SpatiallyExtendedParser.parseSimInputs(args)
-
-    @staticmethod
-    def parsePlot(*args):
-        return SpatiallyExtendedParser.parsePlot(*args)
-
-
 class AStimFiberParser(FiberParser, AStimParser):
 
     def __init__(self):
@@ -240,32 +213,6 @@ class SectionAStimFiberParser(AStimFiberParser):
         args = super().parse()
         args['secid'] = [args['secid']]
         return args
-
-
-class ExtSonicNodeAStimParser(SpatiallyExtendedAStimParser):
-
-    def __init__(self):
-        super().__init__()
-        self.defaults.update({'deff': 100., 'fs': 50., 'section': 'sonophore'})
-        self.factors.update({'deff': 1e-9})
-        self.addDeff()
-
-    def addDeff(self):
-        self.add_argument(
-            '--deff', nargs='+', type=float, help='Effective intracellular depth (nm)')
-
-    def parse(self):
-        args = super().parse()
-        args['deff'] = self.parse2array(args, 'deff', factor=self.factors['deff'])
-        return args
-
-    def parseSimInputs(self, args):
-        return super().parseSimInputs(args) + [args[k] for k in ['fs', 'deff']]
-
-    def parsePlot(self, args, output):
-        if args['section'] == ['all']:
-            args['section'] = ['sonophore', 'surroundings']
-        super().parsePlot(args, output)
 
 
 class SpatiallyExtendedTimeSeriesParser(TimeSeriesParser):

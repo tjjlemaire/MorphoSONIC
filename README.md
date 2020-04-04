@@ -14,7 +14,7 @@ The package contains a `Node` class that provides a NEURON wrapper around the mo
 
 The package also contains several classes defining multi-compartmental model expansions, at various spatial scales.
 
-At the nanometer scale, an `ExtendedSonicNode` class that simulate the behavior of a **nanoscale spatially-extended SONIC model** with two coupled compartments (i.e. nodes with geometrical extents): an "ultrasound-responsive" sonophore and an "ultrasound-resistant" surrounding membrane. As this model is radially symmetric, some adaptation was needed in order to represent it within the *NEURON* environment (check [this link](NEURON_radial_geometry.md) for more details).
+At the nanometer scale, a `RadialModel` class that simulate the behavior of a **nanoscale radially-symmetric model** with central and peripheral compartments. It can be used to model the coupling between an "ultrasound-responsive" sonophore and an "ultrasound-resistant" surrounding membrane (see `usrroundedSonophore` function. As this model is radially symmetric, some adaptation was needed in order to represent it within the *NEURON* environment (check [this link](NEURON_radial_geometry.md) for more details).
 
 At the morphological scale, several models of **unmyelinated and myelinated peripheral fibers** are implemented:
 - `SennFiber` implements a spatially-extended nonlinear node (SENN) myelinated fiber model, as defined in Reilly 1985.
@@ -255,10 +255,6 @@ You can easily run simulations of punctual and spatially-extended models using t
 - Use `run_node_astim.py` for simulations of **point-neuron models** upon **ultrasonic stimulation**. For instance, a 32 nm radius bilayer sonophore within a regular-spiking (RS) neuron membrane, sonicated at 500 kHz and 100 kPa for 150 ms:
 
 ```python run_node_astim.py -n RS -a 32 -f 500 -A 100 --tstim 150 --method sonic -p Qm```
-
-- Use `run_ext_sonic_node_astim.py` for simulations of the **nanometer-scale, spatially-extended SONIC model** of any neuron type upon **ultrasonic stimulation**. For instance, a 32 nm radius bilayer sonophore surrounded by a circular "US-insensitive" patch, within a regular-spiking (RS) neuron membrane with 30% sonophore coverage, sonicated at 500 kHz and 100 kPa for 150 ms:
-
-```python run_ext_sonic_node_astim.py -n RS -a 32 --fs 30 -f 500 -A 100 --tstim 150 --method sonic -p Qm --compare --section all```
 
 - Use `run_fiber_iextra.py` for simulations of a **peripheral fiber models** (myelinated or unmyelinated) of any diameter and with any number of nodes upon **extracellular electrical stimulation**. For instance, a 20 um diameter, 11 nodes SENN-type myelinated fiber, stimulated at 0.6 mA for 0.1 ms by a cathodal point-source electrode located one internodal distance above the central node:
 

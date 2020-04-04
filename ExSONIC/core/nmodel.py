@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-03 21:13:34
+# @Last Modified time: 2020-04-04 13:29:51
 
 import abc
 from neuron import h
@@ -430,6 +430,11 @@ class SpatiallyExtendedNeuronModel(NeuronModel):
             'nature': pp.nature,
             **pp.filecodes
         }
+
+    @property
+    def rmin(self):
+        ''' Lower bound for axial resistance * membrane area (Ohm/cm2). '''
+        return None
 
     @property
     def rs(self):

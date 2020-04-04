@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-17 12:19:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-03 19:46:35
+# @Last Modified time: 2020-04-04 14:34:37
 
 import numpy as np
 
@@ -248,3 +248,56 @@ class FiberConvergenceBatch(LogBatch):
         out = super().run()
         logger.info('parameter sweep successfully completed')
         return out
+
+
+class CoverageTitrationBatch(LogBatch):
+    ''' Interface to a coverage-titration batch '''
+
+    in_key = 'fs'
+    suffix = 'coverage'
+    unit = ''
+
+    def __init__(self, out_key, model_key, model_factory, source, pp, coverages,
+                 root='.', convert_func=None):
+        ''' Construtor.
+
+            :param out_key: string defining the unique batch output key
+            :param model_factory: function creating the model object for a given coverage
+            :param source: source object
+            :param pp: pulsing protocol object
+            :param coverages: array of sonophore coverage fractions
+            :param toffset: constant stimulus offset
+            :param root: root for IO operations
+            :return: array of threshold amplitudes for each coverage fraction
+        '''
+        self.out_keys = [out_key]
+        self.model_key = model_key
+        self.model_factory = model_factory
+        self.source = source
+        self.pp = pp
+        if convert_func is None:
+            self.convert_func = lambda x: x
+        else:
+            self.convert_func = convert_func
+        super().__init__(coverages, root=root)
+
+    @property
+    def out_keys(self):
+        return self._out_keys
+
+    @out_keys.setter
+    def out_keys(self, value):
+        self._out_keys = value
+
+    def corecode(self):
+        return f'{self.model_key}_{self.source}'
+
+    def run(self):
+        logger.info(f'Computing fs-dependent thresholds for {self.model_key} model with {self.source}')
+        return super().run()
+
+    def compute(self, fs):
+        model = self.model_factory(fs)
+        xthr = model.titrate(self.source, self.pp)
+        model.clear()
+        return [self.convert_func(xthr)]
