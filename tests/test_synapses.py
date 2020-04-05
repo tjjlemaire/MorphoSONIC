@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-01-17 11:59:50
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-02 16:36:32
+# @Last Modified time: 2020-04-05 17:36:33
 
 import logging
 import numpy as np
@@ -16,6 +16,7 @@ from PySONIC.core import PulsedProtocol
 
 from ExSONIC.core.synapses import *
 from ExSONIC.core.node import Node
+from ExSONIC.constants import *
 
 logger.setLevel(logging.INFO)
 
@@ -28,7 +29,7 @@ def getSynapseData(syn_model, sf, syn_delay=1., tstop=4.):
     stim = h.NetStim()
     stim.number = 1e3
     stim.start = 0.
-    stim.interval = 1e3 / sf
+    stim.interval = S_TO_MS / sf
 
     # Define output cell: RS node
     node = Node(getPointNeuron('RS'))
@@ -54,7 +55,7 @@ def getSynapseData(syn_model, sf, syn_delay=1., tstop=4.):
     tspikes = np.array(tspikes.to_python())
 
     # Retrieve time and conductance vectors
-    t = data['t'].values[1:] * 1e3
+    t = data['t'].values[1:] * S_TO_MS
     g = np.array(g.to_python())
 
     return tspikes, t, g

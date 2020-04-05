@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-04 13:22:43
+# @Last Modified time: 2020-04-05 16:56:23
 # @Author: Theo Lemaire
 # @Date:   2018-08-21 19:48:04
 # @Last Modified by:   Theo Lemaire
@@ -126,8 +126,8 @@ class Section(hclass(h.Section)):
             :param diam: section diameter (m)
             :param L: section length (m)
         '''
-        self.diam = diam * 1e6  # um
-        self.L = L * 1e6        # um
+        self.diam = diam * M_TO_UM  # um
+        self.L = L * M_TO_UM        # um
 
     def setResistivity(self, value):
         ''' Set section resistivity.
@@ -141,21 +141,21 @@ class Section(hclass(h.Section)):
 
             :return: membrane area (cm2)
          '''
-        return np.pi * (self.diam * 1e-4) * (self.L * 1e-4)
+        return np.pi * self.diam * self.L / CM_TO_UM**2
 
     def axialArea(self):
         ''' Compute section axial area.
 
             :return: axial area (cm2)
         '''
-        return np.pi * (self.diam * 1e-4)**2 / 4
+        return 1 / 4 * np.pi * self.diam**2 / CM_TO_UM**2
 
     def axialResistance(self):
         ''' Compute section axial resistance.
 
             :return: axial resistance (Ohm)
         '''
-        return self.Ra * (self.L * 1e-4) / self.axialArea()
+        return self.Ra * (self.L / CM_TO_UM) / self.axialArea()
 
     def target(self, x):
         ''' Return x-dependent resolved object (section's self of section's only segment).
@@ -199,7 +199,7 @@ class Section(hclass(h.Section)):
             :param xc: transverse capacitance of first extracellular layer (uF/cm2)
         '''
         self.insert('extracellular')
-        self.xraxial[0] = xr * 1e-6  # MOhm/cm
+        self.xraxial[0] = xr * OHM_TO_MOHM  # MOhm/cm
         self.xg[0] = xg              # S/cm2
         self.xc[0] = xc              # S/cm2
         self.has_ext_mech = True

@@ -3,13 +3,14 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-18 21:14:43
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-04 15:08:07
+# @Last Modified time: 2020-04-05 17:14:09
 
 import matplotlib.pyplot as plt
 from PySONIC.parsers import *
 
 from .plt import SectionGroupedTimeSeries, SectionCompTimeSeries
 from .core import models_dict
+from .constants import *
 
 
 class SpatiallyExtendedParser(Parser):
@@ -67,7 +68,7 @@ class FiberParser(SpatiallyExtendedParser):
     def __init__(self):
         super().__init__()
         self.defaults.update({'type': 'senn', 'fiberD': 20., 'nnodes': 21})
-        self.factors.update({'fiberD': 1e-6})
+        self.factors.update({'fiberD': 1 / M_TO_UM})
         self.addType()
         self.addFiberDiameter()
         self.addNnodes()
@@ -152,7 +153,7 @@ class IextraFiberParser(EStimFiberParser):
     def __init__(self):
         super().__init__()
         self.defaults.update({'xps': 0., 'zps': None, 'mode': 'cathode', 'amp': -0.7})
-        self.factors.update({'amp': 1e-3, 'xps': 1e-3, 'zps': 1e-3})
+        self.factors.update({'amp': MA_TO_A, 'xps': 1 / M_TO_MM, 'zps': 1 / M_TO_MM})
         self.addPointSourcePosition()
 
     def addPointSourcePosition(self):
@@ -176,7 +177,7 @@ class IintraFiberParser(EStimFiberParser):
     def __init__(self):
         super().__init__()
         self.defaults.update({'secid': None, 'mode': 'anode', 'amp': 2.0})
-        self.factors.update({'amp': 1e-9})
+        self.factors.update({'amp': 1 / A_TO_NA})
         self.addSectionID()
 
 

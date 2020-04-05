@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-03 12:24:20
+# @Last Modified time: 2020-04-05 17:21:09
 
 import numpy as np
 import matplotlib as mpl
@@ -15,6 +15,7 @@ from PySONIC.utils import logger, si_format, getPow10
 
 from .core import *
 from .utils import loadData, chronaxie, extractIndexesFromLabels
+from .constants import *
 
 
 class SectionGroupedTimeSeries(GroupedTimeSeries):
@@ -140,7 +141,7 @@ class SectionCompTimeSeries(CompTimeSeries):
 
 
 def thresholdCurve(fiber, x, thrs, thrs2=None,
-                   xname='duration', xfactor=1e6, xunit='s',
+                   xname='duration', xfactor=S_TO_US, xunit='s',
                    yname='current', yfactor=1, yunit='A',
                    y2name='charge', y2factor=1, y2unit='C',
                    scale='log', plot_chr=True, fs=12, colors=None, limits=None, xlimits=None):
@@ -208,12 +209,12 @@ def thresholdCurve(fiber, x, thrs, thrs2=None,
 
 def strengthDurationCurve(fiber, durations, thrs, **kwargs):
     return thresholdCurve(fiber, durations, thrs, xname='duration',
-                          xfactor=1e6, xunit='s', **kwargs)
+                          xfactor=S_TO_US, xunit='s', **kwargs)
 
 
 def strengthDistanceCurve(fiber, distances, thrs, **kwargs):
     return thresholdCurve(fiber, distances, thrs, xname='distance',
-                          xfactor=1e3, xunit='m', plot_chr=False, **kwargs)
+                          xfactor=M_TO_MM, xunit='m', plot_chr=False, **kwargs)
 
 
 def plotConvergenceResults(df, inkey, outkeys, rel_eps_thr_Ithr=0.05, rel_eps_thr=0.01,
@@ -287,7 +288,7 @@ def plotConvergenceResults(df, inkey, outkeys, rel_eps_thr_Ithr=0.05, rel_eps_th
         logger.info(f'max {inkey} = {min(xin_thr.values()):.2e}')
     else:
         logger.info(f'To reach convergence {inkey} = {max(xin_thr.values()):.2e}')
-    logger.info(f'Convergence excitation current threshold = {(df.values[-1,2]*1e9):.2f} nA')
+    logger.info(f'Convergence excitation current threshold = {(df.values[-1,2] * A_TO_NA):.2f} nA')
     logger.info(f'Convergence conduction velocity = {df.values[-1,3]:.2f} m/s')
     logger.info(f'Convergence spike amplitude = {df.values[-1,4]:.2f} mV')
 
@@ -312,7 +313,7 @@ def plotFiberXCoords(fiber, fs=12):
     ax.set_yticks(range(len(fiber.sectypes)))
     ax.set_yticklabels(fiber.sectypes)
     for i, (k, xcoords) in enumerate(fiber.getXCoords().items()):
-        ax.plot(xcoords * 1e3, np.ones(xcoords.size) * i, '|', markersize=15, label=k)
+        ax.plot(xcoords * M_TO_MM, np.ones(xcoords.size) * i, '|', markersize=15, label=k)
     for item in ax.get_xticklabels() + ax.get_yticklabels():
         item.set_fontsize(fs)
     fig.tight_layout()
@@ -327,7 +328,7 @@ def plotFieldDistribution(fiber, source, fs=12):
     ax.set_ylabel('Extracellular voltage (mV)', fontsize=fs)
     field_dict = source.computeDistributedAmps(fiber)
     for k, xcoords in fiber.getXCoords().items():
-        ax.plot(xcoords * 1e3, field_dict[k], '.', label=k)
+        ax.plot(xcoords * M_TO_MM, field_dict[k], '.', label=k)
     ylims = ax.get_ylim()
     if source.I < 0.:
         ax.set_ylim(ylims[0], -0.05 * ylims[0])
@@ -354,7 +355,7 @@ def plotMRGLookups(fiberD_range=None, interp_methods=None, fs=12):
         interp_methods = mrg_lkp.interp_choices
 
     # Define factor function
-    factor = lambda k: 1e0 if k == 'nlayers' else 1e6
+    factor = lambda k: 1 if k == 'nlayers' else M_TO_UM
 
     # Create figure backbone
     nouts = len(mrg_lkp.outputs)
@@ -363,7 +364,7 @@ def plotMRGLookups(fiberD_range=None, interp_methods=None, fs=12):
         yunit = '' if k == 'nlayers' else '(um)'
         ax.set_xlabel('fiber diameter (um)', fontsize=fs)
         ax.set_ylabel(f'{k} {yunit}', fontsize=fs)
-        ax.plot(ref_diams * 1e6, mrg_lkp[k] * factor(k), '.', c='k')
+        ax.plot(ref_diams * M_TO_UM, mrg_lkp[k] * factor(k), '.', c='k')
         for item in ax.get_xticklabels() + ax.get_yticklabels():
             item.set_fontsize(fs)
 
@@ -374,7 +375,7 @@ def plotMRGLookups(fiberD_range=None, interp_methods=None, fs=12):
         interp_mrg_lkp = mrg_lkp.project('fiberD', diams)
         label = f'{interp_method} method'
         for ax, (k, v) in zip(axes, interp_mrg_lkp.items()):
-            ax.plot(diams * 1e6, v * factor(k), label=label)
+            ax.plot(diams * M_TO_UM, v * factor(k), label=label)
 
     # Set lookup interpolation method back to default
     mrg_lkp.interp_method = default_method

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-04 13:29:51
+# @Last Modified time: 2020-04-05 17:57:28
 
 import abc
 from neuron import h
@@ -27,7 +27,6 @@ class NeuronModel(metaclass=abc.ABCMeta):
     ''' Generic interface for NEURON models. '''
 
     tscale = 'ms'                 # relevant temporal scale of the model
-    mA_to_nA = 1e6                # conversion factor
     section_class = MechQSection  # default type of NEURON section
     is_constructed = False
 
@@ -107,7 +106,7 @@ class NeuronModel(metaclass=abc.ABCMeta):
             :param rho: axial resistivity (Ohm.cm)
             :return: resistance per unit length (Ohm/cm)
         '''
-        return rho / cls.axialSectionArea(*args, **kwargs) * 1e-4  # Ohm/cm
+        return rho / cls.axialSectionArea(*args, **kwargs) / M_TO_CM**2  # Ohm/cm
 
     @classmethod
     def axialResistance(cls, rho, L, *args, **kwargs):
@@ -117,7 +116,7 @@ class NeuronModel(metaclass=abc.ABCMeta):
             :param L: cylinder length (m)
             :return: resistance (Ohm)
         '''
-        return cls.axialResistancePerUnitLength(rho, *args, **kwargs) * L * 1e2  # Ohm
+        return cls.axialResistancePerUnitLength(rho, *args, **kwargs) * L * M_TO_CM  # Ohm
 
     def setCelsius(self, celsius=None):
         if celsius is None:
@@ -154,51 +153,9 @@ class NeuronModel(metaclass=abc.ABCMeta):
     def createSection(self, id, *args, mech=None, states=None, Cm0=None):
         ''' Create a model section with a given id. '''
         if Cm0 is None:
-            Cm0 = self.pneuron.Cm0 * 1e2  # uF/cm2
+            Cm0 = self.pneuron.Cm0 * F_M2_TO_UF_CM2  # uF/cm2
         args = [x for x in args if x is not None]
         return self.section_class(*args, mechname=mech, states=states, name=id, cell=self, Cm0=Cm0)
-
-    def initToSteadyState(self):
-        ''' Initialize model variables to pre-stimulus resting state values. '''
-        if issubclass(self.section_class, QSection):
-            x0 = self.pneuron.Qm0 * 1e5  # nC/cm2
-        else:
-            x0 = self.pneuron.Vm0  # mV
-        h.finitialize(x0)
-
-    def setTimeProbe(self):
-        ''' Set time probe. '''
-        return Probe(h._ref_t)
-
-    def setStimON(self, value):
-        ''' Set stimulation ON or OFF.
-
-            :param value: new stimulation state (0 = OFF, 1 = ON)
-            :return: new stimulation state
-        '''
-        for sec in self.seclist:
-            sec.setStimON(value)
-        for drive in self.drives:
-            drive.toggle(value)
-        return value
-
-    def toggleStim(self):
-        ''' Toggle stim state (ON -> OFF or OFF -> ON) and set appropriate next toggle event. '''
-        # OFF -> ON at pulse onset
-        if self.stimon == 0:
-            self.stimon = self.setStimON(1)
-            self.cvode.event(min(self.tstim, h.t + self.Ton), self.toggleStim)
-        # ON -> OFF at pulse offset
-        else:
-            self.stimon = self.setStimON(0)
-            if (h.t + self.Toff) < self.tstim - h.dt:
-                self.cvode.event(h.t + self.Toff, self.toggleStim)
-
-        # Re-initialize cvode if active
-        if self.cvode.active():
-            self.cvode.re_init()
-        else:
-            h.fcurrent()
 
     def getIntegrationMethod(self):
         ''' Get the method used by NEURON for the numerical integration of the system. '''
@@ -209,6 +166,44 @@ class NeuronModel(metaclass=abc.ABCMeta):
         else:
             return f'{method_type_str} (fixed dt = {h.dt} ms)'
 
+    def initToSteadyState(self):
+        ''' Initialize model variables to pre-stimulus resting state values. '''
+        self.setStimValue(0)
+        if issubclass(self.section_class, QSection):
+            x0 = self.pneuron.Qm0 * C_M2_TO_NC_CM2  # nC/cm2
+        else:
+            x0 = self.pneuron.Vm0  # mV
+        h.finitialize(x0)
+
+    def setTimeProbe(self):
+        ''' Set time probe. '''
+        return Probe(h._ref_t)
+
+    def setStimValue(self, value):
+        ''' Set stimulation ON or OFF.
+
+            :param value: new stimulation state (0 = OFF, 1 = ON)
+            :return: new stimulation state
+        '''
+        # Set "stimon" attribute in all model sections
+        for sec in self.seclist:
+            sec.setStimON(value)
+        # Set multiplying factor of all model drives
+        for drive in self.drives:
+            drive.toggle(value)
+
+        # For all transitions except the one at time zero
+        if h.t > 0:
+            # If adaptive solver: re-initialize the integrator
+            if self.cvode.active():
+                self.cvode.re_init()
+            # Otherwise, re-compute currents
+            else:
+                h.fcurrent()
+
+    def createStimSetter(self, value):
+        return lambda: self.setStimValue(value)
+
     def integrate(self, pp, dt, atol):
         ''' Integrate a model differential variables for a given duration, while updating the
             value of the boolean parameter stimon during ON and OFF periods throughout the numerical
@@ -218,33 +213,14 @@ class NeuronModel(metaclass=abc.ABCMeta):
 
             :param pp: pulsed protocol object
             :param dt: integration time step (s). If provided, the fixed time step method is used.
-            :param atol: absolute error tolerance (default = 1e-3). If provided, the adaptive
+            :param atol: absolute error tolerance. If provided, the adaptive
                 time step method is used.
         '''
-        tstim, toffset, PRF, DC = pp.tstim, pp.toffset, pp.PRF, pp.DC
-        tstop = tstim + toffset
-
-        # Convert input parameters to NEURON units
-        tstim *= 1e3
-        tstop *= 1e3
-        PRF /= 1e3
-        if dt is not None:
-            dt *= 1e3
-
-        # Update PRF for CW stimuli to optimize integration
-        if DC == 1.0:
-            PRF = 1 / tstim
-
-        # Set pulsing parameters used in CVODE events
-        self.Ton = DC / PRF
-        self.Toff = (1 - DC) / PRF
-        self.tstim = tstim
-
         # Set integration parameters
         self.cvode = h.CVode()
         if dt is not None:
             h.secondorder = 0  # using backward Euler method if fixed time step
-            h.dt = dt
+            h.dt = dt * S_TO_MS
             self.cvode.active(0)
         else:
             self.cvode.active(1)
@@ -253,13 +229,16 @@ class NeuronModel(metaclass=abc.ABCMeta):
                 self.cvode.atol(atol)
 
         # Initialize
-        self.stimon = self.setStimON(0)
         self.initToSteadyState()
-        self.stimon = self.setStimON(1)
-        self.cvode.event(self.Ton, self.toggleStim)
+
+        # Set events
+        for tevent, new_stim_value in pp.stimEvents():
+            self.cvode.event((tevent - TRANSITION_DT) * S_TO_MS)
+            self.cvode.event(tevent * S_TO_MS, self.createStimSetter(new_stim_value))
 
         # Integrate
         logger.debug(f'integrating system using {self.getIntegrationMethod()}')
+        tstop = pp.ttotal * S_TO_MS
         while h.t < tstop:
             h.fadvance()
 
@@ -283,19 +262,19 @@ class NeuronModel(metaclass=abc.ABCMeta):
         self.setPyLookup(*args, **kwargs)
 
         # Convert lookups independent variables to hoc vectors
-        self.Aref = h.Vector(self.pylkp.refs['A'] * 1e-3)  # kPa
-        self.Qref = h.Vector(self.pylkp.refs['Q'] * 1e5)   # nC/cm2
+        self.Aref = h.Vector(self.pylkp.refs['A'] * PA_TO_KPA)
+        self.Qref = h.Vector(self.pylkp.refs['Q'] * C_M2_TO_NC_CM2)
 
         # Convert lookup tables to hoc matrices
         # !!! hoc lookup dictionary must be a member of the class,
         # otherwise the assignment below does not work properly !!!
         self.lkp = {'V': Matrix(self.pylkp['V'])}  # mV
         for ratex in self.pneuron.alphax_list.union(self.pneuron.betax_list):
-            self.lkp[ratex] = Matrix(self.pylkp[ratex] * 1e-3)  # ms-1
+            self.lkp[ratex] = Matrix(self.pylkp[ratex] / S_TO_MS)
         for taux in self.pneuron.taux_list:
-            self.lkp[taux] = Matrix(self.pylkp[taux] * 1e3)  # ms
+            self.lkp[taux] = Matrix(self.pylkp[taux] * S_TO_MS)
         for xinf in self.pneuron.xinf_list:
-            self.lkp[xinf] = Matrix(self.pylkp[xinf])  # (-)
+            self.lkp[xinf] = Matrix(self.pylkp[xinf])
 
     @staticmethod
     def setFuncTable(mechname, fname, matrix, xref, yref):
@@ -344,7 +323,7 @@ class NeuronModel(metaclass=abc.ABCMeta):
             :param drive: drive object
             :param pp: pulse protocol object
             :param dt: integration time step for fixed time step method (s)
-            :param atol: absolute error tolerance for adaptive time step method (default = 1e-3)
+            :param atol: absolute error tolerance for adaptive time step method.
             :return: output dataframe
         '''
         # Set recording vectors
@@ -358,12 +337,12 @@ class NeuronModel(metaclass=abc.ABCMeta):
 
         # Store output in dataframe
         data = pd.DataFrame({
-            't': t.to_array() * 1e-3,  # s
+            't': t.to_array() / S_TO_MS,  # s
             'stimstate': stim.to_array()
         })
         for k, v in probes.items():
             data[k] = v.to_array()
-        data.loc[:, 'Qm'] *= 1e-5  # C/m2
+        data.loc[:, 'Qm'] /= C_M2_TO_NC_CM2  # C/m2
 
         # Prepend initial conditions (prior to stimulation)
         data = prependDataFrame(data)
@@ -417,9 +396,7 @@ class SpatiallyExtendedNeuronModel(NeuronModel):
             'section': {
                 'desc': 'section',
                 'label': 'section',
-                'unit': '',
-                'factor': 1e0,
-                'precision': 0
+                'unit': ''
             }
         }
 
@@ -610,7 +587,7 @@ class SpatiallyExtendedNeuronModel(NeuronModel):
             :param source: source object
             :param pp: pulsed protocol object
             :param dt: integration time step for fixed time step method (s)
-            :param atol: absolute error tolerance for adaptive time step method (default = 1e-3)
+            :param atol: absolute error tolerance for adaptive time step method.
             :return: output dataframe
         '''
         # Set recording vectors
@@ -626,7 +603,7 @@ class SpatiallyExtendedNeuronModel(NeuronModel):
         self.integrate(pp, dt, atol)
 
         # Store output in dataframes
-        t = t.to_array() * 1e-3  # s
+        t = t.to_array() / S_TO_MS  # s
         stim = stim.to_array()
         data = {}
 
@@ -637,7 +614,7 @@ class SpatiallyExtendedNeuronModel(NeuronModel):
                 'stimstate': stim,
                 **{k: v.to_array() for k, v in probes.items()}
             })
-            data[id].loc[:, 'Qm'] *= 1e-5  # C/m2
+            data[id].loc[:, 'Qm'] /= C_M2_TO_NC_CM2  # C/m2
 
         # Voltage data only for other sections
         for sectype, probes_dict in other_probes.items():
@@ -687,7 +664,8 @@ class SpatiallyExtendedNeuronModel(NeuronModel):
                     # Interpolate times of zero crossings
                     tzcross = t[i_zcross] - (Vm[i_zcross] / slopes)
                     for ispike, (tzc, tpeak) in enumerate(zip(tzcross, t[ispikes])):
-                        assert tzc < tpeak, errmsg.format(ispike, tzc * 1e3, ispike, tpeak * 1e3)
+                        assert tzc < tpeak, errmsg.format(
+                            ispike, tzc * S_TO_MS, ispike, tpeak * S_TO_MS)
                     tspikes[id] = tzcross
                 else:
                     tspikes[id] = t[ispikes]
@@ -724,7 +702,7 @@ class SpatiallyExtendedNeuronModel(NeuronModel):
 
     def getStartPoint(self, Arange):
         scale = 'lin' if Arange[0] == 0 else 'log'
-        return getStartPoint(Arange, x=0.2, scale=scale)
+        return getStartPoint(Arange, x=REL_START_POINT, scale=scale)
 
     def getAbsConvThr(self, Arange):
         return np.abs(Arange[1] - Arange[0]) / 1e4
@@ -744,7 +722,7 @@ class SpatiallyExtendedNeuronModel(NeuronModel):
             Arange,
             x0=self.getStartPoint(Arange),
             eps_thr=self.getAbsConvThr(Arange),
-            rel_eps_thr=1e-2,
+            rel_eps_thr=REL_EPS_THR,
             precheck=source.xvar_precheck)
         if source.is_cathodal:
             xthr = -xthr
@@ -895,7 +873,7 @@ class FiberNeuronModel(SpatiallyExtendedNeuronModel):
     def modelcodes(self):
         return {
             'simkey': self.simkey,
-            'fiberD': f'fiberD{(self.fiberD * 1e6):.1f}um',
+            'fiberD': f'fiberD{(self.fiberD * M_TO_UM):.1f}um',
             'nnodes': f'{self.nnodes}node{plural(self.nnodes)}',
         }
 
@@ -987,7 +965,7 @@ class FiberNeuronModel(SpatiallyExtendedNeuronModel):
             Arange,
             x0=self.getStartPoint(Arange),
             eps_thr=self.getAbsConvThr(Arange),
-            rel_eps_thr=1e-2,
+            rel_eps_thr=REL_EPS_THR,
             precheck=source.xvar_precheck)
         if source.is_cathodal:
             xthr = -xthr

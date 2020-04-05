@@ -3,13 +3,15 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-17 12:19:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-04 14:34:37
+# @Last Modified time: 2020-04-05 15:40:00
 
 import numpy as np
 
 from PySONIC.core import LogBatch, PulsedProtocol
 from PySONIC.utils import logger, si_format, isPickable
 from PySONIC.postpro import boundDataFrame
+
+from .constants import *
 
 
 class MPIBatch:
@@ -139,7 +141,7 @@ class StrengthDistanceBatch(LogBatch):
         self._out_keys = value
 
     def sourcecode(self):
-        return f'{self.source.key}_x{self.source.x[0] * 1e3:.1f}mm'
+        return f'{self.source.key}_x{self.source.x[0] * M_TO_MM:.1f}mm'
 
     def corecode(self):
         return f'{self.fiber.modelcode}_{self.sourcecode()}'

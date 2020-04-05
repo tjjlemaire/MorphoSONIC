@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-11-27 18:03:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-03 19:46:14
+# @Last Modified time: 2020-04-05 17:22:27
 
 ''' Constructor functions for different types of fibers. '''
 
@@ -59,7 +59,7 @@ def strengthDuration(fiber_type, stim_type, fiberD, tstim_range, toffset=20e-3, 
     convert_func = lambda x: x
 
     # Instanciate fiber model
-    logger.info(f'creating model with fiberD = {fiberD * 1e6:.2f} um ...')
+    logger.info(f'creating model with fiberD = {fiberD * M_TO_UM:.2f} um ...')
     fiber = getFiberClass(fiber_type)(fiberD, 21)
 
     # Adapt out key and fiber model depending on stimulus modality
@@ -115,9 +115,9 @@ def currentDistance(fiber_type, fiberD, tstim, n_cur, cur_min, cur_max, n_z, z_m
               'nature', 'toffset', 'PRF', 'DC']:
         if k in filecodes:
             del filecodes[k]
-    filecodes['fiberD'] = f'fiberD{(fiberD * 1e6):.2f}um'
-    filecodes['cur'] = f'cur{(n_cur):.0f}_{(cur_min*1e3):.2f}mA-{(cur_max*1e3):.2f}mA'
-    filecodes['z'] = f'z{(n_z):.0f}_{(z_min*1e3):.2f}mm-{(z_max*1e3):.2f}mm'
+    filecodes['fiberD'] = f'fiberD{(fiberD * M_TO_UM):.2f}um'
+    filecodes['cur'] = f'cur{(n_cur):.0f}_{(cur_min / MA_TO_A):.2f}mA-{(cur_max / MA_TO_A):.2f}mA'
+    filecodes['z'] = f'z{(n_z):.0f}_{(z_min * M_TO_MM):.2f}mm-{(z_max * M_TO_MM):.2f}mm'
     fcode = '_'.join(filecodes.values())
 
     # Output file

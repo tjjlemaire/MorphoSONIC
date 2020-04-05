@@ -3,13 +3,14 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-30 21:40:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-04 13:29:57
+# @Last Modified time: 2020-04-05 17:00:05
 
 import numpy as np
 
 from PySONIC.core import PointNeuron, NeuronalBilayerSonophore, AcousticDrive
 from PySONIC.utils import logger, isWithin
 
+from ..constants import *
 from ..utils import array_print_options
 from .sources import AcousticSource
 from .connectors import SerialConnectionScheme
@@ -156,7 +157,7 @@ def addSonicFeatures(Base):
             d = super().modelcodes
             if self.nbls is not None:
                 d.update({
-                    'a': f'{self.a * 1e9:.0f}nm',
+                    'a': f'{self.a * M_TO_NM:.0f}nm',
                     'fs': f'fs{self.fs_str}' if self.fs <= 1 else None
                 })
             return d
@@ -186,7 +187,7 @@ def addSonicFeatures(Base):
             ''' Set US drive. '''
             self.checkForSonophoreRadius()
             self.setFuncTables(drive.f)
-            self.section.setMechValue('Adrive', drive.A * 1e-3)
+            self.section.setMechValue('Adrive', drive.A * PA_TO_KPA)
             return None
 
         @property
@@ -252,10 +253,10 @@ def addSonicFeatures(Base):
             logger.debug(f'Acoustic pressures:')
             with np.printoptions(**array_print_options):
                 for k, amps in A_dict.items():
-                    logger.debug(f'{k}: A = {amps * 1e-3} kPa')
+                    logger.debug(f'{k}: A = {amps * PA_TO_KPA} kPa')
             for k, amps in A_dict.items():
                 for A, sec in zip(amps, self.sections[k].values()):
-                    sec.setMechValue('Adrive', A * 1e-3)
+                    sec.setMechValue('Adrive', A * PA_TO_KPA)
             return []
 
         @property

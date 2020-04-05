@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-03-18 21:17:03
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-03-06 09:08:01
+# @Last Modified time: 2020-04-05 17:24:58
 
 import logging
 import pprint
@@ -13,6 +13,8 @@ from time import gmtime, strftime
 from PySONIC.constants import getConstantsDict
 from PySONIC.core import PointNeuronTranslator
 from PySONIC.utils import logger
+
+from ..constants import *
 
 
 class NmodlTranslator(PointNeuronTranslator):
@@ -214,9 +216,9 @@ class NmodlTranslator(PointNeuronTranslator):
                 elif self.reversal_potential_pattern.match(attr_name):
                     self.params[attr_name] = {'val': attr_val, 'unit': 'mV'}
                 elif self.time_constant_pattern.match(attr_name):
-                    self.params[attr_name] = {'val': attr_val * 1e3, 'unit': 'ms'}
+                    self.params[attr_name] = {'val': attr_val * S_TO_MS, 'unit': 'ms'}
                 elif self.rate_constant_pattern.match(attr_name):
-                    self.params[attr_name] = {'val': attr_val * 1e-3, 'unit': '/ms'}
+                    self.params[attr_name] = {'val': attr_val / S_TO_MS, 'unit': '/ms'}
                 elif self.ion_concentration_pattern.match(attr_name):
                     self.params[attr_name] = {'val': attr_val, 'unit': 'M'}
                 elif self.current_to_molar_rate_pattern.match(attr_name):

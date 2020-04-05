@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-03 20:18:50
+# @Last Modified time: 2020-04-05 17:32:27
 
 import numpy as np
 
@@ -59,7 +59,7 @@ class TestFiberAstim(TestFiber):
         # Plot strength-duration curve
         strengthDurationCurve(
             fiber, durations, {'myelinated': Athrs}, scale='log',
-            yname='amplitude', yfactor=1e-3, yunit='Pa', plot_chr=False)
+            yname='amplitude', yfactor=PA_TO_KPA, yunit='Pa', plot_chr=False)
 
         # Log output metrics
         self.logOutputMetrics(sim_metrics)
@@ -93,7 +93,7 @@ class TestFiberAstim(TestFiber):
         # # Plot strength-duration curve
         # fig2 = strengthDurationCurve(
         #     fiber, durations, {'myelinated': Athrs}, scale='log',
-        #     yname='amplitude', yfactor=1e-3, yunit='Pa', plot_chr=False)
+        #     yname='amplitude', yfactor=PA_TO_KPA, yunit='Pa', plot_chr=False)
 
         # Log output metrics
         self.logOutputMetrics(sim_metrics)

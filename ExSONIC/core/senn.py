@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-03 17:55:28
+# @Last Modified time: 2020-04-05 16:58:22
 
 import numpy as np
 
@@ -11,7 +11,7 @@ from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import logger, isWithin
 
 from ..utils import getNmodlDir, load_mechanisms
-from ..constants import FIXED_DT
+from ..constants import *
 from .nmodel import FiberNeuronModel
 from .sources import ExtracellularCurrent
 from .sonic import addSonicFeatures
@@ -140,7 +140,7 @@ class SingleCableFiber(FiberNeuronModel):
             self.connect('node', i, 'node', i + 1)
 
     def toInjectedCurrents(self, Ve):
-        Iinj = np.diff(Ve['node'], 2) / (self.R_node + self.R_inter) * self.mA_to_nA  # nA
+        Iinj = np.diff(Ve['node'], 2) / (self.R_node + self.R_inter) * MA_TO_NA  # nA
         return {'node': np.pad(Iinj, (1, 1), 'constant')}  # zero-padding on both extremities
 
     def simulate(self, source, pp):
@@ -220,7 +220,7 @@ class UnmyelinatedFiber(SingleCableFiber):
         if fiberL is None:
             fiberL = nnodes * maxNodeL
         if fiberL <= self.fiberL_thr:
-            logger.warning(f'fiber length must be at least {self.fiberL_thr * 1e3:.1f} mm')
+            logger.warning(f'fiber length must be at least {self.fiberL_thr * M_TO_MM:.1f} mm')
         maxNodeL = isWithin('maximum node length', maxNodeL, (0., fiberL))
 
         # Compute number of nodes (ensuring odd number) and node length from fiber length

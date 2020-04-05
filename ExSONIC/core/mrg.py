@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-27 23:08:23
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-03 17:55:58
+# @Last Modified time: 2020-04-05 16:48:48
 
 import numpy as np
 
@@ -12,7 +12,7 @@ from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import logger
 
 from ..utils import getNmodlDir, load_mechanisms
-from ..constants import FIXED_DT
+from ..constants import *
 from .nmodel import FiberNeuronModel
 from .pyhoc import MechVSection
 
@@ -20,12 +20,12 @@ from .pyhoc import MechVSection
 # MRG lookup table from McIntyre 2002
 mrg_lkp = Lookup(
     refs={
-        'fiberD': np.array([5.7, 7.3, 8.7, 10.0, 11.5, 12.8, 14.0, 15.0, 16.0]) * 1e-6},
+        'fiberD': np.array([5.7, 7.3, 8.7, 10.0, 11.5, 12.8, 14.0, 15.0, 16.0]) / M_TO_UM},
     tables={
-        'nodeD': np.array([1.9, 2.4, 2.8, 3.3, 3.7, 4.2, 4.7, 5.0, 5.5]) * 1e-6,
-        'interD': np.array([3.4, 4.6, 5.8, 6.9, 8.1, 9.2, 10.4, 11.5, 12.7]) * 1e-6,
-        'interL': np.array([500., 750., 1000., 1150., 1250., 1350., 1400., 1450., 1500.]) * 1e-6,
-        'flutL': np.array([35., 38., 40., 46., 50., 54., 56., 58., 60.]) * 1e-6,
+        'nodeD': np.array([1.9, 2.4, 2.8, 3.3, 3.7, 4.2, 4.7, 5.0, 5.5]) / M_TO_UM,
+        'interD': np.array([3.4, 4.6, 5.8, 6.9, 8.1, 9.2, 10.4, 11.5, 12.7]) / M_TO_UM,
+        'interL': np.array([500., 750., 1000., 1150., 1250., 1350., 1400., 1450., 1500.]) / M_TO_UM,
+        'flutL': np.array([35., 38., 40., 46., 50., 54., 56., 58., 60.]) / M_TO_UM,
         'nlayers': np.array([80, 100, 110, 120, 130, 135, 140, 145, 150])},
     interp_method='linear', extrapolate=True)
 
@@ -320,7 +320,7 @@ class MRGFiber(FiberNeuronModel):
         ''' Create morphological sections with specific membrane mechanisms. '''
         self.nodes = {k: self.createSection(
             k, mech=self.mechname, states=self.pneuron.statesNames(),
-            Cm0=self.pneuron.Cm0 * 1e2) for k in self.nodeIDs}
+            Cm0=self.pneuron.Cm0 * F_M2_TO_UF_CM2) for k in self.nodeIDs}
         self.mysas = {k: self.createSection(k, Cm0=self._C_inter) for k in self.mysaIDs}
         self.fluts = {k: self.createSection(k, Cm0=self._C_inter) for k in self.flutIDs}
         self.stins = {k: self.createSection(k, Cm0=self._C_inter) for k in self.stinIDs}
@@ -443,16 +443,16 @@ class MRGFiber(FiberNeuronModel):
         I_node_mysa = np.vstack((  # currents flowing from nodes to MYSA compartments
             Ve['node'][:-1] - Ve['MYSA'][::2],  # node -> right-side MYSA
             Ve['node'][1:] - Ve['MYSA'][1::2]   # left-side MYSA <- node
-        )) * 2 / (self.R_node + self.R_mysa) * self.mA_to_nA
+        )) * 2 / (self.R_node + self.R_mysa) * MA_TO_NA
         I_mysa_flut = np.vstack((  # currents flowing from MYSA to FLUT compartments
             Ve['MYSA'][::2] - Ve['FLUT'][::2],    # right-side MYSA -> right-side FLUT
             Ve['MYSA'][1::2] - Ve['FLUT'][1::2],  # left-side FLUT <- left-side MYSA
-        )) * 2 / (self.R_mysa + self.R_flut) * self.mA_to_nA
+        )) * 2 / (self.R_mysa + self.R_flut) * MA_TO_NA
         I_flut_stin = np.vstack((  # currents flowing from FLUT to boundary STIN compartments
             Ve['FLUT'][::2] - Ve_stin[0],   # right-side FLUT -> right-side boundary STIN
             Ve['FLUT'][1::2] - Ve_stin[-1]  # left-side boundary STIN <- left-side FLUT
-        )) * 2 / (self.R_flut + self.R_stin) * self.mA_to_nA
-        I_stin_stin = np.diff(Ve_stin, axis=0) / self.R_stin * self.mA_to_nA  # STIN -> STIN
+        )) * 2 / (self.R_flut + self.R_stin) * MA_TO_NA
+        I_stin_stin = np.diff(Ve_stin, axis=0) / self.R_stin * MA_TO_NA  # STIN -> STIN
 
         # Create an array to currents flowing to nodes with appropriate zero-padding at extremities
         I_mysa_node = np.vstack((
@@ -480,13 +480,3 @@ class MRGFiber(FiberNeuronModel):
     @property
     def mechname(self):
         return self.pneuron.name
-
-    # def initToSteadyState(self):
-    #     ''' Initialize model variables to pre-stimulus resting state values. '''
-    #     h.finitialize(self.pneuron.Vm0)  # nC/cm2
-
-    # def createSection(self, id, mech=None, states=None, Cm0=None):
-    #     ''' Create a model section with a given id. '''
-    #     if Cm0 is None:
-    #         Cm0 = self.pneuron.Cm0 * 1e2  # uF/cm2
-    #     return MechVSection(mechname=mech, states=states, name=id, cell=self, Cm0=Cm0)

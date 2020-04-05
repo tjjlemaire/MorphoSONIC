@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-04 13:27:09
+# @Last Modified time: 2020-04-05 17:23:12
 
 import numpy as np
 
@@ -12,6 +12,7 @@ from PySONIC.utils import si_format, logger
 from PySONIC.postpro import detectSpikes
 
 from ..utils import getNmodlDir, load_mechanisms
+from ..constants import *
 from .nmodel import SpatiallyExtendedNeuronModel
 from .sonic import addSonicFeatures
 
@@ -87,9 +88,9 @@ class RadialModel(SpatiallyExtendedNeuronModel):
     @property
     def morpho_attrs(self):
         return {
-            'innerR': f'{self.innerR * 1e9:.1f}nm',
-            'outerR': f'{self.outerR * 1e9:.1f}nm',
-            'depth': f'{self.depth * 1e9:.0f}nm',
+            'innerR': f'{self.innerR * M_TO_NM:.1f}nm',
+            'outerR': f'{self.outerR * M_TO_NM:.1f}nm',
+            'depth': f'{self.depth * M_TO_NM:.0f}nm',
             'rs': f'{self.rs:.1e}Ohm.cm'
         }
 

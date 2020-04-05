@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-01-13 20:15:35
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-02 16:12:14
+# @Last Modified time: 2020-04-05 16:50:47
 
 import pandas as pd
 from neuron import h
@@ -112,7 +112,7 @@ class NodeCollection:
     def initToSteadyState(self):
         ''' Initialize model variables to pre-stimulus resting state values. '''
         for id, node in self.nodes.items():
-            node.section.v = node.pneuron.Qm0 * 1e5
+            node.section.v = node.pneuron.Qm0 * C_M2_TO_NC_CM2
         h.finitialize()
         if self.cvode.active():
             self.cvode.re_init()
@@ -130,7 +130,7 @@ class NodeCollection:
             :param amps: amplitude dictionary with node ids (in modality units)
             :param pp: pulse protocol object
             :param dt: integration time step for fixed time step method (s)
-            :param atol: absolute error tolerance for adaptive time step method (default = 1e-3)
+            :param atol: absolute error tolerance for adaptive time step method.
             :return: output dataframe
         '''
 
@@ -151,12 +151,12 @@ class NodeCollection:
         data = {}
         for id in self.nodes.keys():
             data[id] = pd.DataFrame({
-                't': t.to_array() * 1e-3,  # s
+                't': t.to_array() / S_TO_MS,  # s
                 'stimstate': stim.to_array()
             })
             for k, v in probes[id].items():
                 data[id][k] = v.to_array()
-            data[id].loc[:,'Qm'] *= 1e-5  # C/m2
+            data[id].loc[:, 'Qm'] /= C_M2_TO_NC_CM2  # C/m2
 
         # Prepend initial conditions (prior to stimulation)
         data = {id: prependDataFrame(df) for id, df in data.items()}
@@ -170,11 +170,11 @@ class NodeCollection:
 
     def meta(self, amps, pp):
         return {
-            **self.modelMeta(), **{
+            **self.modelMeta(),
             'nodes': {k: v.meta(amps[k], pp) for k, v in self.nodes.items()},
             'amps': amps,
             'pp': pp
-        }}
+        }
 
     def desc(self, meta):
         return f'{self}: simulation @ {self.strAmps(meta["amps"])}, {meta["pp"].desc}'

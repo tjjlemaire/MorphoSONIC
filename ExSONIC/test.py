@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 11:34:09
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-03 19:30:36
+# @Last Modified time: 2020-04-05 17:18:47
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -15,6 +15,7 @@ from PySONIC.neurons import getNeuronsDict
 from PySONIC.plt import GroupedTimeSeries
 from PySONIC.utils import logger, si_format, pow10_format, isIterable
 
+from .constants import *
 from .core import *
 
 
@@ -46,9 +47,10 @@ class TestComp(TestBase):
     def plotStimPatches(axes, tbounds, tpatch_on, tpatch_off):
         for ax in axes:
             ax.legend(fontsize=10, frameon=False)
-            ax.set_xlim(tbounds[0] * 1e3, tbounds[1] * 1e3)
+            ax.set_xlim(tbounds[0] * S_TO_MS, tbounds[1] * S_TO_MS)
             for ton, toff in zip(tpatch_on, tpatch_off):
-                ax.axvspan(ton * 1e3, toff * 1e3, edgecolor='none', facecolor='#8A8A8A', alpha=0.2)
+                ax.axvspan(ton * S_TO_MS, toff * S_TO_MS,
+                           edgecolor='none', facecolor='#8A8A8A', alpha=0.2)
 
     @classmethod
     def plotTcompHistogram(cls, ax, tcomp):
@@ -104,7 +106,7 @@ class TestCompNode(TestComp):
 
         # Plot charge density and membrane potential profiles
         ax = axes[0]
-        ax.set_ylim(pneuron.Qbounds * 1e5)
+        ax.set_ylim(pneuron.Qbounds * C_M2_TO_NC_CM2)
         ax.set_ylabel('Qm (nC/cm2)', fontsize=10)
         ax.set_title('membrane charge density', fontsize=12)
         ax = axes[1]
@@ -112,10 +114,13 @@ class TestCompNode(TestComp):
         ax.set_ylabel('$V_{m, eff}$ (mV)', fontsize=10)
         ax.set_title('effective membrane potential', fontsize=12)
         for k in cls.comp_keys:
-            tplt = np.insert(data[k]['t'].values, 0, -tonset) * 1e3
-            axes[0].plot(tplt, np.insert(data[k]['Qm'].values, 0, data[k]['Qm'].values[0]) * 1e5,
-                         label=k)
-            axes[1].plot(tplt, np.insert(data[k]['Vm'].values, 0, data[k]['Vm'].values[0]), label=k)
+            tplt = np.insert(data[k]['t'].values, 0, -tonset) * S_TO_MS
+            axes[0].plot(
+                tplt, np.insert(data[k]['Qm'].values, 0, data[k]['Qm'].values[0]) * C_M2_TO_NC_CM2,
+                label=k)
+            axes[1].plot(
+                tplt, np.insert(data[k]['Vm'].values, 0, data[k]['Vm'].values[0]),
+                label=k)
 
         # Plot stim patches on both graphs
         tbounds = (-tonset, pp.tstim + pp.toffset)
@@ -181,7 +186,7 @@ class TestNodePythonVsNeuron(TestCompNode):
 
         comp_title = (
             f'{nrn_model}, {drive.desc}, {pp.desc}',
-            'adaptive time step' if dt is None else f'dt = ${pow10_format(dt * 1e3)}$ ms')
+            'adaptive time step' if dt is None else f'dt = ${pow10_format(dt * S_TO_MS)}$ ms')
 
         return data, meta, tcomp, comp_title
 
@@ -214,7 +219,7 @@ class TestCompExtended(TestComp):
             ax.set_ylabel('$V_m^*$ (mV)', fontsize=10)
             ax.set_title(key, fontsize=12)
             for k in df:
-                tplt = np.insert(df[k]['t'].values, 0, -tonset) * 1e3
+                tplt = np.insert(df[k]['t'].values, 0, -tonset) * S_TO_MS
                 ax.plot(tplt, np.insert(df[k]['Vm'].values, 0, df[k]['Vm'].values[0]), label=k)
 
         # Plot stim patches on both graphs
@@ -341,8 +346,8 @@ class TestFiber(TestBase):
             }
         }
         for t in [1e0, 1e1, 1e3, 1e4]:
-            key = f'P{si_format(t * 1e-6, 0, space="")}s'
-            desc = f'{si_format(t * 1e-6, 0)}s'
+            key = f'P{si_format(t / S_TO_US, 0, space="")}s'
+            desc = f'{si_format(t / S_TO_US, 0)}s'
             logfmts[key] = {
                 'name': f'polarity selectivity ratio @ {desc}',
                 'fmt': lambda x: f'{x:.2f}'

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-03 19:34:48
+# @Last Modified time: 2020-04-05 17:35:37
 
 import numpy as np
 
@@ -73,7 +73,7 @@ class TestFiberEstim(TestFiber):
 
         # Compute and plot strength-duration curve with both polarities
         fiber.reset()
-        durations = np.logspace(0, 4, 5) * 1e-6  # s
+        durations = np.logspace(0, 4, 5) / S_TO_US  # s
         pps = [PulsedProtocol(x, toffset) for x in durations]
         psources = {k: ExtracellularCurrent((x0, z0), rho=rho_e, mode=k)
                     for k in ['cathode', 'anode']}
@@ -83,7 +83,7 @@ class TestFiberEstim(TestFiber):
         Ithrs['cathode ref'] = np.array([96.3, 9.44, 1.89, 1.00, 1.00]) * I0_ref  # A
 
         # Plot strength-duration curve
-        strengthDurationCurve(fiber, durations, Ithrs, yfactor=1e3, scale='log')
+        strengthDurationCurve(fiber, durations, Ithrs, yfactor=1 / MA_TO_A, scale='log')
 
         # Compare output metrics to reference
         SDcurve_sim_metrics = {  # Output metrics
@@ -135,13 +135,13 @@ class TestFiberEstim(TestFiber):
                     for k in ['cathode', 'anode']}
 
         # Compute and plot strength-duration curve with both polarities
-        durations = np.array([1, 5, 10, 50, 100, 500, 1000, 2000], dtype=float) * 1e-6  # s
+        durations = np.array([1, 5, 10, 50, 100, 500, 1000, 2000], dtype=float) / S_TO_US  # s
         Ithrs = {k: np.array([np.abs(fiber.titrate(v, PulsedProtocol(x, toffset))) for x in durations])  # A
                  for k, v in psources.items()}
         Qthrs = {k: v * durations for k, v in Ithrs.items()}  # C
 
         # Plot strength-duration curve
-        strengthDurationCurve(fiber, durations, Ithrs, yfactor=1e3, scale='log')
+        strengthDurationCurve(fiber, durations, Ithrs, yfactor=1 / MA_TO_A, scale='log')
 
         # Compare output metrics to reference
         i10us, i1ms = 2, 6
@@ -210,13 +210,17 @@ class TestFiberEstim(TestFiber):
 
         # Compute and plot strength-duration curve for intracellular injection at central node
         psource = IntracellularCurrent(fiber.central_ID, mode='anode')
-        durations = np.array([10, 20, 40, 60, 80, 100, 150, 200, 250, 300, 400, 500], dtype=float) * 1e-6  # s
-        Ithrs_ref = np.array([4.4, 2.8, 1.95, 1.6, 1.45, 1.4, 1.30, 1.25, 1.25, 1.25, 1.25, 1.25]) * 1e-9  # A
-        Ithrs_sim = np.array([fiber.titrate(psource, PulsedProtocol(x, toffset)) for x in durations])  # A
+        durations = np.array([
+            10, 20, 40, 60, 80, 100, 150, 200, 250, 300, 400, 500], dtype=float) / S_TO_US  # s
+        Ithrs_ref = np.array([
+            4.4, 2.8, 1.95, 1.6, 1.45, 1.4, 1.30, 1.25, 1.25, 1.25, 1.25, 1.25]) / A_TO_NA  # A
+        Ithrs_sim = np.array([
+            fiber.titrate(psource, PulsedProtocol(x, toffset)) for x in durations])  # A
         Qthrs_sim = Ithrs_sim * durations  # C
 
         # Plot strength-duration curve
-        strengthDurationCurve(fiber, durations, {'ref': Ithrs_ref, 'sim': Ithrs_sim}, yfactor=1e9, scale='lin')
+        strengthDurationCurve(
+            fiber, durations, {'ref': Ithrs_ref, 'sim': Ithrs_sim}, yfactor=A_TO_NA, scale='lin')
 
         # Compare output metrics to reference
         SDcurve_sim_metrics = {  # Output metrics
@@ -295,7 +299,7 @@ class TestFiberEstim(TestFiber):
         }
 
         # Plot strength-duration curve
-        strengthDurationCurve(fiber, durations, {'sim': Ithrs_sim}, yfactor=1e9, scale='log')
+        strengthDurationCurve(fiber, durations, {'sim': Ithrs_sim}, yfactor=A_TO_NA, scale='log')
 
         logger.info(f'Comparing metrics for {si_format(pp.tstim)}s intracellular anodic pulse')
         self.logOutputMetrics(pulse_sim_metrics, pulse_ref_metrics)
@@ -331,7 +335,7 @@ class TestFiberEstim(TestFiber):
         # # Plot strength-duration curve
         # fig2 = strengthDurationCurve(
         #     fiber, durations, {'myelinated': Athrs}, scale='log',
-        #     yname='amplitude', yfactor=1e-3, yunit='Pa', plot_chr=False)
+        #     yname='amplitude', yfactor=PA_TO_KPA, yunit='Pa', plot_chr=False)
 
         # Log output metrics
         self.logOutputMetrics(sim_metrics)

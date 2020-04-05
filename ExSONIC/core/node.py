@@ -3,12 +3,13 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-03 17:59:45
+# @Last Modified time: 2020-04-05 16:46:35
 
 from PySONIC.core import PointNeuron, ElectricDrive
 from PySONIC.utils import logger
 
 from ..utils import getNmodlDir, load_mechanisms
+from ..constants import *
 from .pyhoc import IClamp
 from .nmodel import NeuronModel
 from .sonic import addSonicFeatures
@@ -59,8 +60,8 @@ class Node(NeuronModel):
 
     def getAreaNormalizationFactor(self):
         ''' Return area normalization factor '''
-        A0 = self.section(0.5).area() * 1e-12  # section area (m2)
-        A = self.pneuron.area                  # neuron membrane area (m2)
+        A0 = self.section.membraneArea() / M_TO_CM**2  # section area (m2)
+        A = self.pneuron.area                          # neuron membrane area (m2)
         return A0 / A
 
     @staticmethod
@@ -74,14 +75,22 @@ class Node(NeuronModel):
     def desc(self, meta):
         return f'{self}: simulation @ {meta["drive"].desc}, {meta["pp"].desc}'
 
+    def currentDensityToCurrent(self, i):
+        ''' Convert an intensive current density to an extensive current.
+
+            :param i: current density (mA/m2)
+            :return: current (nA)
+        '''
+        Iinj = i * self.section.membraneArea() / M_TO_CM**2 * MA_TO_NA  # nA
+        logger.debug(f'Equivalent injected current: {Iinj:.1f} nA')
+        return Iinj
+
     def setIClamp(self, drive):
         ''' Set intracellular electrical stimulation drive
 
             :param drive: electric drive object.
         '''
-        Iinj = drive.I * self.section(0.5).area() * 1e-6  # nA
-        logger.debug(f'Equivalent injected current: {Iinj:.1f} nA')
-        return IClamp(self.section, Iinj)
+        return IClamp(self.section, self.currentDensityToCurrent(drive.I))
 
     @property
     def drive_funcs(self):
@@ -125,9 +134,7 @@ class DrivenNode(Node):
         self.Idrive = Idrive
         Node.__init__(self, pneuron, *args, **kwargs)
         logger.debug(f'setting {self.Idrive:.2f} mA/m2 driving current')
-        Iinj = self.Idrive * self.section.membraneArea() * 1e-2  # nA
-        logger.debug(f'Equivalent injected current: {Iinj:.1f} nA')
-        self.iclamp = IClamp(self.section, Iinj)
+        self.iclamp = IClamp(self.section, self.currentDensityToCurrent(self.Idrive))
         self.iclamp.toggle(1)
 
     def __repr__(self):
