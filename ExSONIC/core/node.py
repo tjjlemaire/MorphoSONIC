@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-05 16:46:35
+# @Last Modified time: 2020-04-07 12:38:00
 
 from PySONIC.core import PointNeuron, ElectricDrive
 from PySONIC.utils import logger
@@ -135,7 +135,7 @@ class DrivenNode(Node):
         Node.__init__(self, pneuron, *args, **kwargs)
         logger.debug(f'setting {self.Idrive:.2f} mA/m2 driving current')
         self.iclamp = IClamp(self.section, self.currentDensityToCurrent(self.Idrive))
-        self.iclamp.toggle(1)
+        self.iclamp.set(1)
 
     def __repr__(self):
         return super().__repr__()[:-1] + f', Idrive = {self.Idrive:.2f} mA/m2)'

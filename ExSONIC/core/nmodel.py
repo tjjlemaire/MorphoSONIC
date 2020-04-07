@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-05 17:57:28
+# @Last Modified time: 2020-04-07 12:37:43
 
 import abc
 from neuron import h
@@ -190,7 +190,7 @@ class NeuronModel(metaclass=abc.ABCMeta):
             sec.setStimON(value)
         # Set multiplying factor of all model drives
         for drive in self.drives:
-            drive.toggle(value)
+            drive.set(value)
 
         # For all transitions except the one at time zero
         if h.t > 0:
@@ -489,8 +489,8 @@ class SpatiallyExtendedNeuronModel(NeuronModel):
         if not isIterable(value):
             raise ValueError('drives must be an iterable')
         for item in value:
-            if not hasattr(item, 'toggle'):
-                raise ValueError(f'drive {item} has no toggle method')
+            if not hasattr(item, 'set'):
+                raise ValueError(f'drive {item} has no "set" method')
         self._drives = value
 
     def setOtherProbes(self):

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-05 16:56:23
+# @Last Modified time: 2020-04-07 12:37:07
 # @Author: Theo Lemaire
 # @Date:   2018-08-21 19:48:04
 # @Last Modified by:   Theo Lemaire
@@ -77,7 +77,7 @@ class IClamp(hclass(h.IClamp)):
         self.amp = 0.  # initially, we set the amplitude to zero
         self.xamp = amplitude
 
-    def toggle(self, value):
+    def set(self, value):
         self.amp = value * self.xamp
 
 
@@ -94,7 +94,7 @@ class ExtField():
     def __repr__(self):
         return f'{self.__class__.__name__}({self.section.shortname()}, {self.xamp:.2f} mV)'
 
-    def toggle(self, value):
+    def set(self, value):
         self.section.setVext(self.xamp * self.factor * value)
 
 
