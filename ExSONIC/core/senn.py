@@ -3,14 +3,13 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-05 16:58:22
+# @Last Modified time: 2020-04-08 17:12:18
 
 import numpy as np
 
 from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import logger, isWithin
 
-from ..utils import getNmodlDir, load_mechanisms
 from ..constants import *
 from .nmodel import FiberNeuronModel
 from .sources import ExtracellularCurrent
@@ -20,7 +19,7 @@ from .sonic import addSonicFeatures
 class SingleCableFiber(FiberNeuronModel):
     ''' Generic single-cable fiber model. '''
 
-    def __init__(self, fiberD, nnodes):
+    def __init__(self, fiberD, nnodes, **kwargs):
         ''' Initialization.
 
             :param fiberD: fiber outer diameter (m)
@@ -28,8 +27,7 @@ class SingleCableFiber(FiberNeuronModel):
         '''
         self.fiberD = fiberD
         self.nnodes = nnodes
-        load_mechanisms(getNmodlDir(), self.modfile)
-        self.construct()
+        super().__init__(**kwargs)
 
     def copy(self):
         other = super().copy()
@@ -72,15 +70,6 @@ class SingleCableFiber(FiberNeuronModel):
     def R_inter(self):
         ''' Internodal intracellular axial resistance (Ohm). '''
         return self.axialResistance(self.rs, self.interL, self.interD)
-
-    def construct(self):
-        ''' Create and connect node sections with assigned membrane dynamics. '''
-        self.createSections()
-        self.setGeometry()
-        self.setResistivity()
-        self.setTopology()
-        self.setFuncTables()
-        self.is_constructed = True
 
     def clear(self):
         ''' delete all model sections. '''

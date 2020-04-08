@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-07 12:37:43
+# @Last Modified time: 2020-04-08 17:18:29
 
 import abc
 from neuron import h
@@ -38,6 +38,13 @@ class NeuronModel(metaclass=abc.ABCMeta):
         3: 'CVODE multi order variable time step method',
         4: 'DASPK (Differential Algebraic Solver with Preconditioned Krylov) method'
     }
+
+    def __init__(self, construct=True):
+        ''' Initialization. '''
+        logger.debug(f'Creating {self} model')
+        load_mechanisms(getNmodlDir(), self.modfile)
+        if construct:
+            self.construct()
 
     def set(self, attrkey, value):
         ''' Set attribute if not existing or different, and reset model if already constructed. '''
@@ -135,10 +142,44 @@ class NeuronModel(metaclass=abc.ABCMeta):
     def nsections(self):
         return len(self.seclist)
 
-    @abc.abstractmethod
     def construct(self):
         ''' Create, specify and connect morphological model sections. '''
+        self.createSections()
+        self.setGeometry()
+        self.setResistivity()
+        self.setBiophysics()
+        self.setExtracellular()
+        self.setTopology()
+        self.is_constructed = True
+
+    @abc.abstractmethod
+    def createSections(self):
+        ''' Create morphological sections. '''
         raise NotImplementedError
+
+    def setGeometry(self):
+        ''' Set sections geometry. '''
+        pass
+
+    def setResistivity(self):
+        ''' Set sections axial resistivity. '''
+        pass
+
+    def setBiophysics(self):
+        ''' Set the membrane biophysics of all model sections. '''
+        for sec in self.seclist:
+            if isinstance(sec, MechSection) and sec.mechname is not None:
+                sec.insert(sec.mechname)
+        if issubclass(self.section_class, QSection):
+            self.setFuncTables()
+
+    def setTopology(self):
+        ''' Connect morphological sections. '''
+        pass
+
+    def setExtracellular(self):
+        ''' Set the sections' extracellular mechanisms. '''
+        pass
 
     @abc.abstractmethod
     def clear(self):
@@ -168,6 +209,7 @@ class NeuronModel(metaclass=abc.ABCMeta):
 
     def initToSteadyState(self):
         ''' Initialize model variables to pre-stimulus resting state values. '''
+        h.t = 0
         self.setStimValue(0)
         if issubclass(self.section_class, QSection):
             x0 = self.pneuron.Qm0 * C_M2_TO_NC_CM2  # nC/cm2
@@ -197,12 +239,20 @@ class NeuronModel(metaclass=abc.ABCMeta):
             # If adaptive solver: re-initialize the integrator
             if self.cvode.active():
                 self.cvode.re_init()
-            # Otherwise, re-compute currents
+            # Otherwise, re-align currents with current states and potential
             else:
                 h.fcurrent()
 
     def createStimSetter(self, value):
         return lambda: self.setStimValue(value)
+
+    @staticmethod
+    def fixStimVec(stim, dt):
+        ''' Quick fix for stimulus vector discrepancy for fixed time step simulations. '''
+        if dt is None:
+            return stim
+        else:
+            return np.hstack((stim[1:], stim[-1]))
 
     def integrate(self, pp, dt, atol):
         ''' Integrate a model differential variables for a given duration, while updating the
@@ -233,8 +283,11 @@ class NeuronModel(metaclass=abc.ABCMeta):
 
         # Set events
         for tevent, new_stim_value in pp.stimEvents():
-            self.cvode.event((tevent - TRANSITION_DT) * S_TO_MS)
-            self.cvode.event(tevent * S_TO_MS, self.createStimSetter(new_stim_value))
+            if tevent == 0:
+                self.setStimValue(new_stim_value)
+            else:
+                self.cvode.event((tevent - TRANSITION_DT) * S_TO_MS)
+                self.cvode.event(tevent * S_TO_MS, self.createStimSetter(new_stim_value))
 
         # Integrate
         logger.debug(f'integrating system using {self.getIntegrationMethod()}')
@@ -296,8 +349,8 @@ class NeuronModel(metaclass=abc.ABCMeta):
         # Get the HOC function that fills in a specific FUNCTION_TABLE in a mechanism
         fillTable = getattr(h, f'table_{fname}_{mechname}')
 
-        # Call function and return
-        return fillTable(matrix._ref_x[0][0], nx, xref._ref_x[0], ny, yref._ref_x[0])
+        # Call function
+        fillTable(matrix._ref_x[0][0], nx, xref._ref_x[0], ny, yref._ref_x[0])
 
     def setFuncTables(self, *args, **kwargs):
         ''' Set neuron-specific interpolation tables along the charge dimension,
@@ -336,9 +389,11 @@ class NeuronModel(metaclass=abc.ABCMeta):
         self.integrate(pp, dt, atol)
 
         # Store output in dataframe
+        t = t.to_array() / S_TO_MS  # s
+        stim = self.fixStimVec(stim.to_array(), dt)
         data = pd.DataFrame({
-            't': t.to_array() / S_TO_MS,  # s
-            'stimstate': stim.to_array()
+            't': t,  # s
+            'stimstate': stim
         })
         for k, v in probes.items():
             data[k] = v.to_array()
@@ -386,9 +441,9 @@ class SpatiallyExtendedNeuronModel(NeuronModel):
         raise NotImplementedError
 
     @classmethod
-    def initFromMeta(cls, meta):
+    def initFromMeta(cls, meta, construct=False):
         args, kwargs = cls.getMetaArgs(meta)
-        return cls(*args, **kwargs)
+        return cls(*args, **kwargs, construct=construct)
 
     @staticmethod
     def inputs():
@@ -435,26 +490,6 @@ class SpatiallyExtendedNeuronModel(NeuronModel):
     @property
     def sectypes(self):
         return list(self.sections.keys())
-
-    @abc.abstractmethod
-    def createSections(self):
-        ''' Create morphological sections. '''
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def setGeometry(self):
-        ''' Set sections geometry. '''
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def setResistivity(self):
-        ''' Set sections axial resistivity. '''
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def setTopology(self):
-        ''' Connect morphological sections. '''
-        raise NotImplementedError
 
     def getSectionsDetails(self):
         ''' Get details about the model's sections. '''
@@ -604,7 +639,7 @@ class SpatiallyExtendedNeuronModel(NeuronModel):
 
         # Store output in dataframes
         t = t.to_array() / S_TO_MS  # s
-        stim = stim.to_array()
+        stim = self.fixStimVec(stim.to_array(), dt)
         data = {}
 
         # Full states data for sections with nonlinear mechanisms
@@ -948,7 +983,6 @@ class FiberNeuronModel(SpatiallyExtendedNeuronModel):
         nspikes_start = detectSpikes(data[self.nodeIDs[0]])[0].size
         nspikes_end = detectSpikes(data[self.nodeIDs[-1]])[0].size
         return nspikes_start > 0 and nspikes_end > 0
-
 
     def titrate(self, source, pp):
         ''' Use a binary search to determine the threshold amplitude needed to obtain

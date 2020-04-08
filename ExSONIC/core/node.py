@@ -3,12 +3,11 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-07 12:38:00
+# @Last Modified time: 2020-04-08 17:16:47
 
 from PySONIC.core import PointNeuron, ElectricDrive
 from PySONIC.utils import logger
 
-from ..utils import getNmodlDir, load_mechanisms
 from ..constants import *
 from .pyhoc import IClamp
 from .nmodel import NeuronModel
@@ -19,27 +18,20 @@ from .sonic import addSonicFeatures
 class Node(NeuronModel):
     ''' Node model. '''
 
-    def __init__(self, pneuron, construct=True):
+    def __init__(self, pneuron, **kwargs):
         ''' Initialization.
 
             :param pneuron: point-neuron model
         '''
         self.pneuron = pneuron
-        logger.debug('Creating {} model'.format(self))
-        load_mechanisms(getNmodlDir(), self.modfile)
-        self.clear()
-        if construct:
-            self.construct()
+        super().__init__(**kwargs)
 
     def __repr__(self):
         return f'{self.__class__.__name__}({self.pneuron})'
 
-    def construct(self):
-        ''' Create model sections and set invariant function tables. '''
+    def createSections(self):
         self.section = self.createSection(
             'node', mech=self.mechname, states=self.pneuron.statesNames())
-        self.setFuncTables()
-        self.is_constructed = True
 
     def clear(self):
         self.pylkp = None
@@ -132,7 +124,7 @@ class DrivenNode(Node):
 
     def __init__(self, pneuron, Idrive, *args, **kwargs):
         self.Idrive = Idrive
-        Node.__init__(self, pneuron, *args, **kwargs)
+        super().__init__(pneuron, *args, **kwargs)
         logger.debug(f'setting {self.Idrive:.2f} mA/m2 driving current')
         self.iclamp = IClamp(self.section, self.currentDensityToCurrent(self.Idrive))
         self.iclamp.set(1)

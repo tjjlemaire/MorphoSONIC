@@ -3,13 +3,14 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-05 17:28:59
+# @Last Modified time: 2020-04-07 18:23:07
 
 # Conversions
 V_TO_MV = 1e3         # V to  mV
 PA_TO_KPA = 1e-3      # Pa -> kPa
 HZ_TO_KHZ = 1e-3      # Hz -> kHz
 C_M2_TO_NC_CM2 = 1e5  # C/m2 -> nC/cm2
+S_M2_TO_S_CM2 = 1e-4  # S/m2 -> S/cm2
 S_TO_MS = 1e3         # s -> ms
 S_TO_US = 1e6         # s -> us
 M_TO_CM = 1e2         # m -> cm
@@ -25,7 +26,7 @@ OHM_TO_MOHM = 1e-6    # Ohm-> MOhm
 
 # Numerical integration
 FIXED_DT = 1e-5        # default time step for fixed integration (s)
-TRANSITION_DT = 1e-12  # time step for ON-OFF and OFF-ON sharp transitions (s)
+TRANSITION_DT = 1e-15  # time step for ON-OFF and OFF-ON sharp transitions (s)
 
 # Titration
 IINJ_RANGE = (1e-12, 1e-7)  # intracellular current range allowed at the fiber level (A)

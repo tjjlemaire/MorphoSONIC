@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-03-18 21:17:03
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-05 17:24:58
+# @Last Modified time: 2020-04-07 15:13:29
 
 import logging
 import pprint
@@ -210,7 +210,7 @@ class NmodlTranslator(PointNeuronTranslator):
             try:
                 attr_val = getattr(self.pclass, attr_name)
                 if self.conductance_pattern.match(attr_name):
-                    self.params[attr_name] = {'val': attr_val * 1e-4, 'unit': 'S/cm2'}
+                    self.params[attr_name] = {'val': attr_val * S_M2_TO_S_CM2, 'unit': 'S/cm2'}
                 elif self.permeability_pattern.match(attr_name):
                     self.params[attr_name] = {'val': attr_val * 1e-4, 'unit': '10 m/ms'}
                 elif self.reversal_potential_pattern.match(attr_name):

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-05 17:23:12
+# @Last Modified time: 2020-04-08 17:12:05
 
 import numpy as np
 
@@ -11,7 +11,6 @@ from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import si_format, logger
 from PySONIC.postpro import detectSpikes
 
-from ..utils import getNmodlDir, load_mechanisms
 from ..constants import *
 from .nmodel import SpatiallyExtendedNeuronModel
 from .sonic import addSonicFeatures
@@ -24,15 +23,13 @@ class RadialModel(SpatiallyExtendedNeuronModel):
     simkey = 'radial_model'
     rmin = 1e2  # lower bound for axial resistance * membrane area (Ohm/cm2)
 
-    def __init__(self, pneuron, innerR, outerR, rs, depth=100e-9):
+    def __init__(self, pneuron, innerR, outerR, rs, depth=100e-9, **kwargs):
         self.pneuron = pneuron
         self.rs = rs          # Ohm.cm
         self.innerR = innerR  # m
         self.outerR = outerR  # m
         self.depth = depth      # m
-        logger.debug('Creating {} model'.format(self))
-        load_mechanisms(getNmodlDir(), self.modfile)
-        self.construct()
+        super().__init__(**kwargs)
 
     @property
     def innerR(self):
@@ -105,14 +102,6 @@ class RadialModel(SpatiallyExtendedNeuronModel):
     def __repr__(self):
         morpho_str = ', '.join([f'{k}{v}' for k, v in self.morpho_attrs.items()])
         return f'{self.__class__.__name__}({self.pneuron}, {morpho_str})'
-
-    def construct(self):
-        self.createSections()
-        self.setGeometry()
-        self.setResistivity()
-        self.setTopology()
-        self.setFuncTables()
-        self.is_constructed = True
 
     def clear(self):
         del self.center

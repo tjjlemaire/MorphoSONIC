@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-27 23:08:23
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-05 16:48:48
+# @Last Modified time: 2020-04-08 17:23:39
 
 import numpy as np
 
@@ -11,11 +11,8 @@ from PySONIC.core import Lookup
 from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import logger
 
-from ..utils import getNmodlDir, load_mechanisms
 from ..constants import *
 from .nmodel import FiberNeuronModel
-from .pyhoc import MechVSection
-
 
 # MRG lookup table from McIntyre 2002
 mrg_lkp = Lookup(
@@ -55,11 +52,9 @@ class MRGFiber(FiberNeuronModel):
     _C_myelin_per_membrane = 0.1    # myelin capacitance per lamella (uF/cm2)
     _g_myelin_per_membrane = 0.001  # myelin transverse conductance per lamella (S/cm2)
     _nstin_per_inter = 6            # number of stin sections per internode
-
     correction_choices = ('myelin', 'axoplasm')  # possible choices of correction level
-    section_class = MechVSection
 
-    def __init__(self, fiberD, nnodes, correction_level=None):
+    def __init__(self, fiberD, nnodes, correction_level=None, **kwargs):
         ''' Constructor.
 
             :param fiberD: fiber diameter (m)
@@ -73,8 +68,7 @@ class MRGFiber(FiberNeuronModel):
         for k, v in mrg_lkp.project('fiberD', self.fiberD).items():
             setattr(self, k, v)
         self.setCelsius()
-        load_mechanisms(getNmodlDir(), self.modfile)
-        self.construct()
+        super().__init__(**kwargs)
 
     @property
     def meta(self):
@@ -298,17 +292,6 @@ class MRGFiber(FiberNeuronModel):
         '''
         return self.axialResistancePerUnitLength(self.rhop, d + 2 * w, d_in=d)
 
-    def construct(self):
-        ''' Create and connect node sections with assigned membrane dynamics. '''
-        self.createSections()
-        self.setGeometry()
-        self.setResistivity()
-        self.setInterBiophysics()
-        self.setExtracellular()
-        self.setTopology()
-        # self.setFuncTables()
-        self.is_constructed = True
-
     def clear(self):
         ''' delete all model sections. '''
         del self.nodes
@@ -372,15 +355,15 @@ class MRGFiber(FiberNeuronModel):
             for sec in secdict.values():
                 sec.setResistivity(rhoa)
 
-    def setInterBiophysics(self):
-        ''' Assign biophysics to internodal sections.
+    def setBiophysics(self):
+        ''' Assign biophysics to model sections.
 
             .. note:: if the axoplasm correction level is selected, internodal sections
             leakage conductance and capacitance per unit area are multiplied by the ratio
             of the section's real diameter divided by its assigned diameter (i.e. the
             fiber's outer diameter), to ensure correct sections extensive membrane properties.
         '''
-        logger.debug('setting internodal biophysics')
+        logger.debug('setting sections biophysics')
         for sectype, secdict in self.inters.items():
             g = getattr(self, f'_g_{sectype.lower()}')
             if self.correction_level == 'axoplasm':
@@ -389,6 +372,7 @@ class MRGFiber(FiberNeuronModel):
                 g *= self.diameterRatio(sectype)
             for sec in secdict.values():
                 sec.insertPassiveMech(g, self.pneuron.Vm0)
+        super().setBiophysics()
 
     def setExtracellular(self):
         ''' Set the sections' extracellular mechanisms.
@@ -426,10 +410,9 @@ class MRGFiber(FiberNeuronModel):
             self.connect('MYSA', 2 * i + 1, 'node', i + 1)
 
     def setFuncTables(self, *args, **kwargs):
-        print('hello')
         super().setFuncTables(*args, **kwargs)
         logger.debug(f'setting V functable in inter mechanism')
-        self.setFuncTable(self.inter_mechname, 'V', self.lkp['V'], self.Aref, self.Qref)
+        # self.setFuncTable(self.inter_mechname, 'V', self.lkp['V'], self.Aref, self.Qref)
 
     def setOtherProbes(self):
         return {sectype: {k: {'Vm': v.setProbe('v')} for k, v in secdict.items()}
@@ -474,9 +457,3 @@ class MRGFiber(FiberNeuronModel):
 
     def simulate(self, source, pp):
         return super().simulate(source, pp, dt=FIXED_DT)
-
-    # ------------------- TO MODIFY ------------------------
-
-    @property
-    def mechname(self):
-        return self.pneuron.name

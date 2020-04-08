@@ -3,11 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-07 12:37:07
-# @Author: Theo Lemaire
-# @Date:   2018-08-21 19:48:04
-# @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2019-01-11 10:20:22
+# @Last Modified time: 2020-04-08 17:18:18
 
 ''' Utilities to manipulate HOC objects. '''
 
@@ -300,9 +296,11 @@ class QSection(Section):
         ''' Insert extracellular mechanism with specific parameters, corrected to account
             for Q-based differential scheme.
         '''
-        if 'xr' in kwargs:
-            kwargs['xr'] *= self.Cm0
         super().insertVext(**kwargs)
+        for i in range(2):
+            self.xraxial[i] *= self.Cm0
+            self.xc[i] /= self.Cm0
+            self.xg[i] /= self.Cm0
 
     def connect(self, parent):
         ''' Connect two sections together, provided they have the same membrane capacitance. '''
@@ -328,8 +326,6 @@ class MechSection(Section):
             super().__init__(**kwargs)
         self.mechname = mechname
         self.states = states
-        if self.mechname is not None:
-            self.insert(self.mechname)
 
     @property
     def states(self):

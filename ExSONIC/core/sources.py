@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-05 17:30:46
+# @Last Modified time: 2020-04-07 17:34:06
 
 import abc
 import numpy as np
@@ -334,7 +334,7 @@ class CurrentSource(XSource):
         self._I = value
 
     def Istr(self):
-        return f'{si_format(self.I, 1)}{self.inputs()["I"]["unit"]}'
+        return f'{si_format(self.I, 2)}{self.inputs()["I"]["unit"]}'
 
     @property
     def is_cathodal(self):
