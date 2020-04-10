@@ -3,11 +3,11 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-30 21:40:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-05 17:00:05
+# @Last Modified time: 2020-04-10 18:25:06
 
 import numpy as np
 
-from PySONIC.core import PointNeuron, NeuronalBilayerSonophore, AcousticDrive
+from PySONIC.core import PointNeuron, NeuronalBilayerSonophore, AcousticDrive, ElectricDrive
 from PySONIC.utils import logger, isWithin
 
 from ..constants import *
@@ -208,9 +208,12 @@ def addSonicFeatures(Base):
         def meta(self):
             return {**super().meta, 'method': 'NEURON'}
 
-        def filecodes(self, *args, **kwargs):
-            args = args[:-3] + [self.fs, 'NEURON', None]
-            return self.nbls.filecodes(*args)
+        def filecodes(self, *args):
+            if isinstance(args[0], ElectricDrive):
+                return super().filecodes(*args)
+            else:
+                args = list(args) + [self.fs, 'NEURON', None]
+                return self.nbls.filecodes(*args)
 
     class SonicMorpho(SonicBase):
 

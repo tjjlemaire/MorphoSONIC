@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2017-02-13 18:16:09
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-02 16:40:03
+# @Last Modified time: 2020-04-10 18:45:19
 
 ''' Run A-STIM simulations of a specific point-neuron. '''
 
@@ -25,6 +25,8 @@ def main():
     logger.info("Starting A-STIM simulation batch")
     queue = [item[:2] for item in NeuronalBilayerSonophore.simQueue(
         *AStimParser.parseSimInputs(args), outputdir=args['outputdir'])]
+    if args['save']:
+        queue = [(x[0][:-3], x[1]) for x in queue]  # adapt for NEURON case
     output = []
     for a in args['radius']:
         for pneuron in args['neuron']:
