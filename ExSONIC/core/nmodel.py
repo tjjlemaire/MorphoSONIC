@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-08 17:18:29
+# @Last Modified time: 2020-04-10 18:56:51
 
 import abc
 from neuron import h
@@ -455,7 +455,7 @@ class SpatiallyExtendedNeuronModel(NeuronModel):
             }
         }
 
-    def filecodes(self, source, pp, _):
+    def filecodes(self, source, pp, *_):
         return {
             **self.modelcodes,
             **source.filecodes(),
@@ -911,6 +911,11 @@ class FiberNeuronModel(SpatiallyExtendedNeuronModel):
             'fiberD': f'fiberD{(self.fiberD * M_TO_UM):.1f}um',
             'nnodes': f'{self.nnodes}node{plural(self.nnodes)}',
         }
+
+    def filecodes(self, source, pp, *args):
+        codes = super().filecodes(source, pp, *args)
+        codes['tstim'] = f'{pp.tstim * 1e3:.2f}ms'
+        return codes
 
     def getXCoords(self):
         return {k: getattr(self, f'get{k.title()}Coords')() for k in self.sections.keys()}
