@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2017-08-24 11:55:07
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-02 16:33:35
+# @Last Modified time: 2020-04-17 20:20:40
 
 ''' Run E-STIM simulations of a specific point-neuron. '''
 
@@ -20,10 +20,13 @@ def main():
     logger.setLevel(args['loglevel'])
     if args['mpi']:
         logger.warning('NEURON multiprocessing disabled')
+    sim_inputs = parser.parseSimInputs(args)
+    simQueue_func = {5: 'simQueue', 6: 'simQueueBurst'}[len(sim_inputs)]
 
     # Run E-STIM batch
     logger.info("Starting E-STIM simulation batch")
-    queue = PointNeuron.simQueue(*parser.parseSimInputs(args), outputdir=args['outputdir'])
+    queue = getattr(PointNeuron, simQueue_func)(
+        *sim_inputs, outputdir=args['outputdir'], overwrite=args['overwrite'])
     output = []
     for pneuron in args['neuron']:
         node = Node(pneuron)

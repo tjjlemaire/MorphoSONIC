@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2017-02-13 18:16:09
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-10 18:45:19
+# @Last Modified time: 2020-04-17 20:24:34
 
 ''' Run A-STIM simulations of a specific point-neuron. '''
 
@@ -20,11 +20,14 @@ def main():
     logger.setLevel(args['loglevel'])
     if args['mpi']:
         logger.warning('NEURON multiprocessing disabled')
+    sim_inputs = parser.parseSimInputs(args)
+    simQueue_func = {9: 'simQueue', 10: 'simQueueBurst'}[len(sim_inputs)]
 
     # Run A-STIM batch
     logger.info("Starting A-STIM simulation batch")
-    queue = [item[:2] for item in NeuronalBilayerSonophore.simQueue(
-        *AStimParser.parseSimInputs(args), outputdir=args['outputdir'])]
+    queue = getattr(NeuronalBilayerSonophore, simQueue_func)(
+        *sim_inputs, outputdir=args['outputdir'], overwrite=args['overwrite'])
+    queue = [item[:2] for item in queue]
     if args['save']:
         queue = [(x[0][:-3], x[1]) for x in queue]  # adapt for NEURON case
     output = []
