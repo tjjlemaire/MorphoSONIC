@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-17 12:19:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-05 15:40:00
+# @Last Modified time: 2020-04-18 13:28:54
 
 import numpy as np
 
@@ -230,7 +230,7 @@ class FiberConvergenceBatch(LogBatch):
             data, meta = fiber.simulate(source.updatedX(1.1 * Ithr), self.pp)
 
             # Filter out stimulation artefact from dataframe
-            data = {k: boundDataFrame(df, (self.pp.tstim, self.pp.ttotal))
+            data = {k: boundDataFrame(df, (self.pp.tstim, self.pp.tstop))
                     for k, df in data.items()}
 
             # Compute CV and spike amplitude

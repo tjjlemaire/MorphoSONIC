@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-10 18:56:51
+# @Last Modified time: 2020-04-18 13:29:01
 
 import abc
 from neuron import h
@@ -291,7 +291,7 @@ class NeuronModel(metaclass=abc.ABCMeta):
 
         # Integrate
         logger.debug(f'integrating system using {self.getIntegrationMethod()}')
-        tstop = pp.ttotal * S_TO_MS
+        tstop = pp.tstop * S_TO_MS
         while h.t < tstop:
             h.fadvance()
 

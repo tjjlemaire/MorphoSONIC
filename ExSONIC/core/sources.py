@@ -3,12 +3,11 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-07 17:34:06
+# @Last Modified time: 2020-04-18 13:31:49
 
 import abc
 import numpy as np
 from scipy.optimize import brentq
-from scipy.signal import unit_impulse
 
 from PySONIC.utils import si_format, rotAroundPoint2D, StimObject, gaussian, isIterable
 from PySONIC.core.drives import *

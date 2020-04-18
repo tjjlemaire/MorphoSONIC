@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 11:34:09
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-05 17:18:47
+# @Last Modified time: 2020-04-18 13:27:41
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -44,13 +44,15 @@ class TestComp(TestBase):
         return fig, axes
 
     @staticmethod
-    def plotStimPatches(axes, tbounds, tpatch_on, tpatch_off):
+    def plotStimPatches(axes, tbounds, pulses):
+        tstart, tend, x = zip(*pulses)
+        colors = GroupedTimeSeries.getPatchesColors(x)
         for ax in axes:
             ax.legend(fontsize=10, frameon=False)
             ax.set_xlim(tbounds[0] * S_TO_MS, tbounds[1] * S_TO_MS)
-            for ton, toff in zip(tpatch_on, tpatch_off):
-                ax.axvspan(ton * S_TO_MS, toff * S_TO_MS,
-                           edgecolor='none', facecolor='#8A8A8A', alpha=0.2)
+            for i in range(len(colors)):
+                ax.axvspan(tstart[i] * S_TO_MS, tend[i] * S_TO_MS,
+                           edgecolor='none', facecolor=colors[i], alpha=0.2)
 
     @classmethod
     def plotTcompHistogram(cls, ax, tcomp):
@@ -99,7 +101,7 @@ class TestCompNode(TestComp):
 
         # Determine time onset and stim patches
         tonset = 0.05 * (np.ptp(ref_t))
-        tpatch_on, tpatch_off = GroupedTimeSeries.getStimPulses(ref_t, ref_state)
+        pulses = GroupedTimeSeries.getStimPulses(ref_t, ref_state)
 
         # Create comparative figure backbone
         fig, axes = cls.createFigureBackbone()
@@ -124,7 +126,7 @@ class TestCompNode(TestComp):
 
         # Plot stim patches on both graphs
         tbounds = (-tonset, pp.tstim + pp.toffset)
-        cls.plotStimPatches(axes[:-1], tbounds, tpatch_on, tpatch_off)
+        cls.plotStimPatches(axes[:-1], tbounds, pulses)
 
         # Plot comparative histogram of computation times
         cls.plotTcompHistogram(axes[2], tcomp)
@@ -206,7 +208,7 @@ class TestCompExtended(TestComp):
 
         # Determine time onset and stim patches
         tonset = 0.05 * (np.ptp(ref_t))
-        tpatch_on, tpatch_off = GroupedTimeSeries.getStimPulses(ref_t, ref_state)
+        pulses = GroupedTimeSeries.getStimPulses(ref_t, ref_state)
 
         # Create comparative figure backbone
         fig, axes = cls.createFigureBackbone()
@@ -225,7 +227,7 @@ class TestCompExtended(TestComp):
         # Plot stim patches on both graphs
         pp = args[-1]
         tbounds = (-tonset, pp.tstim + pp.toffset)
-        cls.plotStimPatches(axes[:-1], tbounds, tpatch_on, tpatch_off)
+        cls.plotStimPatches(axes[:-1], tbounds, pulses)
 
         # Plot comparative histogram of computation times
         cls.plotTcompHistogram(axes[2], tcomp)
