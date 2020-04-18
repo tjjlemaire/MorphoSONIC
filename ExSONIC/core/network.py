@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-01-13 20:15:35
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-05 16:50:47
+# @Last Modified time: 2020-04-18 15:12:16
 
 import pandas as pd
 from neuron import h
@@ -190,7 +190,7 @@ class NodeCollection:
             **self.modelCodes(),
             'amps': f'[{"_".join([f"{x:.1f}" for x in amps.values()])}]{self.unit.replace("/", "")}',
             'nature': 'CW' if pp.isCW() else 'PW',
-            **pp.filecodes()
+            **pp.filecodes
         }
 
     def filecode(self, *args):

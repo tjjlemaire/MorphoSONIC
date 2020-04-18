@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-18 13:29:01
+# @Last Modified time: 2020-04-18 14:38:33
 
 import abc
 from neuron import h
@@ -458,7 +458,7 @@ class SpatiallyExtendedNeuronModel(NeuronModel):
     def filecodes(self, source, pp, *_):
         return {
             **self.modelcodes,
-            **source.filecodes(),
+            **source.filecodes,
             'nature': pp.nature,
             **pp.filecodes
         }
@@ -584,7 +584,8 @@ class SpatiallyExtendedNeuronModel(NeuronModel):
     def drive_funcs(self):
         return {
             IntracellularCurrent: self.setIClamps,
-            ExtracellularCurrent: self.setVext
+            ExtracellularCurrent: self.setVext,
+            GaussianVoltageSource: self.setVext
         }
 
     def setDrives(self, source):

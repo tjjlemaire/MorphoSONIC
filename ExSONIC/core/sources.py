@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-18 13:31:49
+# @Last Modified time: 2020-04-18 15:21:34
 
 import abc
 import numpy as np
@@ -17,14 +17,6 @@ from ..constants import *
 
 
 class Source(StimObject):
-
-    @abc.abstractmethod
-    def __eq__(self, other):
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def copy(self):
-        raise NotImplementedError
 
     @abc.abstractmethod
     def computeDistributedAmps(self, fiber):
@@ -95,20 +87,9 @@ class SectionSource(XSource):
         return {
             'sec_id': {
                 'desc': 'section ID',
-                'label': 'ID',
-                'unit': ''
+                'label': 'ID'
             }
         }
-
-    def __repr__(self):
-        return f'{self.__class__.__name__}({self.sec_id})'
-
-    def filecodes(self):
-        return {'sec_id': self.sec_id}
-
-    @property
-    def quickcode(self):
-        return self.sec_id
 
     def computeDistributedAmps(self, model):
         d = {}
@@ -163,33 +144,16 @@ class GaussianSource(XSource):
             'x0': {
                 'desc': 'center coordinate',
                 'label': 'x0',
-                'unit': 'mm',
-                'factor': M_TO_MM,
+                'unit': 'm',
                 'precision': 1
             },
             'sigma': {
                 'desc': 'width',
                 'label': 'sigma',
-                'unit': 'mm',
-                'factor': M_TO_MM,
+                'unit': 'm',
                 'precision': 1
             }
         }
-
-    def __repr__(self):
-        params = [f'{key} = {value}' for key, value in self.filecodes().items()]
-        return f'{self.__class__.__name__}({", ".join(params)})'
-
-    def filecodes(self):
-        codes = {}
-        for key in ['x0', 'sigma']:
-            d = self.inputs()[key]
-            codes[key] = f'{getattr(self, key) * d.get("factor", 1.):.3f}{d["unit"]}'
-        return codes
-
-    @property
-    def quickcode(self):
-        return f'sigma{self.sigma * M_TO_MM:.3f}mm'
 
     def computeDistributedAmps(self, fiber):
         return {k: gaussian(v, mu=self.x0, sigma=self.sigma, A=self.xvar)
@@ -237,12 +201,7 @@ class ExtracellularSource(XSource):
         return len(self.x)
 
     def strPos(self):
-        d = self.inputs()["x"]
-        x_mm = [f'{xx * d.get("factor", 1.):.1f}' for xx in self.x]
-        return f'({",".join(x_mm)}){d["unit"]}'
-
-    def __repr__(self):
-        return f'{self.__class__.__name__}(x={self.strPos()})'
+        return self.paramStr('x')
 
     @staticmethod
     def inputs():
@@ -250,23 +209,15 @@ class ExtracellularSource(XSource):
             'x': {
                 'desc': 'position',
                 'label': 'x',
-                'unit': 'mm',
-                'factor': M_TO_MM,
+                'unit': 'm',
                 'precision': 1
             }
         }
-
-    def filecodes(self):
-        return {'position': self.strPos().replace(',', '_').replace('(', '').replace(')', '')}
 
     @property
     def zstr(self):
         d = self.inputs()['x']
         return f'z{self.z * d.get("factor", 1.):.1f}{d["unit"]}'
-
-    @property
-    def quickcode(self):
-        return f'x{self.strPos()}'
 
     def vectorialDistance(self, x):
         ''' Vectorial distance(s) to target point(s).
@@ -332,8 +283,13 @@ class CurrentSource(XSource):
                 self.checkPositiveOrNull('I', value)
         self._I = value
 
-    def Istr(self):
-        return f'{si_format(self.I, 2)}{self.inputs()["I"]["unit"]}'
+    @property
+    def xvar(self):
+        return self.I
+
+    @xvar.setter
+    def xvar(self, value):
+        self.I = value
 
     @property
     def is_cathodal(self):
@@ -350,23 +306,9 @@ class CurrentSource(XSource):
             },
             'mode': {
                 'desc': 'polarity mode',
-                'label': 'mode',
-                'unit': '',
+                'label': 'mode'
             }
         }
-
-    def filecodes(self):
-        unit = self.inputs()["I"]["unit"]
-        prefix = si_format(1 / self.conv_factor)[-1]
-        return {'I': f'{(self.I * self.conv_factor):.2f}{prefix}{unit}'}
-
-    @property
-    def xvar(self):
-        return self.I
-
-    @xvar.setter
-    def xvar(self, value):
-        self.I = value
 
 
 class IntracellularCurrent(SectionSource, CurrentSource):
@@ -378,28 +320,11 @@ class IntracellularCurrent(SectionSource, CurrentSource):
         SectionSource.__init__(self, sec_id)
         CurrentSource.__init__(self, I, mode)
 
-    def __eq__(self, other):
-        if not isinstance(other, self.__class__):
-            return False
-        for k in ['sec_id', 'mode', 'I']:
-            if getattr(self, k) != getattr(other, k):
-                return False
-        return True
-
-    def __repr__(self):
-        s = f'{SectionSource.__repr__(self)[:-1]}, {self.mode}'
-        if self.I is not None:
-            s = f'{s}, {self.Istr()}'
-        return f'{s})'
-
     def computeDistributedAmps(self, model):
         if not self.is_resolved:
             raise ValueError('Cannot compute field distribution: unresolved source')
         return {k: v * self.conv_factor
                 for k, v in SectionSource.computeDistributedAmps(self, model).items()}
-
-    def filecodes(self):
-        return {**SectionSource.filecodes(self), **CurrentSource.filecodes(self)}
 
     def copy(self):
         return self.__class__(self.sec_id, self.I, mode=self.mode)
@@ -407,10 +332,6 @@ class IntracellularCurrent(SectionSource, CurrentSource):
     @staticmethod
     def inputs():
         return {**SectionSource.inputs(), **CurrentSource.inputs()}
-
-    @property
-    def quickcode(self):
-        return f'{self.key}_{SectionSource.quickcode.fget(self)}'
 
 
 class ExtracellularCurrent(ExtracellularSource, CurrentSource):
@@ -447,20 +368,6 @@ class ExtracellularCurrent(ExtracellularSource, CurrentSource):
             raise ValueError('transverse resistivites must be equal')
         self._rho = value
 
-    def __eq__(self, other):
-        if not isinstance(other, self.__class__):
-            return False
-        for k in ['x', 'mode', 'I', 'rho']:
-            if getattr(self, k) != getattr(other, k):
-                return False
-        return True
-
-    def __repr__(self):
-        s = f'{ExtracellularSource.__repr__(self)[:-1]}, {self.strRho}, {self.mode}'
-        if self.I is not None:
-            s = f'{s}, {self.Istr()}'
-        return f'{s})'
-
     def copy(self):
         return self.__class__(self.x, self.I, mode=self.mode, rho=self.rho)
 
@@ -474,20 +381,6 @@ class ExtracellularCurrent(ExtracellularSource, CurrentSource):
                 'unit': 'Ohm.cm',
                 'precision': 1
             }
-        }
-
-    @property
-    def strRho(self):
-        if isIterable(self.rho):
-            s = f'({",".join(f"{x:.2f}" for x in self.rho)})'
-        else:
-            s = f'{self.rho:.0f}'
-        return f'{s}{self.inputs()["rho"]["unit"]}'
-
-    def filecodes(self):
-        return {
-            **ExtracellularSource.filecodes(self), **CurrentSource.filecodes(self),
-            'rho': self.strRho.replace(',', '_').replace('(', '').replace(')', '')
         }
 
     def conductance(self, d):
@@ -536,10 +429,6 @@ class ExtracellularCurrent(ExtracellularSource, CurrentSource):
         xnodes = fiber.getXZCoords()['node']  # fiber nodes coordinates
         i_closestnode = self.euclidianDistance(xnodes).argmin()  # index of closest fiber node
         return self.Iext(Ve, self.vectorialDistance(xnodes[i_closestnode]))  # A
-
-    @property
-    def quickcode(self):
-        return f'{self.key}_{ExtracellularSource.quickcode.fget(self)}'
 
 
 class VoltageSource(XSource):
@@ -591,13 +480,13 @@ class VoltageSource(XSource):
             'Ve': {
                 'desc': 'extracellular voltage amplitude',
                 'label': 'Ve',
-                'unit': 'mV',
+                'unit': 'V',
+                'factor': 1e-3,
                 'precision': 1
             },
             'mode': {
                 'desc': 'polarity mode',
                 'label': 'mode',
-                'unit': '',
             }
         }
 
@@ -608,14 +497,6 @@ class VoltageSource(XSource):
     @xvar.setter
     def xvar(self, value):
         self.Ve = value
-
-    def Vstr(self):
-        return f'{self.Ve:.1f} {self.inputs()["Ve"]["unit"]}'
-
-    def filecodes(self):
-        unit = self.inputs()["Ve"]["unit"]
-        prefix = si_format(1 / self.conv_factor)[-1]
-        return {'Ve': f'{(self.Ve * self.conv_factor):.2f}{prefix}{unit}'}
 
 
 class GaussianVoltageSource(GaussianSource, VoltageSource):
@@ -628,29 +509,12 @@ class GaussianVoltageSource(GaussianSource, VoltageSource):
         GaussianSource.__init__(self, x0, sigma)
         VoltageSource.__init__(self, Ve, mode=mode)
 
-    def __eq__(self, other):
-        if not isinstance(other, self.__class__):
-            return False
-        for k in ['x0', 'sigma', 'Ve', 'mode']:
-            if getattr(self, k) != getattr(other, k):
-                return False
-        return True
-
-    def __repr__(self):
-        s = f'{GaussianSource.__repr__(self)[:-1]}, {self.mode}'
-        if self.Ve is not None:
-            s = f'{s}, {self.Vstr()}'
-        return f'{s})'
-
     def copy(self):
         return self.__class__(self.x0, self.sigma, Ve=self.Ve, mode=self.mode)
 
     def computeDistributedAmps(self, fiber):
         return {k: v * self.conv_factor
-                for k, v in GaussianSource.computeDistributedAmps(self, fiber)}
-
-    def filecodes(self):
-        return {**GaussianSource.filecodes(self), **VoltageSource.filecodes(self)}
+                for k, v in GaussianSource.computeDistributedAmps(self, fiber).items()}
 
     @staticmethod
     def inputs():
@@ -688,27 +552,18 @@ class AcousticSource(XSource):
                 'desc': 'US drive frequency',
                 'label': 'f',
                 'unit': 'Hz',
-                'factor': HZ_TO_KHZ,
                 'precision': 0
             }
         }
 
-    def filecodes(self):
-        return {'f': f'{self.f * HZ_TO_KHZ:.0f}kHz'}
 
-    @property
-    def quickcode(self):
-        return f'f{si_format(self.f, 0, space="")}{self.inputs()["f"]["unit"]}'
+class AbstractAcousticSource(AcousticSource):
 
-
-class SectionAcousticSource(SectionSource, AcousticSource):
-
-    def __init__(self, sec_id, f, A=None):
+    def __init__(self, f, A=None):
         ''' Constructor.
 
             :param A: Acoustic amplitude (Pa)
         '''
-        SectionSource.__init__(self, sec_id)
         AcousticSource.__init__(self, f)
         self.A = A
 
@@ -731,134 +586,57 @@ class SectionAcousticSource(SectionSource, AcousticSource):
     def xvar(self, value):
         self.A = value
 
-    def __eq__(self, other):
-        if not isinstance(other, self.__class__):
-            return False
-        for k in ['sec_id', 'f', 'A']:
-            if getattr(self, k) != getattr(other, k):
-                return False
-        return True
+    def copy(self):
+        return self.__class__(self.f, A=self.A)
 
-    def __repr__(self):
-        s = f'{SectionSource.__repr__(self)[:-1]}, {si_format(self.f, 1, space="")}Hz'
-        if self.A is not None:
-            s = f'{s}, {si_format(self.A, 1, space="")}Pa'
-        return f'{s})'
+    @staticmethod
+    def inputs():
+        return {
+            **AcousticSource.inputs(),
+            'A': {
+                'desc': 'US pressure amplitude',
+                'label': 'A',
+                'unit': 'Pa',
+                'precision': 2
+            }
+        }
+
+    def computeMaxNodeAmp(self, fiber):
+        return self.A
+
+
+class SectionAcousticSource(SectionSource, AbstractAcousticSource):
+
+    def __init__(self, sec_id, f, A=None):
+        SectionSource.__init__(self, sec_id)
+        AbstractAcousticSource.__init__(self, f, A=A)
 
     def computeDistributedAmps(self, fiber):
         return SectionSource.computeDistributedAmps(self, fiber)
-
-    def filecodes(self):
-        return {
-            **SectionSource.filecodes(self), **AcousticSource.filecodes(self),
-            'A': f'{(self.A * self.conv_factor):.2f}kPa'
-        }
-
-    @property
-    def quickcode(self):
-        return '_'.join([
-            AcousticSource.quickcode.fget(self),
-            SectionSource.quickcode.fget(self)
-        ])
 
     def copy(self):
         return self.__class__(self.sec_id, self.f, A=self.A)
 
     @staticmethod
     def inputs():
-        return {
-            **SectionSource.inputs(), **AcousticSource.inputs(),
-            'A': {
-                'desc': 'US pressure amplitude',
-                'label': 'A',
-                'unit': 'kPa',
-                'factor': PA_TO_KPA,
-                'precision': 2
-            }
-        }
-
-    def computeMaxNodeAmp(self, fiber):
-        return self.A
+        return {**SectionSource.inputs(), **AbstractAcousticSource.inputs()}
 
 
-class GaussianAcousticSource(GaussianSource, AcousticSource):
+class GaussianAcousticSource(GaussianSource, AbstractAcousticSource):
 
     def __init__(self, x0, sigma, f, A=None):
-        ''' Constructor.
-
-            :param A: Acoustic amplitude (Pa)
-        '''
         GaussianSource.__init__(self, x0, sigma)
-        AcousticSource.__init__(self, f)
-        self.A = A
-
-    @property
-    def A(self):
-        return self._A
-
-    @A.setter
-    def A(self, value):
-        if value is not None:
-            value = self.checkFloat('A', value)
-            self.checkPositiveOrNull('A', value)
-        self._A = value
-
-    @property
-    def xvar(self):
-        return self.A
-
-    @xvar.setter
-    def xvar(self, value):
-        self.A = value
-
-    def __eq__(self, other):
-        if not isinstance(other, self.__class__):
-            return False
-        for k in ['x0', 'sigma', 'f', 'A']:
-            if getattr(self, k) != getattr(other, k):
-                return False
-        return True
-
-    def __repr__(self):
-        s = f'{GaussianSource.__repr__(self)[:-1]}, {si_format(self.f, 1, space="")}Hz'
-        if self.A is not None:
-            s = f'{s}, {si_format(self.A, 1, space="")}Pa'
-        return f'{s})'
+        AbstractAcousticSource.__init__(self, f, A=A)
 
     def computeDistributedAmps(self, fiber):
         return GaussianSource.computeDistributedAmps(self, fiber)
-
-    def filecodes(self):
-        codes = {**GaussianSource.filecodes(self), **AcousticSource.filecodes(self)}
-        if self.A is not None:
-            codes['A'] = f'{(self.A * self.conv_factor):.2f}kPa'
-        return codes
-
-    @property
-    def quickcode(self):
-        return '_'.join([
-            AcousticSource.quickcode.fget(self),
-            GaussianSource.quickcode.fget(self)
-        ])
 
     def copy(self):
         return self.__class__(self.x0, self.sigma, self.f, A=self.A)
 
     @staticmethod
     def inputs():
-        return {
-            **GaussianSource.inputs(), **AcousticSource.inputs(),
-            'A': {
-                'desc': 'US pressure amplitude',
-                'label': 'A',
-                'unit': 'kPa',
-                'factor': PA_TO_KPA,
-                'precision': 2
-            }
-        }
-
-    def computeMaxNodeAmp(self, fiber):
-        return self.A
+        return {**GaussianSource.inputs(), **AbstractAcousticSource.inputs()}
 
 
 class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
@@ -887,12 +665,6 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
         self.u = u
         AcousticSource.__init__(self, f)
         ExtracellularSource.__init__(self, x)
-
-    def __repr__(self):
-        s = f'{ExtracellularSource.__repr__(self)[:-1]}, {si_format(self.f, 1, space="")}Hz'
-        if self.u is not None:
-            s = f'{s}, {si_format(self.u, 1, space="")}m/s'
-        return f'{s})'
 
     @property
     def x(self):
@@ -961,17 +733,17 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
         ''' Angular wave number. '''
         return 2 * np.pi * self.f / self.c
 
+    @property
+    def xvar(self):
+        return self.u
+
+    @xvar.setter
+    def xvar(self, value):
+        self.u = value
+
     def copy(self):
         return self.__class__(self.x, self.f, self.u, rho=self.rho, c=self.c,
                               r=self.r, theta=self.theta)
-
-    def __eq__(self, other):
-        if not isinstance(other, self.__class__):
-            return False
-        for k in ['x', 'y', 'z', 'f', 'u', 'rho', 'c', 'r', 'theta']:
-            if getattr(self, k) != getattr(other, k):
-                return False
-        return True
 
     @staticmethod
     def inputs():
@@ -992,7 +764,8 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
             'rho': {
                 'desc': 'medium density',
                 'label': 'rho',
-                'unit': 'kg/m3',
+                'unit': 'g/m3',
+                'factor': 1e3,
                 'precision': 1
             },
             'c': {
@@ -1009,36 +782,6 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
                 'precision': 1
             }
         }
-
-    def filecodes(self):
-        d = {
-            **ExtracellularSource.filecodes(self),
-            'r': f'{si_format(self.r, 2, space="")}{self.inputs()["r"]["unit"]}',
-            'theta': f'{self.theta:.0f}{self.inputs()["theta"]["unit"]}',
-            'rho': f'{self.rho:.0f}{self.inputs()["rho"]["unit"]}',
-            'c': f'{self.c:.0f}{self.inputs()["c"]["unit"]}',
-            **AcousticSource.filecodes(self)}
-        if self.u is not None:
-            d['u'] = f'{self.u:.0f}{self.inputs()["u"]["unit"]}'
-        for k, v in d.items():
-            d[k] = v.replace('/', '_per_')
-        return d
-
-    @property
-    def quickcode(self):
-        return '_'.join([
-            AcousticSource.quickcode.fget(self),
-            f'r{si_format(self.r, 2, space="")}{self.inputs()["r"]["unit"]}',
-            ExtracellularSource.quickcode.fget(self)
-        ])
-
-    @property
-    def xvar(self):
-        return self.u
-
-    @xvar.setter
-    def xvar(self, value):
-        self.u = value
 
     def distance(self, x):
         return np.linalg.norm(np.asarray(x) - np.asarray(self.xz))
@@ -1202,7 +945,7 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
 
         # Compute amplitudes
         node_amps = self.DPSM2d(node_xcoords, np.array([0]))
-        return node_amps.ravel()   # Pa
+        return {'node': node_amps.ravel()}   # Pa
 
     def computeMaxNodeAmp(self, fiber):
         return max(self.computeDistributedAmps(fiber))  # Pa

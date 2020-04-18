@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-17 12:19:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-18 13:28:54
+# @Last Modified time: 2020-04-18 15:20:20
 
 import numpy as np
 
@@ -87,10 +87,10 @@ class StrengthDurationBatch(LogBatch):
         self._out_keys = value
 
     def sourcecode(self):
-        code = self.source.quickcode
-        if hasattr(self.source, 'sec_id') and self.source.sec_id == self.fiber.central_ID:
-            code = code.replace(self.source.sec_id, 'centralnode')
-        return code
+        codes = self.source.filecodes
+        if ['sec_id'] in codes and self.source.sec_id == self.fiber.central_ID:
+            codes['sec_id'] = 'centralnode'
+        return f'{source.key}{"_".join(codes.values())}'
 
     def corecode(self):
         return f'{self.fiber.modelcode}_{self.sourcecode()}'
@@ -141,7 +141,9 @@ class StrengthDistanceBatch(LogBatch):
         self._out_keys = value
 
     def sourcecode(self):
-        return f'{self.source.key}_x{self.source.x[0] * M_TO_MM:.1f}mm'
+        codes = self.source.filecodes
+        codes['x'] = f'{self.source.x[0] * M_TO_MM:.1f}mm'
+        return f'{source.key}{"_".join(codes.values())}'
 
     def corecode(self):
         return f'{self.fiber.modelcode}_{self.sourcecode()}'

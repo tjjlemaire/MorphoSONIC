@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-08 17:12:18
+# @Last Modified time: 2020-04-18 15:38:15
 
 import numpy as np
 
@@ -195,7 +195,7 @@ class UnmyelinatedFiber(SingleCableFiber):
     lindep_NodeL_thr = lambda _, x: 16.3 * x + 9.1e-6  # fiber diameter dependent max. node length
     fiberL_thr = 3e-3                                  # minimal fiber length
 
-    def __init__(self, fiberD, nnodes=None, fiberL=5e-3, maxNodeL=None):
+    def __init__(self, fiberD, nnodes=None, fiberL=5e-3, maxNodeL=None, **kwargs):
         ''' Initialization.
 
             :param fiberD: fiber outer diameter (m)
@@ -219,4 +219,4 @@ class UnmyelinatedFiber(SingleCableFiber):
         self.nodeL = fiberL / nnodes
 
         # Initialize with correct number of nodes
-        super().__init__(fiberD, nnodes)
+        super().__init__(fiberD, nnodes, **kwargs)
