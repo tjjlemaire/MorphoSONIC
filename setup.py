@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-04 16:47:56
+# @Last Modified time: 2020-04-21 11:50:10
 # -*- coding: utf-8 -*-
 # @Author: Theo Lemaire
 # @Date:   2017-06-13 09:40:02
@@ -65,7 +65,8 @@ setup(
     install_requires=[
         'numpy>=1.10',
         'matplotlib>=2'
-        'pandas>=0.21'
+        'pandas>=0.21',
+        'boltons>=20.1.0'
     ],
     zip_safe=False
 )

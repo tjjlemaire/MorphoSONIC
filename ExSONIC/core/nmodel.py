@@ -3,17 +3,18 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-18 14:38:33
+# @Last Modified time: 2020-04-21 12:20:00
 
 import abc
 from neuron import h
 import numpy as np
 import pandas as pd
 from scipy import stats
+from boltons.strutils import cardinalize
 
 from PySONIC.core import Model, PointNeuron
 from PySONIC.postpro import detectSpikes, prependDataFrame
-from PySONIC.utils import logger, si_format, plural, filecode, simAndSave, isIterable
+from PySONIC.utils import logger, si_format, filecode, simAndSave, isIterable
 from PySONIC.constants import *
 from PySONIC.threshold import threshold, titrate, getStartPoint
 
@@ -888,7 +889,7 @@ class FiberNeuronModel(SpatiallyExtendedNeuronModel):
         return f'fiberD = {si_format(self.fiberD, 1)}m'
 
     def str_nodes(self):
-        return f'{self.nnodes} node{plural(self.nnodes)}'
+        return f'{self.nnodes} {cardinalize("node", self.nnodes)}'
 
     def __repr__(self):
         return f'{self.__class__.__name__}({self.str_geometry()}, {self.str_nodes()})'
@@ -910,7 +911,7 @@ class FiberNeuronModel(SpatiallyExtendedNeuronModel):
         return {
             'simkey': self.simkey,
             'fiberD': f'fiberD{(self.fiberD * M_TO_UM):.1f}um',
-            'nnodes': f'{self.nnodes}node{plural(self.nnodes)}',
+            'nnodes': self.str_nodes().replace(' ', '')
         }
 
     def filecodes(self, source, pp, *args):

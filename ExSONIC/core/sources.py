@@ -3,13 +3,14 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-18 15:21:34
+# @Last Modified time: 2020-04-21 12:19:44
 
 import abc
 import numpy as np
 from scipy.optimize import brentq
 
-from PySONIC.utils import si_format, rotAroundPoint2D, StimObject, gaussian, isIterable
+from PySONIC.utils import rotAroundPoint2D, gaussian, isIterable
+from PySONIC.core.stimobj import StimObject
 from PySONIC.core.drives import *
 
 from .grids import getCircle2DGrid
