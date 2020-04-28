@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-08 17:16:47
+# @Last Modified time: 2020-04-22 13:19:47
 
 from PySONIC.core import PointNeuron, ElectricDrive
 from PySONIC.utils import logger

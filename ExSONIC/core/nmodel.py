@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-21 12:20:00
+# @Last Modified time: 2020-04-24 17:27:55
 
 import abc
 from neuron import h

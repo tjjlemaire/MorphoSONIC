@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-17 12:19:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-18 15:20:20
+# @Last Modified time: 2020-04-28 15:34:46
 
 import numpy as np
 
@@ -294,10 +294,11 @@ class CoverageTitrationBatch(LogBatch):
         self._out_keys = value
 
     def corecode(self):
-        return f'{self.model_key}_{self.source}'
+        return f'{self.model_key}_{"_".join(self.source.filecodes.values())}'
 
     def run(self):
-        logger.info(f'Computing fs-dependent thresholds for {self.model_key} model with {self.source}')
+        logger.info(
+            f'Computing fs-dependent thresholds for {self.model_key} model with {self.source}')
         return super().run()
 
     def compute(self, fs):
