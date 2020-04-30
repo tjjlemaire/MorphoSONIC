@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-24 17:27:55
+# @Last Modified time: 2020-04-30 17:14:49
 
 import abc
 from neuron import h
@@ -16,7 +16,7 @@ from PySONIC.core import Model, PointNeuron
 from PySONIC.postpro import detectSpikes, prependDataFrame
 from PySONIC.utils import logger, si_format, filecode, simAndSave, isIterable
 from PySONIC.constants import *
-from PySONIC.threshold import threshold, titrate, getStartPoint
+from PySONIC.threshold import threshold, titrate, Thresholder
 
 from .pyhoc import *
 from .sources import *
@@ -739,7 +739,7 @@ class SpatiallyExtendedNeuronModel(NeuronModel):
 
     def getStartPoint(self, Arange):
         scale = 'lin' if Arange[0] == 0 else 'log'
-        return getStartPoint(Arange, x=REL_START_POINT, scale=scale)
+        return Thresholder.getStartPoint(Arange, x=REL_START_POINT, scale=scale)
 
     def getAbsConvThr(self, Arange):
         return np.abs(Arange[1] - Arange[0]) / 1e4

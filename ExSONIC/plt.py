@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-05 17:21:09
+# @Last Modified time: 2020-04-30 17:16:13
 
 import numpy as np
 import matplotlib as mpl
@@ -21,10 +21,10 @@ from .constants import *
 class SectionGroupedTimeSeries(GroupedTimeSeries):
     ''' Plot the time evolution of grouped variables in a specific section. '''
 
-    def __init__(self, section_id, filepaths, pltscheme=None):
+    def __init__(self, section_id, outputs, pltscheme=None):
         ''' Constructor. '''
         self.section_id = section_id
-        super().__init__(filepaths, pltscheme=pltscheme)
+        super().__init__(outputs, pltscheme=pltscheme)
 
     @staticmethod
     def getModel(meta):
@@ -96,7 +96,7 @@ class SectionCompTimeSeries(CompTimeSeries):
 
     def checkColors(self, colors):
         if colors is None:
-            nlevels = len(self.filepaths)
+            nlevels = self.nouts
             if nlevels < 4:
                 colors = [f'C{i}' for i in range(nlevels)]
             else:
