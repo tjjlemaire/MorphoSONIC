@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-30 21:40:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-10 18:25:06
+# @Last Modified time: 2020-05-08 14:45:15
 
 import numpy as np
 
@@ -290,6 +290,12 @@ def addSonicFeatures(Base):
 
     # Correct class name for consistency with input class
     SonicClass.__name__ = f'{Base.__name__}'
+
+    # Add original class as an attribute of the new decorated class (with modified simkey)
+    class Original(Base):
+        simkey = f'original_{Base.simkey}'
+    Original.__name__ = f'Original{Base.__name__}'
+    SonicClass.__original__ = Original
 
     # Return SONIC-enabled class
     return SonicClass

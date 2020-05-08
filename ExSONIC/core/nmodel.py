@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-30 17:14:49
+# @Last Modified time: 2020-05-07 16:17:47
 
 import abc
 from neuron import h
@@ -413,7 +413,15 @@ class NeuronModel(metaclass=abc.ABCMeta):
         return titrate(self, *args, **kwargs)
 
     def getPltVars(self, *args, **kwargs):
-        return self.pneuron.getPltVars(*args, **kwargs)
+        return {
+            **self.pneuron.getPltVars(*args, **kwargs),
+            'Vext': {
+                'desc': 'extracellular potential',
+                'label': 'V_{ext}',
+                'unit': 'mV',
+                'strictbounds': (-200, 200)
+            }
+        }
 
     @property
     def pltScheme(self):

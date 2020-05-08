@@ -1,7 +1,52 @@
-TITLE Custom extracellular mechanism as point process
+TITLE One-layer custom extracellular mechanism
 
 COMMENT
-Custom implementation of the extracellular mechanism.
+Custom implementation of the extracellular mechanism with one layer (representing the periaxonal space).
+
+From "treeset.c"
+
+The current balance equations are sum of outward currents = sum of inward currents
+
+For an internal node:
+
+cm*dvm/dt + i(vm) = is(vi) + ai_j*(vi_j - vi)
+
+For an external node (one layer):
+
+cx*dvx/dt + gx*(vx - ex) = cm*dvm/dt + i(vm) + ax_j*(vx_j - vx)
+
+where vm = vi - vx, and every term has the dimensions mA/cm2.
+
+The implicit linear form for the compartment internal node is:
+cm/dt*(vmnew - vmold) + (di/dvm*(vmnew - vmold) + i(vmold))
+    = (dis/dvi*(vinew - viold) + is(viold)) + ai_j*(vinew_j - vinew)
+
+and for the compartment external node is:
+
+cx/dt*(vxnew - vxold) - gx(vxnew - ex)
+    = cm/dt*(vmnew - vmold) + (di/dvm*(vmnew - vmold) + i(vmold))
+    + ax_j*(vxnew_j - vxnew) = 0
+
+and this forms the matrix equation row (for an internal node):
+
+    (cm/dt + di/dvm - dis/dvi + ai_j)*vinew
+    - ai_j*vinew_j
+    -(cm/dt + di/dvm)*vxnew
+    =
+    cm/dt*vmold + di/dvm*vmold - i(vmold) - dis/dvi*viold + is(viold)
+
+where old is present value of vm, vi, or vx and new will be found by solving this matrix
+equation (which is of the form G*v = rhs).
+
+
+cx*dvx/dt + gx*(vx - ex) = iax + iperiax
+-> cx/dt * dvx + gx * (vx - ex) = iax + iperiax
+-> cx/dt * (vxnew - vxold) + gx * (vxnew - ex) = iax + iperiax
+-> cx/dt * vxnew - cx/dt * vxold + gx * vxnew - gx * ex = iax + iperiax
+-> (cx/dt + gx) * vxnew - cx/dt * vxold - gx * ex = iax + iperiax
+-> (cx/dt + gx) * vxnew = iax + iperiax + gx * ex + cx/dt * vxold
+-> (cx/dt + gx) * vxnew = iax + iperiax + gx * ex + cx/dt * vxold
+-> vxnew = (iax + iperiax + gx * ex + cx/dt * vxold) / (cx/dt + gx)
 
 @Author: Theo Lemaire, EPFL
 @Date:   2020-04-22
@@ -11,118 +56,55 @@ ENDCOMMENT
 DEFINE MAX_CON 2  : max number of axial connections
 
 NEURON  {
-    POINT_PROCESS custom_extracellular
-    RANGE xg, xc, xr, xrother0, xrother1, e_extracellular, NLEVELS
-    POINTER Vother, Vextother, iax
-}
-
-CONSTANT {
-    MA_CM2_TO_UA_CM2 = 1e3
+    POINT_PROCESS ext
+    RANGE xr, xg, xc, Am, xrother, e_extracellular, V0
+    POINTER Vother, iax
 }
 
 PARAMETER {
-    NLEVELS
-    xg[2]              (S/cm2)
-    xc[2]              (uF/cm2)
-    xr[2]              (ohm)
-    xrother0[MAX_CON]  (ohm)
-    xrother1[MAX_CON]  (ohm)
-    e_extracellular    (mV)
-    Am                 (cm2)
+    xr                (ohm)
+    xg                (S/cm2)
+    xc                (uF/cm2)
+    Am                (cm2)
+    xrother[MAX_CON]  (ohm)
+    e_extracellular   (mV)
 }
 
 ASSIGNED {
+    V0             (mV)
+    tlast          (ms)
+    mydt           (ms)
+    gc             (S/cm2)
+    V0old          (mV)
     Vother         (mV)
-    Vextother      (mV)
     iax            (nA)
     iaxdensity     (mA/cm2)
-    ixraxial[2]    (mA/cm2)
-    itransverse[2] (mA/cm2)
+    ixraxial       (mA/cm2)
+    itransverse    (mA/cm2)
 }
 
-STATE {
-    V0      (mV)
-    V1      (mV)
+PROCEDURE updateV0() {
+    currents()
+    mydt = t - tlast
+    gc = xc * 1e-3 / mydt
+    tlast = t
+    V0old = V0
+    V0 = (gc * V0old + xg * e_extracellular - iaxdensity) / (gc + xg)
+    :printf("t = %.3f ms, mydt = %.3f ms, xc = %.3e uF/cm2, gc = %.3e S/cm2, xg = %.3e S/cm2 \n", t, mydt, xc, gc, xg)
+}
+
+PROCEDURE currents() {
+    iaxdensity = iax * 1e-6 / Am
+    :itransverse = xg * (V0 - e_extracellular)
+    ixraxial = 0
+    FROM i=0 TO MAX_CON-1 {
+        ixraxial = ixraxial + (V0 - get_Vother(i)) / (xr + xrother[i])
+    }
+    ixraxial = 2 * ixraxial / Am
 }
 
 BREAKPOINT {
-    SOLVE states METHOD cnexp
+    updateV0()
 }
-
-INITIAL {
-    if (NLEVELS == 0) {
-        V0 = e_extracellular
-        V1 = 0.
-    }
-    else {
-        if (NLEVELS == 1) {
-            V0 = e_extracellular
-            :V0 = e_extracellular + (ixraxial[0]) / xg[0]
-            V1 = 0
-        }
-        else {
-            V0 = 0
-            V1 = 0
-        }
-    }
-}
-
-DERIVATIVE states {
-    if (NLEVELS == 0) {
-        currents0()
-        V1' = 0
-        V0' = (e_extracellular - V0) * 1e6 :-itransverse[0] * 1e3
-    } else {
-        if (NLEVELS == 1) {
-            currents1()
-            :V0' = (iaxdensity + ixraxial[0] + itransverse[0]) / xc[0] * 1e3
-            V1' = 0
-            V0' = -itransverse[0] * 1e3
-            :V0' = -xg[0] * (V0 - e_extracellular) / xc[0] * 1e-3
-        }
-        else {
-            currents2()
-            V1' = (iaxdensity + ixraxial[0] + ixraxial[1] + itransverse[1]) / xc[1] * 1e3
-            V0' = (iaxdensity + ixraxial[0] + itransverse[0]) / xc[0] * 1e3 + V1'
-        }
-    }
-}
-
-
-PROCEDURE currents0() {
-    itransverse[0] = xg[0] * (V0 - e_extracellular)
-    iaxdensity = 0
-    ixraxial[0] = 0
-    ixraxial[1] = 0
-    itransverse[1] = 0
-}
-
-PROCEDURE currents1() {
-    itransverse[0] = xg[0] * (V0 - e_extracellular)
-    iaxdensity = iax * 1e-6 / Am
-    ixraxial[0] = 0
-    FROM i=0 TO MAX_CON-1 {
-        ixraxial[0] = ixraxial[0] + (V0 - get_Vother(i)) / (xr[0] + xrother0[i])
-    }
-    ixraxial[0] = 2 * ixraxial[0] / Am
-    ixraxial[1] = 0
-    itransverse[1] = 0
-}
-
-PROCEDURE currents2() {
-    itransverse[0] = xg[0] * (V0 - V1)
-    iaxdensity = iax * 1e-6 / Am
-    ixraxial[0] = 0
-    ixraxial[1] = 0
-    FROM i=0 TO MAX_CON-1 {
-        ixraxial[0] = ixraxial[0] + (V0 - get_Vother(i)) / (xr[0] + xrother0[i])
-        ixraxial[1] = ixraxial[1] + (V1 - get_Vextother(i)) / (xr[1] + xrother1[i])
-    }
-    ixraxial[0] = 2 * ixraxial[0] / Am
-    ixraxial[1] = 2 * ixraxial[1] / Am
-    itransverse[1] = xg[1] * (V1 - e_extracellular)
-}
-
 
 INCLUDE "Vother.inc"
-INCLUDE "Vextother.inc"

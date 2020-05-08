@@ -3,14 +3,14 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-27 12:36:36
+# @Last Modified time: 2020-05-08 15:28:21
 
 ''' Utilities to manipulate HOC objects. '''
 
 import numpy as np
 from neuron import h, hclass
 
-from PySONIC.utils import logger
+from PySONIC.utils import logger, isWithin
 from ..utils import load_mechanisms, getNmodlDir
 from ..constants import *
 
@@ -206,6 +206,9 @@ class Section(hclass(h.Section)):
         ''' Set the extracellular potential just outside of a section. '''
         self.e_extracellular = Ve
 
+    def setVextProbe(self):
+        return Probe(self(0.5)._ref_vext[0])
+
     def connect(self, parent):
         ''' Connect proximal end to the distal end of a parent section.
 
@@ -382,7 +385,10 @@ class MechSection(Section):
 
             :return: probes object dictionary
         '''
-        return {k: self.setMechProbe(self.alias(k)) for k in self.states}
+        d = {k: self.setMechProbe(self.alias(k)) for k in self.states}
+        if self.has_ext_mech:
+            d['Vext'] = self.setVextProbe()
+        return d
 
 
 class MechVSection(MechSection, VSection):
@@ -436,6 +442,8 @@ class CustomConnectMechQSection(MechQSection):
             self.vref = f'{cs.vref}_{self.mechname}'
         self.rmin = cs.rmin
         self.iax = None
+        self.ext = None
+        self.parent_ref = None
 
     def setResistivity(self, value):
         ''' Set appropriate section's resistivity based on connection scheme.
@@ -464,6 +472,9 @@ class CustomConnectMechQSection(MechQSection):
             logger.debug(s)
         return R
 
+    def insertPassiveMech(self, g, Erev):
+        raise NotImplementedError
+
     def getVrefValue(self, **kwargs):
         ''' Get the value of the section's reference voltage variable used to compute
             intracellular currents.
@@ -480,8 +491,35 @@ class CustomConnectMechQSection(MechQSection):
         # Return axial current point-process set to current section
         return Iax(self, R)
 
-    def attachExtracellular(self, *args):
-        return Extracellular(self, *args)
+    def connectIntracellular(self, parent):
+        ''' Connect the intracellular layers of a section and its parent. '''
+        # Inform sections about each other's axial resistance
+        parent.iax.Rother[1] = self.iax.R  # Ohm
+        self.iax.Rother[0] = parent.iax.R  # Ohm
+
+        # Set bi-directional pointers to sections about each other's membrane potential
+        parent.iax.set_Vother(1, self.getVrefValue(x=0.5))  # mV
+        self.iax.set_Vother(0, parent.getVrefValue(x=0.5))  # mV
+
+    def connectExtracellular(self, parent):
+        ''' Connect the extracellular layers of a section and its parent. '''
+        # Inform sections about each other's extracellular axial resistances
+        parent.ext.xrother[1] = self.ext.xr  # Ohm
+        self.ext.xrother[0] = parent.ext.xr  # Ohm
+
+        # Set bi-directional pointers to sections about each other's extracellular potential
+        parent.iax.set_Vextother(1, self.ext._ref_V0)  # mV
+        self.iax.set_Vextother(0, parent.ext._ref_V0)  # mV
+
+        # Set pointers to neighbor extracellular potentials in this point-process
+        parent.ext.set_Vother(1, self.ext._ref_V0)  # mV
+        self.ext.set_Vother(0, parent.ext._ref_V0)  # mV
+
+    def has_parent(self):
+        return self.parent_ref is not None
+
+    def parent(self):
+        return self.parent_ref.sec
 
     def connect(self, parent):
         ''' Connect to a parent section in series to enable trans-sectional axial current. '''
@@ -489,32 +527,13 @@ class CustomConnectMechQSection(MechQSection):
             if sec.iax is None:
                 sec.iax = sec.attachIax()
 
-        # Inform sections about each other's axial resistance (in Ohm)
-        parent.iax.Rother[1] = self.iax.R
-        self.iax.Rother[0] = parent.iax.R
-
-        # Set bi-directional pointers to sections about each other's membrane potential
-        parent.iax.set_Vother(1, self.getVrefValue(x=0.5))
-        self.iax.set_Vother(0, parent.getVrefValue(x=0.5))
-
-        # If both sections have extracellular mechanisms
+        # Connect intracellular and extracellular (if any) layers between the two sections
+        self.connectIntracellular(parent)
         if self.has_ext_mech and parent.has_ext_mech:
-            # Inform sections about each other's extracellular axial resistances (in Ohm)
-            parent.ext.xrother0[1] = self.ext.xr[0]
-            parent.ext.xrother1[1] = self.ext.xr[1]
-            self.ext.xrother0[0] = parent.ext.xr[0]
-            self.ext.xrother1[0] = parent.ext.xr[1]
+            self.connectExtracellular(parent)
 
-            # Set bi-directional pointers to sections about each other's extracellular potential
-            parent.iax.set_Vextother(1, self.ext._ref_V0)
-            self.iax.set_Vextother(0, parent.ext._ref_V0)
-
-        # Register sections to one another
-        self.parent = parent
-        parent.child = self
-
-    def insertPassiveMech(self, g, Erev):
-        raise NotImplementedError
+        # Register parent section
+        self.parent_ref = h.SectionRef(sec=parent)
 
     def insertVext(self, xr=1e20, xg=1e10, xc=0.):
         ''' Insert extracellular mechanism with specific parameters.
@@ -523,13 +542,27 @@ class CustomConnectMechQSection(MechQSection):
             :param xg: transverse conductance of first extracellular layer (S/cm2)
             :param xc: transverse capacitance of first extracellular layer (uF/cm2)
         '''
-        self.ext = self.attachExtracellular(xc, xg, xr)
+        # Attach extracellular point-process
+        self.ext = Extracellular(self, xr, xg, xc)
+
+        # If section has an axial point-process (meaning that it is connected)
+        if self.iax is not None:
+            # Assign pointers bidirectionally between axial and extracellular point processes.
+            self.iax.setVextPointer(self.ext._ref_V0)
+            self.ext.setIaxPointer(self.iax._ref_iax)
+
+            # If section has parent and that parent has an extracellular mechanism
+            if self.has_parent() and self.parent().has_ext_mech:
+                self.connectExtracellular(self.parent())
+
         self.has_ext_mech = True
 
     def setVext(self, Ve):
         ''' Set the extracellular potential just outside of a section. '''
         self.ext.e_extracellular = Ve / self.Cm0
-        self.iax.setVext(self.ext._ref_V0)
+
+    def setVextProbe(self):
+        return Probe(self.ext._ref_V0)
 
 
 class Iax(hclass(h.Iax)):
@@ -549,98 +582,94 @@ class Iax(hclass(h.Iax)):
         super().__init__(sec)
         self.R = R
 
-        # Declare Vother pointer arrays
+        # Set pointer to section's membrane potential
+        self.setVmPointer(sec)
+
+        # Set infinite resistance to (nonexistent) neighboring sections
+        for i in range(MAX_CUSTOM_CON):
+            self.Rother[i] = 1e20    # Ohm
+
+        # Declare Vother and Vextother pointer arrays
         self.declare_Vother()
         self.declare_Vextother()
 
-        # Set pointer to section's membrane potential
-        h.setpointer(sec.getVrefValue(x=0.5), 'V', self)
-
-        # While section not connected: assign infinite resistance and local membrane potential
-        # to (nonexistent) neighboring sections
+        # Set Vother pointers to point towards local membrane potential
         for i in range(MAX_CUSTOM_CON):
-            self.Rother[i] = 1e20    # Ohm
             self.set_Vother(i, sec.getVrefValue(x=0.5))
 
-        # Assign local and neighboring extracellular potentials to ground
-        self.setVext(h._ref_ground)
+        # Set Vext and Vextother pointers to point towards ground
+        self.setVextPointer(h._ref_ground)
         for i in range(MAX_CUSTOM_CON):
             self.set_Vextother(i, h._ref_ground)
 
-    def setVext(self, ref_hocvar):
+    def setVmPointer(self, sec):
+        ''' Set pointer to section's membrane potential. '''
+        h.setpointer(sec.getVrefValue(x=0.5), 'V', self)
+
+    def setVextPointer(self, ref_hocvar):
+        ''' Set pointer to section's extracellular potential. '''
         h.setpointer(ref_hocvar, 'Vext', self)
 
 
-class Extracellular(hclass(h.custom_extracellular)):
+class Extracellular(hclass(h.ext)):
+    ''' Extracellular point-process object. '''
+
+    # Parameters units
+    units = {
+        'xr': 'Ohm',
+        'xg': 'S/cm2',
+        'xc': 'uF/cm2',
+        'Am': 'cm2'
+    }
+
+    # Parameters limits (from extcelln.c)
+    limits = {
+        'xr': (1e-3, 1e21),  # multiplied by 1e6 to have limits in Ohm/cm
+        'xg': (0., 1e15),
+        'xc': (0., 1e15)
+    }
 
     def __new__(cls, sec, *_):
+        ''' Instanciation. '''
         return super(Extracellular, cls).__new__(cls, sec(0.5))
 
     def __init__(self, sec, xr, xg, xc):
+        ''' Initialization.
+
+            :param sec: section object
+            :param xr: axial resistance per unit length of extracellular layer (Ohm/cm)
+            :param xg: transverse conductance of extracellular layer (S/cm2)
+            :param xc: transverse capacitance of extracellular layer (uF/cm2)
+        '''
         super().__init__(sec)
+        # Assign parameters (within limits)
+        self.xr = isWithin('xr', xr, self.limits['xr']) * (sec.L / CM_TO_UM)  # Ohm
+        self.xg = isWithin('xg', xg, self.limits['xg'])                       # S/cm2
+        self.xc = isWithin('xc', xc, self.limits['xc'])                       # uF/cm2
+        self.Am = sec.membraneArea()                                          # cm2
+        self.e_extracellular = 0.                                             # mV
 
-        # Assign provided parameters
-        self.xc[0] = xc                       # uF/cm2
-        self.xg[0] = xg                       # S/cm2
-        self.xr[0] = xr * (sec.L / CM_TO_UM)  # Ohm
+        # Initialize "infinite" neighboring axial resistances" to ensure no longitudinal coupling
+        for i in range(MAX_CUSTOM_CON):
+            self.xrother[i] = 1e20  # Ohm
 
-        # Set remaining parameters
-        self.xg[1] = 1e10                     # S/cm2
-        self.xc[1] = 0                        # uF/cm2
-        self.xr[1] = 1e20 * sec.L / CM_TO_UM  # Ohm
-        self.Am = sec.membraneArea()          # cm2
-        self.e_extracellular = 0.             # mV
+        # Set intracellular axial current pointer towards zero value
+        self.setIaxPointer(h._ref_ground)  # nA
 
-        # Determine number of extracellular levels
-        self.NLEVELS = 1
-
-        # Declare Vother pointer arrays
+        # Declare Vother pointer array and point them towards local extracellular voltage
         self.declare_Vother()
-        self.declare_Vextother()
-
-        # Assign infinite extracellular resistance to (nonexistent) neighboring sections
         for i in range(MAX_CUSTOM_CON):
-            self.xrother0[i] = 1e20  # Ohm
-            self.xrother1[i] = 1e20  # Ohm
+            self.set_Vother(i, self._ref_V0)  # mV
 
-        # Assign 2 levels neighboring extracellular potentials to local values
-        for i in range(MAX_CUSTOM_CON):
-            self.set_Vother(i, self._ref_V0)     # mV
-            self.set_Vextother(i, self._ref_V1)  # mV
+    def __repr__(self):
+        ''' Object representation. '''
+        params = ', '.join([self.paramStr(k) for k in ['xr', 'xg', 'xc', 'Am']])
+        return f'{self.__class__.__name__}({params})'
 
-        # If section has an axial point-process
-        if sec.iax is not None:
-            # Assign pointers bidirectionally between axial point process and this one.
-            sec.iax.setVext(self._ref_V0)
-            self.setIax(sec.iax._ref_iax)
+    def paramStr(self, key):
+        ''' Return descriptive string for parameter value. '''
+        return f'{key} = {getattr(self, key):.2e} {self.units[key]}'
 
-            # For each connected section
-            for i, k in enumerate(['child', 'parent']):
-                if hasattr(sec, k):
-                    connected_sec = getattr(sec, k)
-
-                    # If the section also has an extracellular mechanism
-                    if connected_sec.has_ext_mech:
-                        # Set pointers to neighboring ext. potentials in axial point-processes
-                        connected_sec.iax.set_Vextother(i, self._ref_V0)
-                        sec.iax.set_Vextother(1 - i, connected_sec.ext._ref_V0)
-
-                        # Inform both sections about each other's extracellular axial reistances
-                        connected_sec.ext.xrother0[i] = self.xr[0]      # Ohm
-                        connected_sec.ext.xrother1[i] = self.xr[1]      # Ohm
-                        self.xrother0[1 - i] = connected_sec.ext.xr[0]  # Ohm
-                        self.xrother1[1 - i] = connected_sec.ext.xr[1]  # Ohm
-
-                        # Set pointers to neighbor extracellular potentials in this point-process
-                        connected_sec.ext.set_Vother(i, self._ref_V0)         # mV
-                        connected_sec.ext.set_Vextother(i, self._ref_V1)      # mV
-                        self.set_Vother(1 - i, connected_sec.ext._ref_V0)     # mV
-                        self.set_Vextother(1 - i, connected_sec.ext._ref_V1)  # mV
-
-        # Otherwise
-        else:
-            # Set axial current of this point-process to point towards zero value
-            self.setIax(h._ref_ground)
-
-    def setIax(self, ref_hocvar):
+    def setIaxPointer(self, ref_hocvar):
+        ''' Set the pointer towards the intracellular axial current (in nA). '''
         h.setpointer(ref_hocvar, 'iax', self)

@@ -3,10 +3,9 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-30 17:16:13
+# @Last Modified time: 2020-05-04 12:35:36
 
 import numpy as np
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 from scipy import signal
 
@@ -14,7 +13,7 @@ from PySONIC.plt import GroupedTimeSeries, CompTimeSeries
 from PySONIC.utils import logger, si_format, getPow10
 
 from .core import *
-from .utils import loadData, chronaxie, extractIndexesFromLabels
+from .utils import loadData, chronaxie
 from .constants import *
 
 
@@ -91,53 +90,8 @@ class SectionCompTimeSeries(CompTimeSeries):
             data = data.loc[(data['t'] >= tmin) & (data['t'] <= tmax)]
         return data, meta
 
-    def getCompLabels(self, comp_values):
-        return np.arange(len(comp_values)), comp_values
-
-    def checkColors(self, colors):
-        if colors is None:
-            nlevels = self.nouts
-            if nlevels < 4:
-                colors = [f'C{i}' for i in range(nlevels)]
-            else:
-                norm = mpl.colors.Normalize(0, nlevels - 1)
-                sm = plt.cm.ScalarMappable(norm=norm, cmap='plasma')
-                sm._A = []
-                colors = [sm.to_rgba(i) for i in range(nlevels)]
-        return colors
-
-    def addLegend(self, fig, ax, handles, labels, fs, color=None, ls=None):
-        nlabels = len(labels)
-        use_cbar_legend = False
-        if nlabels > 3:
-            out = extractIndexesFromLabels(labels)
-            if out is not None:
-                prefix, label_indexes = out
-                sorted_indexes = (np.array(range(nlabels)) + min(label_indexes)).tolist()
-                if label_indexes == sorted_indexes:
-                    use_cbar_legend = True
-        if use_cbar_legend:
-            colors = [h.get_color() for h in handles]
-            cmap = mpl.colors.ListedColormap(colors)
-            bounds = np.arange(nlabels + 1) + 1 + min(label_indexes)
-            ticks = bounds[:-1] + 0.5
-            if nlabels > 10:
-                ticks = [ticks[0], ticks[-1]]
-            norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
-            fig.subplots_adjust(left=0.1, right=0.8, bottom=0.15, top=0.95, hspace=0.5)
-            cbar_ax = fig.add_axes([0.85, 0.15, 0.03, 0.8])
-            cb = mpl.colorbar.ColorbarBase(
-                cbar_ax,
-                cmap=cmap,
-                norm=norm,
-                ticks=ticks,
-                boundaries=bounds,
-                format='%1i'
-            )
-            cbar_ax.tick_params(axis='both', which='both', length=0)
-            cbar_ax.set_title(f'{prefix} index', size=fs)
-        else:
-            super().addLegend(fig, ax, handles, labels, fs, color=None, ls=None)
+    def render(self, *args, cmap='plasma', **kwargs):
+        return super().render(*args, cmap='plasma', **kwargs)
 
 
 def thresholdCurve(fiber, x, thrs, thrs2=None,

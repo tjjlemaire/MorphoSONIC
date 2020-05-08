@@ -38,6 +38,9 @@ This mechanism is useful for simulating the stimulation with extracellular elect
 
 Each layer is composed of axial resistors (referred to as `xraxial[0]` and `xraxial[1]`) representing some level of longitudinal extracellular coupling along a cylindrical shell surrounding the neurite, and a transverse RC circuit composed of a capacitor (namely `xc[0]` and `xc[1]`) and conductor (namely `xg[0]` and `xg[1]`) representing some level of coupling between the extracellular space and the ground. Moreover, a voltage source is introduced in series with the resistor of the second network layer in order to model the time-and-space varying extracellular potential imposed by the user (`e_extracellular`).
 
+In this circuit, axial resistors are specified in units of resistance per unit length (MOhm/cm), and therefore correspond to a longitudinal resistivity (in Ohm.cm) divided by a specific cross-sectional area (in cm2), thus they only need to be integrated along a length separating two nodes in order to yield an absolute resistance value, (in Ohm).
+Oppositely, transverse elements are specified in units per unit area (i.e. uF/cm2 and S/cm2), hence they must be integrated over a given transverse surface area (in cm2) in order to yield an absolute capacitance (in F) and conductance (in S).
+
 Effectively, this additional circuitry introduces 2 additional "extracellular" voltage nodes (referred to as `vext[0]` and `vext[1]`) above each "intracellular" section node (now representing `v + vext[0]`), at which the the voltage equation is solved simultaneously by applying of Kirchoff's law.
 
 ### Governing equations
@@ -46,74 +49,69 @@ Let's write down the governing equations for that cable network (using $xr$ as a
 
 First, we define the **longitudinal and transverse ohmic currents** flowing at each level of the network:
 
-(a) $i_{membrane}(i) = \sum_{ion} g_{ion}\cdot (v_i - E_{ion})$
+(a) $i_{membrane}(v)_i = \sum_{ion} g_{ion}\cdot (v_i - E_{ion})$
 
-(b) $i_{axial}(i) = 2\sum_{j=\{i-1; i+1\}} \frac{(v_i + v_{ext}[0]_i)-(v_j + v_{ext}[0]_j)}{Ra_i + Ra_j}$
+(b) $i_{axial}(v, vext[0])_i = 2\sum_{j=\{i-1; i+1\}} \frac{(v_i + vext[0]_i)-(v_j + vext[0]_j)}{Ra_i + Ra_j}$
 
-(c) $i_{xraxial}[0](i) = 2\sum_{j=\{i-1; i+1\}} \frac{v_{ext}[0]_i - v_{ext}[0]_j}{xr[0]_i +xr[0]_j}$
+(c) $i_{xraxial}[0](vext[0])_i = 2\sum_{j=\{i-1; i+1\}} \frac{vext[0]_i - vext[0]_j}{xr[0]_i +xr[0]_j}$
 
-(d) $i_{transverse}[0](i) = xg[0]_i \cdot (v_{ext}[0]_i - v_{ext}[1]_i)$
+(d) $i_{transverse}[0](vext[0], vext[1])_i = xg[0]_i \cdot (vext[0]_i - vext[1]_i)$
 
-(e) $i_{xraxial}[1](i) = 2\sum_{j=\{i-1; i+1\}} \frac{v_{ext}[1]_i - v_{ext}[1]_j}{xr[1]_i + xr[1]_j}$
+(e) $i_{xraxial}[1](vext[1])_i = 2\sum_{j=\{i-1; i+1\}} \frac{vext[1]_i - vext[1]_j}{xr[1]_i + xr[1]_j}$
 
-(f) $i_{transverse}[1](i) = xg[1]_i \cdot (v_{ext}[1]_i - e_{extracellular, i})$
+(f) $i_{transverse}[1](vext[1], e_{extracellular})_i = xg[1]_i \cdot (vext[1]_i - e_{extracellular, i})$
 
 Then, considering both ohmic and capacitive currents and **applying Kirchoff's law** at each network node, we have the following equations:
 
-(1) $cm_i \frac{d v_i}{dt} = i_{axial}(i) -i_{membrane}(i)$
+(1) $cm_i \frac{d v_i}{dt} = i_{axial}(v, vext[0])_i -i_{membrane}(v)_i$
 
-(2) $-cm_i \frac{d v_i}{dt} + xc[0]_i \frac{d(v_{ext}[0]_i - v_{ext}[1]_i)}{dt} = i_{xraxial}[0](i) + i_{membrane}(i) + i_{transverse}[0](i)$
+(2) $-cm_i \frac{d v_i}{dt} + xc[0]_i \frac{d(vext[0]_i - vext[1]_i)}{dt} = i_{xraxial}[0](vext[0])_i + i_{membrane}(v)_i + i_{transverse}[0](vext[0], vext[1])_i$
 
-(3) $xc[0]_i \frac{d(v_{ext}[1]_i - v_{ext}[0]_i)}{dt} + xc[1]_i \frac{d(v_{ext}[1]_i - ground)}{dt}= i_{xraxial}[1](i) - i_{tranverse}[0](i) + i_{tranverse}[1](i)$
+(3) $xc[0]_i \frac{d(vext[1]_i - vext[0]_i)}{dt} + xc[1]_i \frac{d(vext[1]_i - ground \equiv 0)}{dt} \\ = i_{xraxial}[1](vext[1])_i - i_{transverse}[0](vext[0], vext[1])_i + i_{transverse}[1](vext[1], e_{extracellular})_i$
 
-Interestingly, we can **separate the differences inside the voltage derivatives**, yielding:
+First off, we can **separate the differences inside the voltage derivatives**, yielding:
 
-(1) $cm_i \frac{d v_i}{dt} = i_{axial}(i) -i_{membrane}(i)$
+(1) $cm_i \frac{d v_i}{dt} = i_{axial}(v, vext[0])_i -i_{membrane}(v)_i$
 
-(2) $-cm_i \frac{d v_i}{dt} + xc[0]_i \frac{d v_{ext}[0]_i}{dt} - xc[0]_i \frac{d v_{ext}[1]_i}{dt} = i_{xraxial}[0](i) + i_{membrane}(i) + i_{transverse}[0](i)$
+(2) $-cm_i \frac{d v_i}{dt} + xc[0]_i \frac{d vext[0]_i}{dt} - xc[0]_i \frac{d vext[1]_i}{dt} = i_{xraxial}[0](vext[0])_i + i_{membrane}(v)_i + i_{transverse}[0](vext[0], vext[1])_i$
 
-(3) $(xc[0]_i + xc[1]_i) \frac{d v_{ext}[1]_i}{dt} - xc[0]_i \frac{d v_{ext}[0]_i}{dt} = i_{xraxial}[1](i) - i_{tranverse}[0](i) + i_{tranverse}[1](i)$
+(3) $(xc[0]_i + xc[1]_i) \frac{d vext[1]_i}{dt} - xc[0]_i \frac{d vext[0]_i}{dt} \\ = i_{xraxial}[1](vext[1])_i - i_{transverse}[0](vext[0], vext[1])_i + i_{transverse}[1](vext[1], e_{extracellular})_i$
 
-Interestingly, we notice that terms (2) and (3) both contain the voltage derivatives at the two external nodes, leading to an ill-posed problem. Nonetheless, both terms can be re-arranged in order to **isolate the voltage derivative at the first external node** (down to a capacitance multiplier):
+We notice that terms (2) and (3) both contain the voltage derivatives at the two external nodes, leading to an ill-posed problem.
 
-(1) $cm_i \frac{d v_i}{dt} = i_{axial}(i) -i_{membrane}(i)$
+Nonetheless, both terms can be re-arranged in order to **isolate the voltage derivative at the first external node**:
 
-(2) $xc[0]_i \frac{d v_{ext}[0]_i}{dt} = i_{xraxial}[0](i) + i_{membrane}(i) + i_{transverse}[0](i) + cm_i \frac{d v_i}{dt} + xc[0]_i \frac{d v_{ext}[1]_i}{dt}$
+(1) $cm_i \frac{d v_i}{dt} = i_{axial}(v, vext[0])_i -i_{membrane}(v)_i$
 
-(3) $xc[0]_i \frac{d v_{ext}[0]_i}{dt} = (xc[0]_i + xc[1]_i) \frac{d v_{ext}[1]_i}{dt} - i_{xraxial}[1](i) + i_{tranverse}[0](i) - i_{tranverse}[1](i)$
+(2) $xc[0]_i \frac{d vext[0]_i}{dt} = i_{xraxial}[0](vext[0])_i + i_{membrane}(v)_i + i_{transverse}[0](vext[0], vext[1])_i + cm_i \frac{d v_i}{dt} + xc[0]_i \frac{d vext[1]_i}{dt}$
+
+(3) $xc[0]_i \frac{d vext[0]_i}{dt} \\ = (xc[0]_i + xc[1]_i) \frac{d vext[1]_i}{dt} - i_{xraxial}[1](vext[1])_i + i_{transverse}[0](vext[0], vext[1])_i - i_{transverse}[1](vext[1], e_{extracellular})_i$
 
 Next, we can **equate the right-hand side terms of equations (2) and (3)**, noting that their left-hand side terms are identical:
 
-$i_{xraxial}[0](i) + i_{membrane}(i) + i_{transverse}[0](i) + cm_i \frac{d v_i}{dt} + xc[0]_i \frac{d v_{ext}[1]_i}{dt} = (xc[0]_i + xc[1]_i) \frac{d v_{ext}[1]_i}{dt} - i_{xraxial}[1](i) + i_{tranverse}[0](i) - i_{tranverse}[1](i)$
+$i_{xraxial}[0](vext[0])_i + i_{membrane}(v)_i + i_{transverse}[0](vext[0], vext[1])_i + cm_i \frac{d v_i}{dt} + xc[0]_i \frac{d vext[1]_i}{dt} \\ = (xc[0]_i + xc[1]_i) \frac{d vext[1]_i}{dt} - i_{xraxial}[1](vext[1])_i + i_{transverse}[0](vext[0], vext[1])_i - i_{transverse}[1](vext[1], e_{extracellular})_i$
 
 Owing to some common terms on both sides of the equal sign, we can **simplify the equation** to:
 
-$i_{xraxial}[0](i) + i_{membrane}(i) + cm_i \frac{d v_i}{dt} = xc[1]_i \frac{d v_{ext}[1]_i}{dt} - i_{xraxial}[1](i) - i_{tranverse}[1](i)$
+$i_{xraxial}[0](vext[0])_i + i_{membrane}(v)_i + cm_i \frac{d v_i}{dt} = xc[1]_i \frac{d vext[1]_i}{dt} - i_{xraxial}[1](vext[1])_i - i_{transverse}[1](vext[1], e_{extracellular})_i$
 
 We can then **isolate the voltage derivative at the second external node** (down to a capacitance multiplier):
 
-$xc[1]_i \frac{d v_{ext}[1]_i}{dt} = i_{xraxial}[0](i) + i_{membrane}(i) + cm_i \frac{d v_i}{dt} + i_{xraxial}[1](i) + i_{tranverse}[1](i)$
+$xc[1]_i \frac{d vext[1]_i}{dt} = i_{xraxial}[0](vext[0])_i + i_{membrane}(v)_i + cm_i \frac{d v_i}{dt} + i_{xraxial}[1](vext[1])_i + i_{transverse}[1](vext[1], e_{extracellular})_i$
 
-We end up with the following differential system:
+We obtain the following well-posed differential system:
 
-(1) $\frac{d v_i}{dt} = \frac{i_{axial}(i) -i_{membrane}(i)}{cm_i}$
+(1) $cm_i \frac{d v_i}{dt} = i_{axial}(v, vext[0])_i -i_{membrane}(v)_i$
 
-(2) $\frac{d v_{ext}[0]_i}{dt} = \frac{i_{xraxial}[0](i) + i_{membrane}(i) + i_{transverse}[0](i) + cm_i \frac{d v_i}{dt}}{xc[0]_i} + \frac{d v_{ext}[1]_i}{dt}$
+(2) $xc[0]_i \frac{d vext[0]_i}{dt} = i_{xraxial}[0](vext[0])_i + i_{membrane}(v)_i + i_{transverse}[0](vext[0], vext[1])_i + cm_i \frac{d v_i}{dt} + xc[0]_i \frac{d vext[1]_i}{dt}$
 
-(3) $\frac{d v_{ext}[1]_i}{dt} = \frac{i_{xraxial}[0](i) + i_{membrane}(i) + cm_i \frac{d v_i}{dt} + i_{xraxial}[1](i) + i_{tranverse}[1](i)}{xc[1]_i}$
+(3) $xc[1]_i \frac{d vext[1]_i}{dt} = i_{xraxial}[0](vext[0])_i + i_{membrane}(v)_i + cm_i \frac{d v_i}{dt} + i_{xraxial}[1](vext[1])_i + i_{transverse}[1](vext[1], e_{extracellular})_i$
 
-Finally, recalling that $cm_i \frac{d v_i}{dt} = i_{axial}(i) - i_{membrane}(i)$, we can **remove the dependency on the transmembrane voltage derivative** in the second and third terms, yielding:
+Next, we can insert equation (1) into equations (2) and (3), yielding a **differential system for the sole two extracellular nodes**:
 
-(1) $\frac{d v_i}{dt} = \frac{i_{axial}(i) -i_{membrane}(i)}{cm_i}$
+(1) $xc[0]_i \frac{d vext[0]_i}{dt} = i_{axial}(v, vext[0])_i + i_{xraxial}[0](vext[0])_i + i_{transverse}[0](vext[0], vext[1])_i + xc[0]_i \frac{d vext[1]_i}{dt}$
 
-(2) $\frac{d v_{ext}[0]_i}{dt} = \frac{i_{axial}(i) + i_{xraxial}[0](i) + i_{transverse}[0](i)}{xc[0]_i} + \frac{d v_{ext}[1]_i}{dt}$
-
-(3) $\frac{d v_{ext}[1]_i}{dt} = \frac{i_{axial}(i) + i_{xraxial}[0](i) + i_{xraxial}[1](i) + i_{tranverse}[1](i)}{xc[1]_i}$
-
-### Parameters units
-
-Note that in this circuit, axial resistors are specified in units of resistance per unit length (MOhm/cm), and therefore correspond to a longitudinal resistivity (in Ohm.cm) divided by a specific cross-sectional area (in cm2), thus they only need to be integrated along a length separating two nodes in order to yield an absolute resistance value, (in Ohm).
-Oppositely, transverse elements are specified in units per unit area (i.e. uF/cm2 and S/cm2), hence they must be integrated over a given transverse surface area (in cm2) in order to yield an absolute capacitance (in F) and conductance (in S). This has important implications, which will be discussed below.
+(2) ${xc[1]_i} \frac{d vext[1]_i}{dt} = i_{axial}(v, vext[0])_i + i_{xraxial}[0](vext[0])_i + i_{xraxial}[1](vext[1])_i + i_{transverse}[1](vext[1], e_{extracellular})_i$
 
 ### Simple use-case: unmyelinated neurite
 
@@ -122,31 +120,33 @@ In the case where one simply wishes to model the influence of an extracellular p
 - Setting both axial resistors (`xraxial[0]` and `xraxial[1]`) to a "pseudo-infinite" value (i.e. 1e10 Ohm/cm), thereby removing any kind of longitudinal coupling in the extracellular layers.
 - Setting both transverse conductances (`xg[0]` and `xg[1]`) to a "pseudo-infinite" value (i.e. 1e10 S/cm2), thereby forcing `vext[1]` and `vext[0]` to equilibrate instantaneously with `e_extracellular`.
 
-Thus, in essence we have $v_{ext}[0] = v_{ext}[1] = e_{extracellular}$, and the system can be reduced to a single equation:
+Thus, in essence we have $vext[0] = vext[1] = e_{extracellular}$, and the system can be reduced to a single equation:
 
-(1) $cm_i \frac{d v_i}{dt} = i_{axial}(i) -i_{membrane}(i)$
+$$cm_i \frac{d v_i}{dt} = i_{axial}(v, e_{extracellular})_i -i_{membrane}(v)_i$$
 
 with a re-defined axial current:
 
-$i_{axial}(i) = 2\sum_{j=\{i-1; i+1\}} \frac{(v_i + e_{extracellular,_i}) - (v_j + e_{extracellular, j})}{Ra_i + Ra_j}$
+$i_{axial}(v, e_{extracellular})_i = 2\sum_{j=\{i-1; i+1\}} \frac{(v_i + e_{extracellular,_i}) - (v_j + e_{extracellular, j})}{Ra_i + Ra_j}$
 
 ### More complex use-case: myelinated neurite
 
-In the case where one wishes to model the influence of an extracellular potential field on a (partially) myelinated neurite and / or the longitudinal current flow in the periaxonal space, the situation becomes more complex.
+In the case where one wishes to model the extracellular potential (re-)distribution over a (partially) myelinated neurite, the situation becomes more complex.
 
 Specifically, while parameters of the second layer (`xraxial[1]`, `xc[1]` and `xg[1]`) can still be set in such a way to ensure a direct synchronization of vext[1] to e_extracellular without longitudinal coupling, that is not true anymore for the first layer since:
 - `xraxial[0]` now represents the longitudinal resistance per unit length in the periaxonal space
 - `xc[0]` and `xg[0]` now represent the transverse capacitance and conductance per unit area of the myelin sheath
 
-Thus, in essence we have $v_{ext}[1] = e_{extracellular}$, and the system can be reduced to two equations:
+Thus, in essence we have $vext[1] = e_{extracellular}$, and the system can be reduced to two equations:
 
-(1) $cm_i \frac{d v_i}{dt} = i_{axial}(i) - i_{membrane}(i)$
+(1) $cm_i \frac{d v_i}{dt} = i_{axial}(v, vext)_i - i_{membrane}(v)_i$
 
-(2) $xc[0]_i \frac{d v_{ext}[0]_i}{dt} = i_{axial}(i) + i_{xraxial}[0](i) + i_{transverse}[0](i)$
+(2) $xc_i \frac{d vext_i}{dt} = i_{axial}(v, vext)_i + i_{xraxial}(vext)_i + i_{transverse}(vext, e_{extracellular})_i$
 
 with a redefined transverse current:
 
-$i_{transverse}[0](i) = xg[0]_i \cdot (v_{ext}[0]_i - e_{extracellular, i})$
+$i_{transverse}(vext, e_{extracellular})_i = xg_i \cdot (vext_i - e_{extracellular, i})$
+
+### Scaling of finite impedances to match myelin properties
 
 Hence, these parameters must be given finite impedance values.
 
@@ -171,3 +171,17 @@ Consequently, in order to ensure unicity of myelin conductance and capacitance a
     - `Ra = rho_a * (fiberD / section.diam)^2`
 
 Note that this correction problem does not apply to the extracellular axial resistors, since those are provided as resistances per unit length. Hence, they do not need to be integrated over a surface area but rather only along the given length (which is consistent between the neurite section and its surrounding myelin), in order to compute their equivalent extensive property.
+
+### Formulation into a numerical integration scheme
+
+Let's take the case of a myelinated neurite with one effective layer of extracellular coupling. Expliciting the currents inside the equations, we have:
+
+(1) $cm_i \frac{d v_i}{dt} = 2\sum_{j=\{i-1; i+1\}} \big(\frac{(v_i + vext_i) - (v_j + vext_j)}{Ra_i + Ra_j} \big) - i_{membrane}(v)_i$
+
+(2) $xc_i \frac{d vext_i}{dt} = 2\sum_{j=\{i-1; i+1\}} \big(\frac{(v_i + vext_i) - (v_j + vext_j)}{Ra_i + Ra_j} \big) + 2\sum_{j=\{i-1; i+1\}} \big(\frac{vext_i - vext_j}{xr_i + xr_j}\big) + xg_i (vext_i - e_{extracellular, i})$
+
+Moving the time derivative as a denominator of capacitance and re-organizing the equations, we have:
+
+(1) $\frac{cm_i}{dt} dv_i = 2\sum_{j=\{i-1; i+1\}} \big(\frac{(v_i + vext_i) - (v_j + vext_j)}{Ra_i + Ra_j} \big) - i_{membrane}(v)_i$
+
+(2) $xc_i \frac{d vext_i}{dt} = 2\sum_{j=\{i-1; i+1\}} \big(\frac{(v_i + vext_i) - (v_j + vext_j)}{Ra_i + Ra_j} \big) + 2\sum_{j=\{i-1; i+1\}} \big(\frac{vext_i - vext_j}{xr_i + xr_j}\big) + xg_i (vext_i - e_{extracellular, i})$
