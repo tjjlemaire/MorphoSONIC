@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-08 15:28:21
+# @Last Modified time: 2020-05-08 15:38:05
 
 ''' Utilities to manipulate HOC objects. '''
 
@@ -483,14 +483,6 @@ class CustomConnectMechQSection(MechQSection):
         '''
         return self.getValue(f'_ref_{self.vref}', **kwargs)
 
-    def attachIax(self):
-        ''' Attach a custom axial current point process to the section. '''
-        # Compute section resistance
-        R = self.axialResistance() if self.rmin is None else self.boundedAxialResistance()  # Ohm
-
-        # Return axial current point-process set to current section
-        return Iax(self, R)
-
     def connectIntracellular(self, parent):
         ''' Connect the intracellular layers of a section and its parent. '''
         # Inform sections about each other's axial resistance
@@ -516,16 +508,18 @@ class CustomConnectMechQSection(MechQSection):
         self.ext.set_Vother(0, parent.ext._ref_V0)  # mV
 
     def has_parent(self):
+        ''' Determine if section has parent. '''
         return self.parent_ref is not None
 
     def parent(self):
+        ''' Return parent section. '''
         return self.parent_ref.sec
 
     def connect(self, parent):
         ''' Connect to a parent section in series to enable trans-sectional axial current. '''
         for sec in [parent, self]:
             if sec.iax is None:
-                sec.iax = sec.attachIax()
+                sec.iax = Iax(sec)
 
         # Connect intracellular and extracellular (if any) layers between the two sections
         self.connectIntracellular(parent)
@@ -555,6 +549,7 @@ class CustomConnectMechQSection(MechQSection):
             if self.has_parent() and self.parent().has_ext_mech:
                 self.connectExtracellular(self.parent())
 
+        # Inform section that it has an extracellular mechanism
         self.has_ext_mech = True
 
     def setVext(self, Ve):
@@ -568,19 +563,18 @@ class CustomConnectMechQSection(MechQSection):
 class Iax(hclass(h.Iax)):
     ''' Axial current point process object that allows setting parameters on creation. '''
 
-    def __new__(cls, sec, _):
+    def __new__(cls, sec):
         ''' Instanciation. '''
         return super(Iax, cls).__new__(cls, sec(0.5))
 
-    def __init__(self, sec, R):
+    def __init__(self, sec):
         ''' Initialization.
 
             :param sec: section object
-            :param R: section resistance (Ohm)
         '''
-        # Assign attributes
         super().__init__(sec)
-        self.R = R
+        # Assign attributes
+        self.R = sec.axialResistance() if sec.rmin is None else sec.boundedAxialResistance()  # Ohm
 
         # Set pointer to section's membrane potential
         self.setVmPointer(sec)

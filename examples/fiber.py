@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-30 17:17:06
+# @Last Modified time: 2020-05-08 15:41:45
 
 import logging
 import matplotlib.pyplot as plt
@@ -35,7 +35,7 @@ iintra_source = IntracellularCurrent(
     I=3.0e-9)                 # current amplitude (A)
 iextra_source = ExtracellularCurrent(
     x=(0., fiber.interL),  # point-source electrode position (m)
-    I=-0.68e-3)            # current amplitude (A)
+    I=-0.70e-3)            # current amplitude (A)
 voltage_source = GaussianVoltageSource(
     0,                   # gaussian center (m)
     fiber.length / 10.,  # gaussian width (m)
