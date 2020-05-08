@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-08 19:23:32
+# @Last Modified time: 2020-05-08 22:27:44
 
 ''' Utilities to manipulate HOC objects. '''
 
@@ -554,7 +554,7 @@ class CustomConnectMechQSection(MechQSection):
 
     def setVext(self, Ve):
         ''' Set the extracellular potential just outside of a section. '''
-        self.ext.e_extracellular = Ve / self.Cm0
+        self.ext.e_extracellular = Ve  # mV
 
     def setVextProbe(self):
         return Probe(self.ext._ref_V0)
@@ -576,6 +576,7 @@ class Iax(hclass(h.Iax)):
         # Determine section's resistance and half-section axial conductance
         self.R = sec.axialResistance() if sec.rmin is None else sec.boundedAxialResistance()  # Ohm
         self.Ghalf = 2 / (self.R * OHM_TO_MOHM)  # S
+        self.cm0 = sec.Cm0  # uF/cm2
 
         # Initialize axial conductance vector with section's half conductance
         for i in range(MAX_CUSTOM_CON):
@@ -646,6 +647,7 @@ class Extracellular(hclass(h.ext)):
         self.xg = isWithin('xg', xg, self.limits['xg'])                       # S/cm2
         self.xc = isWithin('xc', xc, self.limits['xc']) * UF_CM2_TO_MF_CM2    # mF/cm2
         self.Am = sec.membraneArea()                                          # cm2
+        self.cm0 = sec.Cm0                                                    # uF/cm2
         self.e_extracellular = 0.                                             # mV
         self.ghalf = 2 / (self.xr * self.Am)  # S/cm2
 

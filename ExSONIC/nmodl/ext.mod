@@ -57,7 +57,7 @@ DEFINE MAX_CON 2  : max number of axial connections
 
 NEURON  {
     POINT_PROCESS ext
-    RANGE gax, xg, xc, Am, e_extracellular, V0
+    RANGE gax, xg, xc, Am, cm0, e_extracellular, V0
     POINTER Vother, iax
 }
 
@@ -66,6 +66,7 @@ PARAMETER {
     xg                (S/cm2)
     xc                (mF/cm2)
     Am                (cm2)
+    cm0               (uF/cm2)
     e_extracellular   (mV)
 }
 
@@ -86,12 +87,12 @@ PROCEDURE updateV0() {
     mydt = t - tlast
     tlast = t
     V0last = V0
-    V0 = (xc / mydt * V0last + xg * e_extracellular - iaxdensity - ixraxial) / (xc / mydt + xg)
+    V0 = (xc / mydt * V0last + xg * e_extracellular - iaxdensity / cm0 - ixraxial) / (xc / mydt + xg)
     :printf("t = %.3f ms, mydt = %.3f ms, gc = %.3e S/cm2, xg = %.3e S/cm2 \n", t, mydt, xc / mydt, xg)
 }
 
 PROCEDURE currents() {
-    iaxdensity = iax * 1e-6 / Am
+    iaxdensity = iax / Am * 1e-6
     ixraxial = 0
     FROM i=0 TO MAX_CON-1 {
         ixraxial = ixraxial + gax[i] * (V0 - get_Vother(i))

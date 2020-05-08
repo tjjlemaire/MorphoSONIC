@@ -15,7 +15,7 @@ DEFINE MAX_CON 2  : max number of axial connections
 NEURON  {
     POINT_PROCESS Iax
     NONSPECIFIC_CURRENT iax
-    RANGE Gax
+    RANGE Gax, cm0
     POINTER V, Vother, Vext, Vextother
 }
 
@@ -25,6 +25,7 @@ UNITS {
 
 PARAMETER {
     Gax[MAX_CON]  (uS)
+    cm0           (uF/cm2)
 }
 
 ASSIGNED {
@@ -38,7 +39,7 @@ ASSIGNED {
 BREAKPOINT {
     iax = 0
     FROM i=0 TO MAX_CON-1 {
-        iax = iax + Gax[i] * ((V + Vext) - (get_Vother(i) + get_Vextother(i)))
+        iax = iax + Gax[i] * (V - get_Vother(i) + (Vext - get_Vextother(i)) / cm0)
     }
 }
 
