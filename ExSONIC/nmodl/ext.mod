@@ -64,9 +64,10 @@ NEURON  {
 PARAMETER {
     xr                (ohm)
     xg                (S/cm2)
-    xc                (uF/cm2)
+    xc                (mF/cm2)
     Am                (cm2)
     xrother[MAX_CON]  (ohm)
+    gax[MAX_CON]      (S/cm2)
     e_extracellular   (mV)
 }
 
@@ -74,8 +75,7 @@ ASSIGNED {
     V0             (mV)
     tlast          (ms)
     mydt           (ms)
-    gc             (S/cm2)
-    V0old          (mV)
+    V0last         (mV)
     Vother         (mV)
     iax            (nA)
     iaxdensity     (mA/cm2)
@@ -83,24 +83,31 @@ ASSIGNED {
     itransverse    (mA/cm2)
 }
 
+INITIAL {
+    set_gax()
+}
+
 PROCEDURE updateV0() {
     currents()
     mydt = t - tlast
-    gc = xc * 1e-3 / mydt
     tlast = t
-    V0old = V0
-    V0 = (gc * V0old + xg * e_extracellular - iaxdensity) / (gc + xg)
-    :printf("t = %.3f ms, mydt = %.3f ms, xc = %.3e uF/cm2, gc = %.3e S/cm2, xg = %.3e S/cm2 \n", t, mydt, xc, gc, xg)
+    V0last = V0
+    V0 = (xc / mydt * V0last + xg * e_extracellular - iaxdensity + ixraxial) / (xc / mydt + xg)
+    :printf("t = %.3f ms, mydt = %.3f ms, gc = %.3e S/cm2, xg = %.3e S/cm2 \n", t, mydt, xc / mydt, xg)
+}
+
+PROCEDURE set_gax() {
+    FROM i=0 TO MAX_CON-1 {
+        gax[i] = 2 / ((xr + xrother[i]) * Am)
+    }
 }
 
 PROCEDURE currents() {
     iaxdensity = iax * 1e-6 / Am
-    :itransverse = xg * (V0 - e_extracellular)
     ixraxial = 0
     FROM i=0 TO MAX_CON-1 {
-        ixraxial = ixraxial + (V0 - get_Vother(i)) / (xr + xrother[i])
+        ixraxial = ixraxial + gax[i] * (V0 - get_Vother(i))
     }
-    ixraxial = 2 * ixraxial / Am
 }
 
 BREAKPOINT {

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-08 15:38:05
+# @Last Modified time: 2020-05-08 19:01:34
 
 ''' Utilities to manipulate HOC objects. '''
 
@@ -11,7 +11,7 @@ import numpy as np
 from neuron import h, hclass
 
 from PySONIC.utils import logger, isWithin
-from ..utils import load_mechanisms, getNmodlDir
+from ..utils import load_mechanisms, getNmodlDir, seriesGeq
 from ..constants import *
 
 # Declare ground hoc variable
@@ -485,9 +485,9 @@ class CustomConnectMechQSection(MechQSection):
 
     def connectIntracellular(self, parent):
         ''' Connect the intracellular layers of a section and its parent. '''
-        # Inform sections about each other's axial resistance
-        parent.iax.Rother[1] = self.iax.R  # Ohm
-        self.iax.Rother[0] = parent.iax.R  # Ohm
+        # Add half axial conductances to appropriate indexes of gax vectors
+        parent.iax.addToGax(1, self.iax.Ghalf)  # S
+        self.iax.addToGax(0, parent.iax.Ghalf)  # S
 
         # Set bi-directional pointers to sections about each other's membrane potential
         parent.iax.set_Vother(1, self.getVrefValue(x=0.5))  # mV
@@ -560,7 +560,15 @@ class CustomConnectMechQSection(MechQSection):
         return Probe(self.ext._ref_V0)
 
 
-class Iax(hclass(h.Iax)):
+class PointProcessBase:
+    ''' Generic point-process interface with common utilities. '''
+
+    def addToGax(self, i, G):
+        ''' Add a conductance in series to the ith element of the axial conductance vector. '''
+        self.Gax[i] = seriesGeq(self.Gax[i], G)
+
+
+class Iax(hclass(h.Iax), PointProcessBase):
     ''' Axial current point process object that allows setting parameters on creation. '''
 
     def __new__(cls, sec):
@@ -573,15 +581,15 @@ class Iax(hclass(h.Iax)):
             :param sec: section object
         '''
         super().__init__(sec)
-        # Assign attributes
+        # Determine section's resistance
         self.R = sec.axialResistance() if sec.rmin is None else sec.boundedAxialResistance()  # Ohm
+
+        # Initialize axial conductance vector with section's half conductance
+        for i in range(MAX_CUSTOM_CON):
+            self.Gax[i] = self.Ghalf  # uS
 
         # Set pointer to section's membrane potential
         self.setVmPointer(sec)
-
-        # Set infinite resistance to (nonexistent) neighboring sections
-        for i in range(MAX_CUSTOM_CON):
-            self.Rother[i] = 1e20    # Ohm
 
         # Declare Vother and Vextother pointer arrays
         self.declare_Vother()
@@ -596,6 +604,11 @@ class Iax(hclass(h.Iax)):
         for i in range(MAX_CUSTOM_CON):
             self.set_Vextother(i, h._ref_ground)
 
+    @property
+    def Ghalf(self):
+        ''' Half-section axial conductance (in uS). '''
+        return 2 / (self.R * OHM_TO_MOHM)  # S
+
     def setVmPointer(self, sec):
         ''' Set pointer to section's membrane potential. '''
         h.setpointer(sec.getVrefValue(x=0.5), 'V', self)
@@ -605,22 +618,22 @@ class Iax(hclass(h.Iax)):
         h.setpointer(ref_hocvar, 'Vext', self)
 
 
-class Extracellular(hclass(h.ext)):
+class Extracellular(hclass(h.ext), PointProcessBase):
     ''' Extracellular point-process object. '''
 
     # Parameters units
     units = {
         'xr': 'Ohm',
         'xg': 'S/cm2',
-        'xc': 'uF/cm2',
+        'xc': 'mF/cm2',
         'Am': 'cm2'
     }
 
     # Parameters limits (from extcelln.c)
     limits = {
-        'xr': (1e-3, 1e21),  # multiplied by 1e6 to have limits in Ohm/cm
-        'xg': (0., 1e15),
-        'xc': (0., 1e15)
+        'xr': (1e-3, 1e21),  # Ohm/cm
+        'xg': (0., 1e15),    # S/cm2
+        'xc': (0., 1e15)     # uF/cm2
     }
 
     def __new__(cls, sec, *_):
@@ -639,7 +652,7 @@ class Extracellular(hclass(h.ext)):
         # Assign parameters (within limits)
         self.xr = isWithin('xr', xr, self.limits['xr']) * (sec.L / CM_TO_UM)  # Ohm
         self.xg = isWithin('xg', xg, self.limits['xg'])                       # S/cm2
-        self.xc = isWithin('xc', xc, self.limits['xc'])                       # uF/cm2
+        self.xc = isWithin('xc', xc, self.limits['xc']) * UF_CM2_TO_MF_CM2    # mF/cm2
         self.Am = sec.membraneArea()                                          # cm2
         self.e_extracellular = 0.                                             # mV
 

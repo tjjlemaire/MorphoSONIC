@@ -3,26 +3,27 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-07 18:15:55
+# @Last Modified time: 2020-05-08 16:06:15
 
 # Conversions
-V_TO_MV = 1e3         # V to  mV
-PA_TO_KPA = 1e-3      # Pa -> kPa
-HZ_TO_KHZ = 1e-3      # Hz -> kHz
-C_M2_TO_NC_CM2 = 1e5  # C/m2 -> nC/cm2
-S_M2_TO_S_CM2 = 1e-4  # S/m2 -> S/cm2
-S_TO_MS = 1e3         # s -> ms
-S_TO_US = 1e6         # s -> us
-M_TO_CM = 1e2         # m -> cm
-M_TO_MM = 1e3         # m -> mm
-M_TO_UM = 1e6         # m to um
-M_TO_NM = 1e9         # m to nm
-CM_TO_UM = 1e4        # cm -> um
-A_TO_NA = 1e9         # A -> nA
-MA_TO_A = 1e-3        # mA -> A
-MA_TO_NA = 1e6        # mA -> nA
-F_M2_TO_UF_CM2 = 1e2  # F/m2 -> uF/cm2
-OHM_TO_MOHM = 1e-6    # Ohm-> MOhm
+V_TO_MV = 1e3            # V to  mV
+PA_TO_KPA = 1e-3         # Pa -> kPa
+HZ_TO_KHZ = 1e-3         # Hz -> kHz
+C_M2_TO_NC_CM2 = 1e5     # C/m2 -> nC/cm2
+S_M2_TO_S_CM2 = 1e-4     # S/m2 -> S/cm2
+S_TO_MS = 1e3            # s -> ms
+S_TO_US = 1e6            # s -> us
+M_TO_CM = 1e2            # m -> cm
+M_TO_MM = 1e3            # m -> mm
+M_TO_UM = 1e6            # m to um
+M_TO_NM = 1e9            # m to nm
+CM_TO_UM = 1e4           # cm -> um
+A_TO_NA = 1e9            # A -> nA
+MA_TO_A = 1e-3           # mA -> A
+MA_TO_NA = 1e6           # mA -> nA
+F_M2_TO_UF_CM2 = 1e2     # F/m2 -> uF/cm2
+UF_CM2_TO_MF_CM2 = 1e-3  # F/m2 -> uF/cm2
+OHM_TO_MOHM = 1e-6       # Ohm-> MOhm
 
 # Numerical integration
 FIXED_DT = 1e-5        # default time step for fixed integration (s)

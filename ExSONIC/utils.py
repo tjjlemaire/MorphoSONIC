@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 14:38:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-04 12:35:46
+# @Last Modified time: 2020-05-08 18:35:08
 
 import os
 import pickle
@@ -140,3 +140,12 @@ def fitTauSD(durations, currents, method='Weiss'):
         lambda t, tau: method(t, tau, I0),
         durations, currents, p0=chronaxie(durations, currents))[0][0]
     return tau_e, method(durations, tau_e, I0)
+
+
+def seriesGeq(*G):
+    ''' Return the equivalent conductance for n conductances in parallel.
+
+        :param G: list of conductances
+        :return: equivalent series condictance.
+    '''
+    return 1 / sum(map(lambda x: 1 / x, G))
