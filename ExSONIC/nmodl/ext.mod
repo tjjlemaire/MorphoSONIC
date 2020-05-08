@@ -87,7 +87,7 @@ PROCEDURE updateV0() {
     mydt = t - tlast
     tlast = t
     V0last = V0
-    V0 = (xc / mydt * V0last + xg * e_extracellular - iaxdensity / cm0 - ixraxial) / (xc / mydt + xg)
+    V0 = (xc / mydt * V0last + xg * e_extracellular - iaxdensity * cm0 - ixraxial) / (xc / mydt + xg)
     :printf("t = %.3f ms, mydt = %.3f ms, gc = %.3e S/cm2, xg = %.3e S/cm2 \n", t, mydt, xc / mydt, xg)
 }
 
