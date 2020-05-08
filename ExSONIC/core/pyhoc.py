@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-08 19:01:34
+# @Last Modified time: 2020-05-08 19:23:32
 
 ''' Utilities to manipulate HOC objects. '''
 
@@ -485,9 +485,9 @@ class CustomConnectMechQSection(MechQSection):
 
     def connectIntracellular(self, parent):
         ''' Connect the intracellular layers of a section and its parent. '''
-        # Add half axial conductances to appropriate indexes of gax vectors
-        parent.iax.addToGax(1, self.iax.Ghalf)  # S
-        self.iax.addToGax(0, parent.iax.Ghalf)  # S
+        # Add half axial conductances to appropriate indexes of Gax vectors
+        parent.iax.updateAxialConductance(1, self.iax.Ghalf)  # S
+        self.iax.updateAxialConductance(0, parent.iax.Ghalf)  # S
 
         # Set bi-directional pointers to sections about each other's membrane potential
         parent.iax.set_Vother(1, self.getVrefValue(x=0.5))  # mV
@@ -495,9 +495,9 @@ class CustomConnectMechQSection(MechQSection):
 
     def connectExtracellular(self, parent):
         ''' Connect the extracellular layers of a section and its parent. '''
-        # Inform sections about each other's extracellular axial resistances
-        parent.ext.xrother[1] = self.ext.xr  # Ohm
-        self.ext.xrother[0] = parent.ext.xr  # Ohm
+        # Add half axial conductances to appropriate indexes of gax vectors
+        parent.ext.updateAxialConductance(1, self.ext.ghalf)  # S
+        self.ext.updateAxialConductance(0, parent.ext.ghalf)  # S
 
         # Set bi-directional pointers to sections about each other's extracellular potential
         parent.iax.set_Vextother(1, self.ext._ref_V0)  # mV
@@ -560,15 +560,7 @@ class CustomConnectMechQSection(MechQSection):
         return Probe(self.ext._ref_V0)
 
 
-class PointProcessBase:
-    ''' Generic point-process interface with common utilities. '''
-
-    def addToGax(self, i, G):
-        ''' Add a conductance in series to the ith element of the axial conductance vector. '''
-        self.Gax[i] = seriesGeq(self.Gax[i], G)
-
-
-class Iax(hclass(h.Iax), PointProcessBase):
+class Iax(hclass(h.Iax)):
     ''' Axial current point process object that allows setting parameters on creation. '''
 
     def __new__(cls, sec):
@@ -581,8 +573,9 @@ class Iax(hclass(h.Iax), PointProcessBase):
             :param sec: section object
         '''
         super().__init__(sec)
-        # Determine section's resistance
+        # Determine section's resistance and half-section axial conductance
         self.R = sec.axialResistance() if sec.rmin is None else sec.boundedAxialResistance()  # Ohm
+        self.Ghalf = 2 / (self.R * OHM_TO_MOHM)  # S
 
         # Initialize axial conductance vector with section's half conductance
         for i in range(MAX_CUSTOM_CON):
@@ -604,10 +597,9 @@ class Iax(hclass(h.Iax), PointProcessBase):
         for i in range(MAX_CUSTOM_CON):
             self.set_Vextother(i, h._ref_ground)
 
-    @property
-    def Ghalf(self):
-        ''' Half-section axial conductance (in uS). '''
-        return 2 / (self.R * OHM_TO_MOHM)  # S
+    def updateAxialConductance(self, i, G):
+        ''' Add a conductance in series to the ith element of the axial conductance vector. '''
+        self.Gax[i] = seriesGeq(self.Gax[i], G)
 
     def setVmPointer(self, sec):
         ''' Set pointer to section's membrane potential. '''
@@ -618,7 +610,7 @@ class Iax(hclass(h.Iax), PointProcessBase):
         h.setpointer(ref_hocvar, 'Vext', self)
 
 
-class Extracellular(hclass(h.ext), PointProcessBase):
+class Extracellular(hclass(h.ext)):
     ''' Extracellular point-process object. '''
 
     # Parameters units
@@ -655,10 +647,11 @@ class Extracellular(hclass(h.ext), PointProcessBase):
         self.xc = isWithin('xc', xc, self.limits['xc']) * UF_CM2_TO_MF_CM2    # mF/cm2
         self.Am = sec.membraneArea()                                          # cm2
         self.e_extracellular = 0.                                             # mV
+        self.ghalf = 2 / (self.xr * self.Am)  # S/cm2
 
-        # Initialize "infinite" neighboring axial resistances" to ensure no longitudinal coupling
+        # Initialize axial conductance vector with section's half conductance
         for i in range(MAX_CUSTOM_CON):
-            self.xrother[i] = 1e20  # Ohm
+            self.gax[i] = self.ghalf  # S/cm2
 
         # Set intracellular axial current pointer towards zero value
         self.setIaxPointer(h._ref_ground)  # nA
@@ -672,6 +665,10 @@ class Extracellular(hclass(h.ext), PointProcessBase):
         ''' Object representation. '''
         params = ', '.join([self.paramStr(k) for k in ['xr', 'xg', 'xc', 'Am']])
         return f'{self.__class__.__name__}({params})'
+
+    def updateAxialConductance(self, i, g):
+        ''' Add a conductance in series to the ith element of the axial conductance vector. '''
+        self.gax[i] = seriesGeq(self.gax[i], g)
 
     def paramStr(self, key):
         ''' Return descriptive string for parameter value. '''
