@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-08 22:27:44
+# @Last Modified time: 2020-05-11 16:27:19
 
 ''' Utilities to manipulate HOC objects. '''
 
@@ -44,19 +44,21 @@ class Probe(hclass(h.Vector)):
 class Matrix(hclass(h.Matrix)):
     ''' Interface to Hoc Matrix with facilitated initialization from 2D numpy array. '''
 
-    def __new__(cls, arr):
-        ''' Instanciation. '''
-        return super(Matrix, cls).__new__(cls, *arr.shape)
-
-    def __init__(self, arr):
-        ''' Initialization. '''
-        super().__init__(arr)
-        for i, row in enumerate(arr):
-            self.setrow(i, h.Vector(row))
-
     def to_array(self):
         ''' Return itself as a numpy array. '''
         return np.array([self.getrow(i).to_python() for i in range(self.nrow())])
+
+    @classmethod
+    def from_array(cls, arr):
+        ''' Create matrix object from numpy array. '''
+        m = cls(*arr.shape)
+        for i, row in enumerate(arr):
+            m.setrow(i, h.Vector(row))
+        return m
+
+    def shape(self):
+        ''' Return shape of matrix. '''
+        return (self.nrow(), self.ncol())
 
 
 class IClamp(hclass(h.IClamp)):
@@ -444,6 +446,7 @@ class CustomConnectMechQSection(MechQSection):
         self.iax = None
         self.ext = None
         self.parent_ref = None
+        self.child_ref = None
 
     def setResistivity(self, value):
         ''' Set appropriate section's resistivity based on connection scheme.
@@ -526,8 +529,9 @@ class CustomConnectMechQSection(MechQSection):
         if self.has_ext_mech and parent.has_ext_mech:
             self.connectExtracellular(parent)
 
-        # Register parent section
+        # Register parent and child section
         self.parent_ref = h.SectionRef(sec=parent)
+        parent.child_ref = h.SectionRef(sec=self)
 
     def insertVext(self, xr=1e20, xg=1e10, xc=0.):
         ''' Insert extracellular mechanism with specific parameters.
@@ -536,6 +540,10 @@ class CustomConnectMechQSection(MechQSection):
             :param xg: transverse conductance of first extracellular layer (S/cm2)
             :param xc: transverse capacitance of first extracellular layer (uF/cm2)
         '''
+        sec_index = self.cell().getSecIndex(self)
+        self.cell().cx_vec[sec_index] = xc * UF_CM2_TO_MF_CM2  # mF/cm2
+        self.cell().gx_vec[sec_index] = xg                     # S/cm2
+
         # Attach extracellular point-process
         self.ext = Extracellular(self, xr, xg, xc)
 
@@ -555,6 +563,7 @@ class CustomConnectMechQSection(MechQSection):
     def setVext(self, Ve):
         ''' Set the extracellular potential just outside of a section. '''
         self.ext.e_extracellular = Ve  # mV
+        self.cell().ex_vec[self.cell().getSecIndex(self)] = Ve
 
     def setVextProbe(self):
         return Probe(self.ext._ref_V0)
@@ -679,3 +688,4 @@ class Extracellular(hclass(h.ext)):
     def setIaxPointer(self, ref_hocvar):
         ''' Set the pointer towards the intracellular axial current (in nA). '''
         h.setpointer(ref_hocvar, 'iax', self)
+

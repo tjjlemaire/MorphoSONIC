@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-07 16:17:47
+# @Last Modified time: 2020-05-11 15:57:19
 
 import abc
 from neuron import h
@@ -149,8 +149,8 @@ class NeuronModel(metaclass=abc.ABCMeta):
         self.setGeometry()
         self.setResistivity()
         self.setBiophysics()
-        self.setExtracellular()
         self.setTopology()
+        self.setExtracellular()
         self.is_constructed = True
 
     @abc.abstractmethod
@@ -322,13 +322,13 @@ class NeuronModel(metaclass=abc.ABCMeta):
         # Convert lookup tables to hoc matrices
         # !!! hoc lookup dictionary must be a member of the class,
         # otherwise the assignment below does not work properly !!!
-        self.lkp = {'V': Matrix(self.pylkp['V'])}  # mV
+        self.lkp = {'V': Matrix.from_array(self.pylkp['V'])}  # mV
         for ratex in self.pneuron.alphax_list.union(self.pneuron.betax_list):
-            self.lkp[ratex] = Matrix(self.pylkp[ratex] / S_TO_MS)
+            self.lkp[ratex] = Matrix.from_array(self.pylkp[ratex] / S_TO_MS)
         for taux in self.pneuron.taux_list:
-            self.lkp[taux] = Matrix(self.pylkp[taux] * S_TO_MS)
+            self.lkp[taux] = Matrix.from_array(self.pylkp[taux] * S_TO_MS)
         for xinf in self.pneuron.xinf_list:
-            self.lkp[xinf] = Matrix(self.pylkp[xinf])
+            self.lkp[xinf] = Matrix.from_array(self.pylkp[xinf])
 
     @staticmethod
     def setFuncTable(mechname, fname, matrix, xref, yref):

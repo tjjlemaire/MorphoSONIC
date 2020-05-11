@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-08 22:30:48
+# @Last Modified time: 2020-05-08 22:36:33
 
 import logging
 import matplotlib.pyplot as plt
@@ -36,7 +36,7 @@ for lbl, fiber in fibers.items():
 
     # Insert Vext in all sections
     for sec in fiber.seclist:
-        sec.insertVext(xr=1e20, xg=1e0, xc=0)
+        sec.insertVext(xr=1e10, xg=1e0, xc=0)
 
     # Define source
     source = GaussianVoltageSource(

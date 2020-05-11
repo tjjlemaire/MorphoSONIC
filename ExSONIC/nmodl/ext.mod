@@ -97,6 +97,7 @@ PROCEDURE currents() {
     FROM i=0 TO MAX_CON-1 {
         ixraxial = ixraxial + gax[i] * (V0 - get_Vother(i))
     }
+    :ixraxial = bound(ixraxial, 1e-2)
 }
 
 BREAKPOINT {
@@ -104,3 +105,4 @@ BREAKPOINT {
 }
 
 INCLUDE "Vother.inc"
+INCLUDE "bound.inc"

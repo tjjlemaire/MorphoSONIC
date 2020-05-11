@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2017-08-24 11:55:07
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-17 20:20:40
+# @Last Modified time: 2020-05-09 19:55:20
 
 ''' Run E-STIM simulations of a specific point-neuron. '''
 
@@ -24,7 +24,7 @@ def main():
     simQueue_func = {5: 'simQueue', 6: 'simQueueBurst'}[len(sim_inputs)]
 
     # Run E-STIM batch
-    logger.info("Starting E-STIM simulation batch")
+    logger.info("Starting node E-STIM simulation batch")
     queue = getattr(PointNeuron, simQueue_func)(
         *sim_inputs, outputdir=args['outputdir'], overwrite=args['overwrite'])
     output = []

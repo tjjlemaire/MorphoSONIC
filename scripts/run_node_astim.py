@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2017-02-13 18:16:09
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-17 20:24:34
+# @Last Modified time: 2020-05-09 19:55:25
 
 ''' Run A-STIM simulations of a specific point-neuron. '''
 
@@ -24,7 +24,7 @@ def main():
     simQueue_func = {9: 'simQueue', 10: 'simQueueBurst'}[len(sim_inputs)]
 
     # Run A-STIM batch
-    logger.info("Starting A-STIM simulation batch")
+    logger.info("Starting node A-STIM simulation batch")
     queue = getattr(NeuronalBilayerSonophore, simQueue_func)(
         *sim_inputs, outputdir=args['outputdir'], overwrite=args['overwrite'])
     queue = [item[:2] for item in queue]

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-15 20:33:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-02 17:54:59
+# @Last Modified time: 2020-05-09 19:55:01
 
 ''' Run simulations of an SENN fiber model with a specific point-neuron mechanism
     upon extracellular electrical stimulation. '''
@@ -24,7 +24,7 @@ def main():
         logger.warning('NEURON multiprocessing disabled')
 
     # Run batch
-    logger.info('Starting SENN fiber Iext-STIM simulation batch')
+    logger.info('Starting fiber Iext-STIM simulation batch')
     queue = PointNeuron.simQueue(*EStimParser.parseSimInputs(args), outputdir=args['outputdir'])
     output = []
     for fiber_class in args['type']:

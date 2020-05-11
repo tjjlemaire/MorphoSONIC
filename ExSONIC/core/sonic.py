@@ -3,8 +3,9 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-30 21:40:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-08 14:45:15
+# @Last Modified time: 2020-05-11 16:28:04
 
+from neuron import h
 import numpy as np
 
 from PySONIC.core import PointNeuron, NeuronalBilayerSonophore, AcousticDrive, ElectricDrive
@@ -14,7 +15,7 @@ from ..constants import *
 from ..utils import array_print_options
 from .sources import AcousticSource
 from .connectors import SerialConnectionScheme
-from .pyhoc import CustomConnectMechQSection
+from .pyhoc import CustomConnectMechQSection, Matrix
 
 from .nmodel import NeuronModel, SpatiallyExtendedNeuronModel
 
@@ -219,6 +220,7 @@ def addSonicFeatures(Base):
 
         def __init__(self, *args, **kwargs):
             self.connection_scheme = SerialConnectionScheme(vref=f'Vm', rmin=self.rmin)
+            self.has_topology = False
             super().__init__(*args, **kwargs)
 
         def copy(self):
@@ -252,6 +254,43 @@ def addSonicFeatures(Base):
             kwargs.update({k: meta[k] for k in ['a', 'fs']})
             return args, kwargs
 
+        def setOrderedSecRefList(self):
+            ''' Return a list of ordered section references based on the model's topology. '''
+            ordered_secref_list = []
+            for sec in self.seclist:
+                if not sec.has_parent():
+                    ordered_secref_list = [sec]
+                    break
+            while ordered_secref_list[-1].child_ref is not None:
+                ordered_secref_list.append(ordered_secref_list[-1].child_ref.sec)
+            if len(ordered_secref_list) < len(self.seclist):
+                raise ValueError('There are some unconnected sections in the model...')
+            self.ordered_secref_list = ordered_secref_list
+
+        def getSecIndex(self, sec):
+            ''' Get index of section in the model's ordered section list. '''
+            return self.ordered_secref_list.index(sec)
+
+        def initExtracellularNetworkArrays(self):
+            ''' Initialize arrays that will be used to compute set the extracellular network. '''
+            self.cx_vec = np.zeros(self.nsections)   # transverse capacitance vector
+            self.gx_vec = np.zeros(self.nsections)   # transverse conductance vector
+            self.ax_vec = np.zeros(self.nsections)   # longitudinal conductance vector
+            self.ex_vec = np.zeros(self.nsections)   # imposed extracelluar voltage vector
+            self.i_vec = np.zeros(self.nsections)   # currents vector (iax + gx * ex)
+
+        def setTopology(self):
+            super().setTopology()
+            self.setOrderedSecRefList()
+            self.initExtracellularNetworkArrays()
+            self.has_topology = True
+
+        def setExtracellular(self):
+            if not self.has_topology:
+                raise ValueError(
+                    'Model topology must be defined prior to setting the extracellular network.')
+            super().setExtracellular()
+
         def setUSDrives(self, A_dict):
             logger.debug(f'Acoustic pressures:')
             with np.printoptions(**array_print_options):
@@ -274,6 +313,16 @@ def addSonicFeatures(Base):
                 self.checkForSonophoreRadius()
                 self.setFuncTables(source.f)
             super().setDrives(source)
+            self.initExtracellularNetwork()
+
+        def initExtracellularNetwork(self):
+            ''' Initialize a linear mechanism to represent the extracellular voltage network. '''
+            c = Matrix.from_array(np.diag(self.cx_vec))  # capacitance sparse matrix
+            g = Matrix.from_array(np.diag(self.gx_vec))  # total conductance matrix
+            self.vx = h.Vector(self.nsections)           # extracellular voltage vector
+            vx0 = h.Vector(self.nsections)               # initial conditions vector
+            i = h.Vector(self.i_vec)                     # currents vector
+            h.LinearMechanism(c, g, self.vx, vx0, i)
 
         @property
         def Aranges(self):
