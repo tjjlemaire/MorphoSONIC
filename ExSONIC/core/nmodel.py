@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-11 15:57:19
+# @Last Modified time: 2020-05-11 19:08:30
 
 import abc
 from neuron import h
@@ -255,6 +255,10 @@ class NeuronModel(metaclass=abc.ABCMeta):
         else:
             return np.hstack((stim[1:], stim[-1]))
 
+    def advance(self):
+        ''' Advance simulation onto the next time step. '''
+        h.fadvance()
+
     def integrate(self, pp, dt, atol):
         ''' Integrate a model differential variables for a given duration, while updating the
             value of the boolean parameter stimon during ON and OFF periods throughout the numerical
@@ -294,7 +298,7 @@ class NeuronModel(metaclass=abc.ABCMeta):
         logger.debug(f'integrating system using {self.getIntegrationMethod()}')
         tstop = pp.tstop * S_TO_MS
         while h.t < tstop:
-            h.fadvance()
+            self.advance()
 
         # Set absolute error tolerance back to default value if changed
         if atol is not None:
