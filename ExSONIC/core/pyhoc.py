@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-12 17:27:47
+# @Last Modified time: 2020-05-15 14:11:43
 
 ''' Utilities to manipulate HOC objects. '''
 
@@ -531,6 +531,10 @@ class CustomConnectMechQSection(MechQSection):
         ''' Get reference to section's intracellular current. '''
         return self.iax._ref_iax
 
+    def iaxDensity(self):
+        ''' Return the section's intracellular axial current divided by its membrane area. '''
+        return self.iax.iax / self.membraneArea() * 1e-6  # mA/cm2
+
     def connectExtracellular(self, parent):
         ''' Connect the extracellular layers of a section and its parent. '''
         # Set bi-directional pointers to sections about each other's extracellular potential
@@ -576,16 +580,17 @@ class CustomConnectMechQSection(MechQSection):
         self.cell().gx_mat.addval(i, i, xg)                     # S/cm2
         self.cell().gx_vec.x[i] += xg                           # S/cm2
 
-        # Attach extracellular point-process
+        # Compute half-section extracellular axial conductance
         self.ga_half = 2 / (xr * (self.L / CM_TO_UM) * self.membraneArea())  # S/cm2
 
         # If section has an axial point-process (meaning that it is connected)
         if self.iax is not None:
-            # Assign pointers bidirectionally between axial and extracellular point processes.
+            # Assign pointer towards corresponding extracellular voltage
             self.iax.setVextPointer(self.getVextRef())
 
             # If section has parent and that parent has an extracellular mechanism
             if self.has_parent() and self.parent().has_ext_mech:
+                # Connect the two sections extracellularly
                 self.connectExtracellular(self.parent())
 
         # Inform section that it has an extracellular mechanism
@@ -593,7 +598,6 @@ class CustomConnectMechQSection(MechQSection):
 
     def setVext(self, Ve):
         ''' Set the extracellular potential just outside of a section. '''
-        # self.ext.e_extracellular = Ve  # mV
         self.cell().ex_vec.x[self.cell().getSecIndex(self)] = Ve  # mV
 
     def setVextProbe(self):

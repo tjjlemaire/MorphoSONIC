@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-12 17:24:42
+# @Last Modified time: 2020-05-18 15:18:52
 
 import logging
 import matplotlib.pyplot as plt
@@ -36,7 +36,7 @@ for lbl, fiber in fibers.items():
 
     # Insert extracellular network in all sections
     for sec in fiber.seclist:
-        sec.insertVext(xr=1e10, xg=1e0, xc=0)
+        sec.insertVext(xr=1e10, xg=1e0, xc=1e3)
 
     # Define voltage source
     source = GaussianVoltageSource(

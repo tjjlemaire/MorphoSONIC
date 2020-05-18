@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-30 21:40:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-12 17:24:29
+# @Last Modified time: 2020-05-18 15:18:22
 
 from neuron import h
 import numpy as np
@@ -321,18 +321,13 @@ def addSonicFeatures(Base):
             ''' Initialize a linear mechanism to represent the extracellular voltage network. '''
             if self.ext_lm is not None:
                 raise ValueError('Extracellular Linear Mechanism already exists')
-            # print('cx_mat (mF/cm2):')
-            # self.cx_mat.printf()
-            # print('gx_mat (S/cm2):')
-            # self.gx_mat.printf()
             self.ext_lm = h.LinearMechanism(
                 self.vx_callback, self.cx_mat, self.gx_mat, self.vx, self.vx0, self.ix_vec)
 
         def vx_callback(self):
             ''' LinearMechanism callback that updates the currents vector. '''
             for i, sec in enumerate(self.ordered_secref_list):
-                iaxdensity = sec.iax.iax / sec.membraneArea() * 1e-6  # mA/cm2
-                self.ix_vec.x[i] = self.gx_vec[i] * self.ex_vec.x[i] - iaxdensity * sec.Cm0
+                self.ix_vec.x[i] = self.gx_vec.x[i] * self.ex_vec.x[i] - sec.iaxDensity() * sec.Cm0
 
         def simulate(self, *args, **kwargs):
             self.initExtracellularNetwork()
