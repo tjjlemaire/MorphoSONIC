@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-30 21:40:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-18 15:18:22
+# @Last Modified time: 2020-05-19 12:36:33
 
 from neuron import h
 import numpy as np
@@ -273,14 +273,44 @@ def addSonicFeatures(Base):
             return self.ordered_secref_list.index(sec)
 
         def initExtracellularNetworkArrays(self, n):
-            ''' Initialize arrays that will be used to compute set the extracellular network. '''
-            self.cx_mat = Matrix(n, n)        # capacitance matrix (mF/cm2)
+            ''' Initialize arrays that will be used to set the 1-layer extracellular network.
+
+                Governing equations for an external node are:
+
+                cx * dvx/dt + gx * (vx - ex) = cm * dvm/dt + i(vm) + ax_j * (vx_j - vx)
+
+                which we simplify using the currents balance at the internal node:
+                iax = cm * dvm/dt + i(vm)
+
+                cx * dvx/dt + gx * (vx - ex) = iax + ax_j * (vx_j - vx)
+
+                Putting all vx dependencies on the left-hand side, and developing, we find the
+                matrix equation row for an external node:
+
+                cx * dvx/dt + (gx + ax_j) * vx - ax_j * vx_j = iax + gx * ex
+            '''
+            self.cx_mat = Matrix(n, n, 2)     # capacitance matrix (mF/cm2)
             self.gx_mat = Matrix(n, n)        # conductance matrix (S/cm2)
             self.gx_vec = h.Vector(n)         # transverse conductance vector (S/cm2)
-            self.ex_vec = h.Vector(n)         # imposed extracellular voltage vector (mV)
             self.ix_vec = h.Vector(n)         # currents (mA/cm2)
             self.vx = h.Vector(n)             # extracellular voltage vector
             self.vx0 = h.Vector(np.zeros(n))  # initial conditions vector
+
+        def initExtracellularNetwork(self):
+            ''' Initialize a linear mechanism to represent the extracellular voltage network. '''
+            if self.ext_lm is not None:
+                raise ValueError('Extracellular Linear Mechanism already exists')
+            self.ext_lm = h.LinearMechanism(
+                self.vx_callback, self.cx_mat, self.gx_mat, self.vx, self.vx0, self.ix_vec)
+
+        def vx_callback(self):
+            ''' LinearMechanism callback that updates the currents vector. '''
+            for i, sec in enumerate(self.ordered_secref_list):
+                # Propagate e_ext discontinuities into vx
+                if sec.ex != sec.ex_last:
+                    self.vx.x[i] += sec.ex - sec.ex_last
+                    sec.ex_last = sec.ex
+                self.ix_vec.x[i] = self.gx_vec.x[i] * sec.ex - sec.iaxDensity()
 
         def setTopology(self):
             super().setTopology()
@@ -316,18 +346,6 @@ def addSonicFeatures(Base):
                 self.checkForSonophoreRadius()
                 self.setFuncTables(source.f)
             super().setDrives(source)
-
-        def initExtracellularNetwork(self):
-            ''' Initialize a linear mechanism to represent the extracellular voltage network. '''
-            if self.ext_lm is not None:
-                raise ValueError('Extracellular Linear Mechanism already exists')
-            self.ext_lm = h.LinearMechanism(
-                self.vx_callback, self.cx_mat, self.gx_mat, self.vx, self.vx0, self.ix_vec)
-
-        def vx_callback(self):
-            ''' LinearMechanism callback that updates the currents vector. '''
-            for i, sec in enumerate(self.ordered_secref_list):
-                self.ix_vec.x[i] = self.gx_vec.x[i] * self.ex_vec.x[i] - sec.iaxDensity() * sec.Cm0
 
         def simulate(self, *args, **kwargs):
             self.initExtracellularNetwork()

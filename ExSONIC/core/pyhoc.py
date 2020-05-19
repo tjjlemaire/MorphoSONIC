@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-15 14:11:43
+# @Last Modified time: 2020-05-19 12:48:41
 
 ''' Utilities to manipulate HOC objects. '''
 
@@ -93,13 +93,12 @@ class ExtField():
         if not self.section.has_ext_mech:
             self.section.insertVext(**kwargs)
         self.xamp = amplitude
-        self.factor = self.section.Cm0 if isinstance(self.section, QSection) else 1.
 
     def __repr__(self):
         return f'{self.__class__.__name__}({self.section.shortname()}, {self.xamp:.2f} mV)'
 
     def set(self, value):
-        self.section.setVext(self.xamp * self.factor * value)
+        self.section.setVext(self.xamp * value)
 
 
 class Section(hclass(h.Section)):
@@ -117,6 +116,10 @@ class Section(hclass(h.Section)):
             super().__init__(name=name)
         self.nseg = 1
         self.has_ext_mech = False
+
+    @property
+    def cfac(self):
+        raise NotImplementedError
 
     def shortname(self):
         s = self.name()
@@ -136,9 +139,12 @@ class Section(hclass(h.Section)):
     def setResistivity(self, value):
         ''' Set section resistivity.
 
+            Applies cfac-correction to Q-based sections, such that
+            Iax = dV / r = dQ / (r * cm)
+
             :param value: longitudinal resistivity (Ohm.cm)
         '''
-        self.Ra = value
+        self.Ra = value * self.cfac
 
     def membraneArea(self):
         ''' Compute section membrane surface area.
@@ -198,22 +204,33 @@ class Section(hclass(h.Section)):
     def insertVext(self, xr=1e20, xg=1e10, xc=0.):
         ''' Insert extracellular mechanism with specific parameters.
 
+            Applies cfac-correction to Q-based sections.
+
             :param xr: axial resistance per unit length of first extracellular layer (Ohm/cm)
             :param xg: transverse conductance of first extracellular layer (S/cm2)
             :param xc: transverse capacitance of first extracellular layer (uF/cm2)
         '''
         self.insert('extracellular')
         self.xraxial[0] = xr * OHM_TO_MOHM  # MOhm/cm
-        self.xg[0] = xg              # S/cm2
-        self.xc[0] = xc              # S/cm2
+        self.xg[0] = xg                     # S/cm2
+        self.xc[0] = xc                     # S/cm2
+        for i in range(2):
+            self.xraxial[i] *= self.cfac
+            self.xc[i] /= self.cfac
+            self.xg[i] /= self.cfac
         self.has_ext_mech = True
 
     def setVext(self, Ve):
         ''' Set the extracellular potential just outside of a section. '''
-        self.e_extracellular = Ve
+        self.e_extracellular = Ve * self.cfac
+
+    def getVextRef(self):
+        ''' Get reference to section's extracellular voltage. '''
+        return self(0.5)._ref_vext[0]
 
     def setVextProbe(self):
-        return Probe(self(0.5)._ref_vext[0])
+        ''' Set a probe for the section's extracellular voltage. '''
+        return Probe(self.getVextRef(), factor=1 / self.cfac)
 
     def connect(self, parent):
         ''' Connect proximal end to the distal end of a parent section.
@@ -225,12 +242,14 @@ class Section(hclass(h.Section)):
     def insertPassiveMech(self, g, Erev):
         ''' Insert a passive (leakage) mechanism with specifc parameters.
 
+            Applies cfac-correction to Q-based sections.
+
             :param g: conductance (S/cm2)
             :param Erev: reversal potential (mV)
         '''
         self.insert('pas')
         self.g_pas = g
-        self.e_pas = Erev
+        self.e_pas = Erev * self.cfac
 
     def getDetails(self):
         ''' Get details of section parameters. '''
@@ -252,6 +271,8 @@ class Section(hclass(h.Section)):
 
 class VSection(Section):
     ''' Interface to a Hoc Section with voltage based transmembrane dynamics. '''
+
+    cfac = 1
 
     def __init__(self, name=None, cell=None, Cm0=1.):
         ''' Initialization.
@@ -281,37 +302,9 @@ class QSection(Section):
         super().__init__(name=name, cell=cell)
         self.Cm0 = Cm0
 
-    def setResistivity(self, value):
-        ''' Set corrected section resistivity to account for Q-based differential scheme.
-
-            Since v represents the charge density, resistivity must be multiplied by
-            membrane capacitance to ensure consistency of axial currents:
-            Iax = dV / r = dQ / (r * cm)
-
-            :param value: longitudinal resistivity (Ohm.cm)
-        '''
-        super().setResistivity(value * self.Cm0)  # uF.Ohm/cm
-
-    def insertPassiveMech(self, g, Erev):
-        ''' Insert a passive (leakage) mechanism with specific parameters.
-
-            The reversal potential is multiplyied by the section's membrane capacitance
-            to enable a Q-based synchronization across sections.
-
-            :param g: conductance (S/cm2)
-            :param Erev: reversal potential (mV)
-        '''
-        super().insertPassiveMech(g, Erev * self.Cm0)
-
-    def insertVext(self, **kwargs):
-        ''' Insert extracellular mechanism with specific parameters, corrected to account
-            for Q-based differential scheme.
-        '''
-        super().insertVext(**kwargs)
-        for i in range(2):
-            self.xraxial[i] *= self.Cm0
-            self.xc[i] /= self.Cm0
-            self.xg[i] /= self.Cm0
+    @property
+    def cfac(self):
+        return self.Cm0
 
     def connect(self, parent):
         ''' Connect two sections together, provided they have the same membrane capacitance. '''
@@ -455,18 +448,15 @@ class CustomConnectMechQSection(MechQSection):
             self.vref = f'{cs.vref}_{self.mechname}'
         self.rmin = cs.rmin
         self.iax = None
-        self.ext = None
         self.parent_ref = None
         self.child_ref = None
+        self.ex = 0.       # mV
+        self.ex_last = 0.  # mV
 
-    def setResistivity(self, value):
-        ''' Set appropriate section's resistivity based on connection scheme.
-
-            :param value: longitudinal resistivity (Ohm.cm)
-        '''
-        if self.vref == 'v':
-            value *= self.Cm0
-        self.Ra = value
+    @property
+    def cfac(self):
+        ''' Coupling-variable depdendent multiplying factor. '''
+        return self.Cm0 if self.vref == 'v' else 1.
 
     def has_parent(self):
         ''' Determine if section has parent. '''
@@ -524,7 +514,7 @@ class CustomConnectMechQSection(MechQSection):
         self.iax.set_Vother(0, parent.getVrefValue(x=0.5))  # mV
 
     def getVextRef(self):
-        ''' Get reference to section's extracelular voltage. '''
+        ''' Get reference to section's extracellular voltage. '''
         return self.cell().vx._ref_x[self.cell().getSecIndex(self)]
 
     def getIaxRef(self):
@@ -533,7 +523,7 @@ class CustomConnectMechQSection(MechQSection):
 
     def iaxDensity(self):
         ''' Return the section's intracellular axial current divided by its membrane area. '''
-        return self.iax.iax / self.membraneArea() * 1e-6  # mA/cm2
+        return self.iax.iax / self.membraneArea() * 1e-6 * self.cfac  # mA/cm2
 
     def connectExtracellular(self, parent):
         ''' Connect the extracellular layers of a section and its parent. '''
@@ -569,10 +559,10 @@ class CustomConnectMechQSection(MechQSection):
             :param xg: transverse conductance of first extracellular layer (S/cm2)
             :param xc: transverse capacitance of first extracellular layer (uF/cm2)
         '''
-        # Check that provided parameters are within reaonable bounds
-        xr = isWithin('xr', xr, self.ext_bounds['xr'])  # Ohm/cm
-        xg = isWithin('xg', xg, self.ext_bounds['xg'])  # S/cm2
-        xc = isWithin('xc', xc, self.ext_bounds['xc'])  # uF/cm2
+        # Check that provided parameters are within reasonable bounds, and scale by cfac
+        xr = isWithin('xr', xr, self.ext_bounds['xr']) * self.cfac
+        xg = isWithin('xg', xg, self.ext_bounds['xg']) / self.cfac
+        xc = isWithin('xc', xc, self.ext_bounds['xc']) / self.cfac
 
         # Add values to the correct indexes of the extracellular arrays
         i = self.cell().getSecIndex(self)
@@ -590,18 +580,22 @@ class CustomConnectMechQSection(MechQSection):
 
             # If section has parent and that parent has an extracellular mechanism
             if self.has_parent() and self.parent().has_ext_mech:
-                # Connect the two sections extracellularly
+                # Connect the extracellular part of the two sections bidirectionally
                 self.connectExtracellular(self.parent())
+            else:
+                # Otherwise close the vext loop on the section's left-side
+                self.iax.set_Vextother(0, self.getVextRef())  # mV
+            # If section has no child or child section has no extracellular mechanism
+            if not self.has_child() or not self.child().has_ext_mech:
+                # Close the vext loop on the section's right-side
+                self.iax.set_Vextother(1, self.getVextRef())  # mV
 
         # Inform section that it has an extracellular mechanism
         self.has_ext_mech = True
 
     def setVext(self, Ve):
         ''' Set the extracellular potential just outside of a section. '''
-        self.cell().ex_vec.x[self.cell().getSecIndex(self)] = Ve  # mV
-
-    def setVextProbe(self):
-        return Probe(self.getVextRef())
+        self.ex = Ve * self.cfac  # mV
 
 
 class Iax(hclass(h.Iax)):
@@ -620,7 +614,6 @@ class Iax(hclass(h.Iax)):
         # Determine section's resistance and half-section axial conductance
         self.R = sec.axialResistance() if sec.rmin is None else sec.boundedAxialResistance()  # Ohm
         self.Ghalf = 2 / (self.R * OHM_TO_MOHM)  # S
-        self.cm0 = sec.Cm0  # uF/cm2
 
         # Initialize axial conductance vector with section's half conductance
         for i in range(MAX_CUSTOM_CON):

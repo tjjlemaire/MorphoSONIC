@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-21 12:19:44
+# @Last Modified time: 2020-05-18 20:36:19
 
 import abc
 import numpy as np
@@ -104,6 +104,15 @@ class SectionSource(XSource):
         if not match:
             raise ValueError(f'{self.sec_id} section ID not found in {model}')
         return d
+
+    def computeSourceAmp(self, model, A):
+        return A
+
+
+class UniformSource(XSource):
+
+    def computeDistributedAmps(self, model):
+        return {k: np.ones(len(v)) * self.xvar for k, v in model.sections.items()}
 
     def computeSourceAmp(self, model, A):
         return A
@@ -498,6 +507,30 @@ class VoltageSource(XSource):
     @xvar.setter
     def xvar(self, value):
         self.Ve = value
+
+
+class UniformVoltageSource(UniformSource, VoltageSource):
+
+    def __init__(self, Ve=None, mode='cathode'):
+        ''' Constructor.
+
+            :param Ve: Extracellular voltage (mV)
+        '''
+        VoltageSource.__init__(self, Ve, mode=mode)
+
+    def copy(self):
+        return self.__class__(Ve=self.Ve, mode=self.mode)
+
+    def computeDistributedAmps(self, fiber):
+        return {k: v * self.conv_factor
+                for k, v in UniformSource.computeDistributedAmps(self, fiber).items()}
+
+    @staticmethod
+    def inputs():
+        return VoltageSource.inputs()
+
+    def computeMaxNodeAmp(self, fiber):
+        return self.Ve
 
 
 class GaussianVoltageSource(GaussianSource, VoltageSource):

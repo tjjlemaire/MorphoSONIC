@@ -15,7 +15,7 @@ DEFINE MAX_CON 2  : max number of axial connections
 NEURON  {
     POINT_PROCESS Iax
     NONSPECIFIC_CURRENT iax
-    RANGE Gax, cm0
+    RANGE Gax, cfac
     POINTER V, Vother, Vext, Vextother
 }
 
@@ -25,7 +25,6 @@ UNITS {
 
 PARAMETER {
     Gax[MAX_CON]  (uS)
-    cm0           (uF/cm2)
 }
 
 ASSIGNED {
@@ -39,9 +38,65 @@ ASSIGNED {
 BREAKPOINT {
     iax = 0
     FROM i=0 TO MAX_CON-1 {
-        iax = iax + Gax[i] * (V - get_Vother(i) + (Vext - get_Vextother(i)) / cm0)
+        iax = iax + Gax[i] * (V - get_Vother(i) + Vext - get_Vextother(i))
     }
 }
 
-INCLUDE "Vother.inc"
-INCLUDE "Vextother.inc"
+
+PROCEDURE declare_Vother() {
+    LOCAL n
+    n = MAX_CON
+    VERBATIM
+    {
+        double*** pd = (double***)(&(_p_Vother));
+        *pd = (double**)hoc_Ecalloc((size_t)_ln, sizeof(double*));
+    }
+    ENDVERBATIM
+}
+
+PROCEDURE set_Vother(i) {
+    VERBATIM
+    {
+        double** pd = (double**)_p_Vother;
+        pd[(int)_li] = hoc_pgetarg(2);
+    }
+    ENDVERBATIM
+}
+
+FUNCTION get_Vother(i) {
+    VERBATIM
+    {
+        double** pd = (double**)_p_Vother;
+        _lget_Vother = *pd[(int)_li];
+    }
+    ENDVERBATIM
+}
+
+PROCEDURE declare_Vextother() {
+    LOCAL n
+    n = MAX_CON
+    VERBATIM
+    {
+        double*** pd = (double***)(&(_p_Vextother));
+        *pd = (double**)hoc_Ecalloc((size_t)_ln, sizeof(double*));
+    }
+    ENDVERBATIM
+}
+
+PROCEDURE set_Vextother(i) {
+    VERBATIM
+    {
+        double** pd = (double**)_p_Vextother;
+        pd[(int)_li] = hoc_pgetarg(2);
+    }
+    ENDVERBATIM
+}
+
+FUNCTION get_Vextother(i) {
+    VERBATIM
+    {
+        double** pd = (double**)_p_Vextother;
+        _lget_Vextother = *pd[(int)_li];
+    }
+    ENDVERBATIM
+}

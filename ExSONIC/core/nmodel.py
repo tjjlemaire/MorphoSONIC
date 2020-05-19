@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-11 19:08:30
+# @Last Modified time: 2020-05-18 20:36:56
 
 import abc
 from neuron import h
@@ -598,7 +598,8 @@ class SpatiallyExtendedNeuronModel(NeuronModel):
         return {
             IntracellularCurrent: self.setIClamps,
             ExtracellularCurrent: self.setVext,
-            GaussianVoltageSource: self.setVext
+            GaussianVoltageSource: self.setVext,
+            UniformVoltageSource: self.setVext
         }
 
     def setDrives(self, source):
