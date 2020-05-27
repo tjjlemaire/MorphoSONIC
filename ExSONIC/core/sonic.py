@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-30 21:40:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-27 15:37:41
+# @Last Modified time: 2020-05-27 17:27:23
 
 from neuron import h
 import numpy as np
@@ -15,7 +15,7 @@ from ..constants import *
 from ..utils import array_print_options, seriesGeq
 from .sources import AcousticSource
 from .connectors import SerialConnectionScheme
-from .pyhoc import CustomConnectMechQSection, Matrix
+from .pyhoc import getCustomConnectSection, Matrix
 
 from .nmodel import NeuronModel, SpatiallyExtendedNeuronModel
 
@@ -240,10 +240,10 @@ def addSonicFeatures(Base):
             self.set('connection_scheme', value)
 
         def getSectionClass(self, *args, **kwargs):
-            if self.connection_scheme is not None:
-                return CustomConnectMechQSection
-            else:
-                return super().getSectionClass(*args, **kwargs)
+            sec_class = super().getSectionClass(*args, **kwargs)
+            if self.connection_scheme is None:
+                return sec_class
+            return getCustomConnectSection(sec_class)
 
         def createSection(self, *args, **kwargs):
             return super().createSection(args[0], self.connection_scheme, *args[1:], **kwargs)

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-27 13:37:02
+# @Last Modified time: 2020-05-27 17:34:19
 
 import logging
 import matplotlib.pyplot as plt
@@ -26,7 +26,7 @@ fiber_class = MRGFiber
 
 fibers = {k: v(fiberD, nnodes) for k, v in {
     'normal': fiber_class.__original__,
-    # 'sonic': fiber_class
+    'sonic': fiber_class
 }.items()}
 
 # Stimulation parameters
@@ -55,6 +55,8 @@ for lbl, fiber in fibers.items():
     # Insert extracellular network in all sections
     # for sec in fiber.seclist:
     #     sec.insertVext(xr=1e20, xg=1e2, xc=0)
+    for sec in fiber.seclist:
+        print(sec.__class__.__name__, sec)
 
     # Simulate model
     data, meta = fiber.simulate(source, pp)
