@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-27 16:03:31
+# @Last Modified time: 2020-05-27 16:34:42
 
 import abc
 from neuron import h
@@ -409,7 +409,7 @@ class NeuronModel(metaclass=abc.ABCMeta):
         # Set recording vectors
         t = self.setTimeProbe()
         stim = self.section.setStimProbe()
-        probes = self.section.setProbesDict()
+        probes = self.section.setProbes()
 
         # Set drive and integrate model
         self.setDrive(drive)
@@ -663,7 +663,7 @@ class SpatiallyExtendedNeuronModel(NeuronModel):
         all_probes = {}
         for sectype, secdict in self.sections.items():
             for k, sec in secdict.items():
-                all_probes[k] = sec.setProbesDict()
+                all_probes[k] = sec.setProbes()
 
         # Integrate model
         self.integrate(pp, dt, atol)

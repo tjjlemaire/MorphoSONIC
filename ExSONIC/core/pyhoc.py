@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-27 16:08:21
+# @Last Modified time: 2020-05-27 16:34:54
 
 ''' Utilities to manipulate HOC objects. '''
 
@@ -293,7 +293,7 @@ class Section(hclass(h.Section)):
     def setQmProbe(self):
         raise NotImplementedError
 
-    def setProbesDict(self):
+    def setProbes(self):
         ''' Set recording vectors for all variables of interest in the section.
 
             :return: probes object dictionary
@@ -442,9 +442,9 @@ class MechSection(Section):
         ''' Set recording vector for stimulation state. '''
         return self.setMechProbe(self.stimon_var)
 
-    def setProbesDict(self):
+    def setProbes(self):
         return {
-            **super().setProbesDict(),
+            **super().setProbes(),
             **{k: self.setMechProbe(self.alias(k)) for k in self.states}
         }
 

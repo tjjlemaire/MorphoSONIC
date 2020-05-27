@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-01-13 20:15:35
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-18 15:12:16
+# @Last Modified time: 2020-05-27 16:34:23
 
 import pandas as pd
 from neuron import h
@@ -139,7 +139,7 @@ class NodeCollection:
         # Set recording vectors
         t = self.setTimeProbe()
         stim = self.refnode.section.setStimProbe()
-        probes = {k: v.section.setProbesDict(v.pneuron.statesNames()) for k, v in self.nodes.items()}
+        probes = {k: v.section.setProbes(v.pneuron.statesNames()) for k, v in self.nodes.items()}
 
         # Set distributed stimulus amplitudes
         self.setStimAmps(amps)
