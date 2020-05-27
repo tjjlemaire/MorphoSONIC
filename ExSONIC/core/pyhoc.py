@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-19 12:48:41
+# @Last Modified time: 2020-05-27 16:08:21
 
 ''' Utilities to manipulate HOC objects. '''
 
@@ -80,6 +80,7 @@ class IClamp(hclass(h.IClamp)):
         self.dur = 1e9  # dur must be long enough to span all our changes
         self.amp = 0.  # initially, we set the amplitude to zero
         self.xamp = amplitude
+        section.iclamp = self
 
     def set(self, value):
         self.amp = value * self.xamp
@@ -104,6 +105,9 @@ class ExtField():
 class Section(hclass(h.Section)):
     ''' Interface to a Hoc Section with nseg=1. '''
 
+    # passive_mechname = 'custom_pas'
+    passive_mechname = 'pas'
+
     def __init__(self, name=None, cell=None):
         ''' Initialization.
 
@@ -116,6 +120,7 @@ class Section(hclass(h.Section)):
             super().__init__(name=name)
         self.nseg = 1
         self.has_ext_mech = False
+        self.iclamp = None
 
     @property
     def cfac(self):
@@ -239,17 +244,31 @@ class Section(hclass(h.Section)):
         '''
         super().connect(parent, 1, 0)
 
-    def insertPassiveMech(self, g, Erev):
-        ''' Insert a passive (leakage) mechanism with specifc parameters.
+    def hasPassive(self):
+        ''' Determine if section contains a passive membrane mechanism. '''
+        return h.ismembrane(self.passive_mechname, sec=self)
 
-            Applies cfac-correction to Q-based sections.
+    def insertPassive(self):
+        ''' Insert passive (leakage) mechanism. '''
+        self.insert(self.passive_mechname)
 
-            :param g: conductance (S/cm2)
-            :param Erev: reversal potential (mV)
-        '''
-        self.insert('pas')
-        self.g_pas = g
-        self.e_pas = Erev * self.cfac
+    def setPassive(self, key, value):
+        ''' Set an attribute of the passive (leakage) mechanism. '''
+        setattr(self, f'{key}_{self.passive_mechname}', value)
+
+    def setPassiveG(self, value):
+        ''' Set the passive conductance (S/cm2). '''
+        self.setPassive('g', value)
+
+    def setPassiveE(self, value):
+        ''' Set the passive reversal potential (mV). '''
+        self.setPassive('e', value * self.cfac)
+
+    def iStimDensity(self):
+        ''' Return the section's stimulating current divided by its membrane area. '''
+        if self.iclamp is None:
+            return 0
+        return self.iclamp.i / self.membraneArea() * 1e-6 * self.cfac  # mA/cm2
 
     def getDetails(self):
         ''' Get details of section parameters. '''
@@ -268,6 +287,27 @@ class Section(hclass(h.Section)):
             })
         return d
 
+    def setVmProbe(self):
+        raise NotImplementedError
+
+    def setQmProbe(self):
+        raise NotImplementedError
+
+    def setProbesDict(self):
+        ''' Set recording vectors for all variables of interest in the section.
+
+            :return: probes object dictionary
+        '''
+        d = {
+            'Qm': self.setQmProbe(),
+            'Vm': self.setVmProbe()}
+        if self.has_ext_mech:
+            d['Vext'] = self.setVextProbe()
+        return d
+
+    def setStimON(self, value):
+        pass
+
 
 class VSection(Section):
     ''' Interface to a Hoc Section with voltage based transmembrane dynamics. '''
@@ -284,6 +324,12 @@ class VSection(Section):
         super().__init__(name=name, cell=cell)
         self.Cm0 = Cm0
         self.cm = self.Cm0
+
+    def setVmProbe(self):
+        return self.setProbe('v')
+
+    def setQmProbe(self):
+        return self.setProbe('v', factor=self.Cm0 / C_M2_TO_NC_CM2)
 
 
 class QSection(Section):
@@ -312,6 +358,12 @@ class QSection(Section):
             raise ValueError('Cannot connect Q-based sections with differing capacitance')
         super().connect(parent)
 
+    def setVmProbe(self):
+        return self.setProbe('v', factor=1 / self.Cm0)
+
+    def setQmProbe(self):
+        return self.setProbe('v', factor=1 / C_M2_TO_NC_CM2)
+
 
 class MechSection(Section):
     ''' Interface to a section with associated point-neuron mechanism. '''
@@ -320,7 +372,7 @@ class MechSection(Section):
     NEURON_aliases = {'O': 'O1', 'C': 'C1'}
     stimon_var = 'stimon'
 
-    def __init__(self, mechname=None, states=None, **kwargs):
+    def __init__(self, mechname, states=None, **kwargs):
         ''' Initialization.
 
             :param mechname: mechanism name
@@ -330,6 +382,17 @@ class MechSection(Section):
             super().__init__(**kwargs)
         self.mechname = mechname
         self.states = states
+
+    @property
+    def mechname(self):
+        return self._mechname
+
+    @mechname.setter
+    def mechname(self, value):
+        if value == 'pas':
+            value = self.passive_mechname
+        self.insert(value)
+        self._mechname = value
 
     @property
     def states(self):
@@ -380,14 +443,10 @@ class MechSection(Section):
         return self.setMechProbe(self.stimon_var)
 
     def setProbesDict(self):
-        ''' Set recording vectors for all variables of interest in the section.
-
-            :return: probes object dictionary
-        '''
-        d = {k: self.setMechProbe(self.alias(k)) for k in self.states}
-        if self.has_ext_mech:
-            d['Vext'] = self.setVextProbe()
-        return d
+        return {
+            **super().setProbesDict(),
+            **{k: self.setMechProbe(self.alias(k)) for k in self.states}
+        }
 
 
 class MechVSection(MechSection, VSection):
@@ -400,12 +459,8 @@ class MechVSection(MechSection, VSection):
         VSection.__init__(self, name=name, cell=cell, Cm0=Cm0)
         MechSection.__init__(self, **kwargs)
 
-    def setProbesDict(self):
-        return {
-            'Vm': self.setProbe('v'),
-            'Qm': self.setMechProbe('Qm', factor=2.),
-            **super().setProbesDict()
-        }
+    def setQmProbe(self):
+        return self.setMechProbe('Qm', factor=1 / C_M2_TO_NC_CM2)
 
 
 class MechQSection(MechSection, QSection):
@@ -418,16 +473,14 @@ class MechQSection(MechSection, QSection):
         QSection.__init__(self, name=name, cell=cell, Cm0=Cm0)
         MechSection.__init__(self, **kwargs)
 
-    def setProbesDict(self):
-        return {
-            'Qm': self.setProbe('v'),
-            'Vm': self.setMechProbe('Vm'),
-            **super().setProbesDict()
-        }
+    def setVmProbe(self):
+        return self.setMechProbe('Vm')
 
 
 class CustomConnectMechQSection(MechQSection):
     ''' Interface to a Hoc Section with associated point-neuron mechanism. '''
+
+    passive_mechname = 'custom_pas'
 
     # Bounds of extracellular parameters (from extcelln.c)
     ext_bounds = {
@@ -482,6 +535,23 @@ class CustomConnectMechQSection(MechQSection):
         '''
         return self.getValue(f'_ref_{self.vref}', **kwargs)
 
+    def setResistivity(self, value):
+        super().setResistivity(value)
+        self.Ra = value * self.cfac
+
+    def ghalf(self, rs):
+        ''' Compute half-section axial conductance per unit area for a specific resistivity.
+
+            :param rs: resistivity (Ohm.cm)
+            :return: conductivity per unit membrane area (S/cm2)
+        '''
+        return 2 / (rs * (self.L / CM_TO_UM) * self.membraneArea())  # S/cm2
+
+    @property
+    def ga_half(self):
+        ''' Half-section intracellular axial conductance per unit area (S/cm2). '''
+        return self.ghalf(self.Ra)
+
     def boundedAxialResistance(self):
         ''' Compute bounded value for axial resistance to ensure (resistance * membrane area)
             is always above a specific threshold, in order to limit the magnitude of axial currents.
@@ -490,28 +560,17 @@ class CustomConnectMechQSection(MechQSection):
         '''
         Am = self.membraneArea()    # cm2
         R = self.axialResistance()  # Ohm
+        if self.rmin is None:
+            return R
         s = f'{self}: R*Am = {R * Am:.1e} Ohm.cm2'
         if R < self.rmin / Am:
-            s += f' -> bounded to {self.rmin:.1e} Ohm.cm2'
+            s = f'{s} -> bounded to {self.rmin:.1e} Ohm.cm2'
             R = self.rmin / Am
             logger.warning(s)
         else:
-            s += ' -> not bounded'
+            s = f'{s} -> not bounded'
             logger.debug(s)
         return R
-
-    def insertPassiveMech(self, g, Erev):
-        raise NotImplementedError
-
-    def connectIntracellular(self, parent):
-        ''' Connect the intracellular layers of a section and its parent. '''
-        # Add half axial conductances to appropriate indexes of Gax vectors
-        parent.iax.updateAxialConductance(1, self.iax.Ghalf)  # S
-        self.iax.updateAxialConductance(0, parent.iax.Ghalf)  # S
-
-        # Set bi-directional pointers to sections about each other's membrane potential
-        parent.iax.set_Vother(1, self.getVrefValue(x=0.5))  # mV
-        self.iax.set_Vother(0, parent.getVrefValue(x=0.5))  # mV
 
     def getVextRef(self):
         ''' Get reference to section's extracellular voltage. '''
@@ -525,26 +584,34 @@ class CustomConnectMechQSection(MechQSection):
         ''' Return the section's intracellular axial current divided by its membrane area. '''
         return self.iax.iax / self.membraneArea() * 1e-6 * self.cfac  # mA/cm2
 
-    def connectExtracellular(self, parent):
-        ''' Connect the extracellular layers of a section and its parent. '''
-        # Set bi-directional pointers to sections about each other's extracellular potential
-        parent.iax.set_Vextother(1, self.getVextRef())  # mV
-        self.iax.set_Vextother(0, parent.getVextRef())  # mV
+    def connectIntracellular(self, parent):
+        ''' Connect the intracellular layers of a section and its parent. '''
+        self.cell().connectIntracellularNodes(self, parent)
 
-        # Update extracellular conductance matrix for both sections
-        i = self.cell().getSecIndex(self)
-        ga = seriesGeq(self.ga_half, parent.ga_half)  # S/cm2
-        self.cell().gx_mat.addval(i, i, ga)
-        self.cell().gx_mat.addval(i, i - 1, -ga)
-        self.cell().gx_mat.addval(i - 1, i - 1, ga)
-        self.cell().gx_mat.addval(i - 1, i, -ga)
-
-    def connect(self, parent):
-        ''' Connect to a parent section in series to enable trans-sectional axial current. '''
+        # Define axial current point-process to both sections, if not already done.
         for sec in [parent, self]:
             if sec.iax is None:
                 sec.iax = Iax(sec)
 
+        # Add half axial conductances to appropriate indexes of Gax vectors
+        parent.iax.updateAxialConductance(1, self.iax.Ghalf)  # S
+        self.iax.updateAxialConductance(0, parent.iax.Ghalf)  # S
+
+        # Set bi-directional pointers to sections about each other's membrane potential
+        parent.iax.set_Vother(1, self.getVrefValue(x=0.5))  # mV
+        self.iax.set_Vother(0, parent.getVrefValue(x=0.5))  # mV
+
+    def connectExtracellular(self, parent):
+        ''' Connect the extracellular layers of a section and its parent. '''
+        # Update extracellular conductance matrix
+        self.cell().connectExtracellularNodes(self, parent)
+
+        # Set bi-directional pointers to sections about each other's extracellular potential
+        parent.iax.set_Vextother(1, self.getVextRef())  # mV
+        self.iax.set_Vextother(0, parent.getVextRef())  # mV
+
+    def connect(self, parent):
+        ''' Connect to a parent section in series to enable trans-sectional axial currents. '''
         # Connect intracellular layer between the two sections
         self.connectIntracellular(parent)
 
@@ -565,30 +632,22 @@ class CustomConnectMechQSection(MechQSection):
         xc = isWithin('xc', xc, self.ext_bounds['xc']) / self.cfac
 
         # Add values to the correct indexes of the extracellular arrays
-        i = self.cell().getSecIndex(self)
-        self.cell().cx_mat.addval(i, i, xc * UF_CM2_TO_MF_CM2)  # mF/cm2
-        self.cell().gx_mat.addval(i, i, xg)                     # S/cm2
-        self.cell().gx_vec.x[i] += xg                           # S/cm2
+        self.cell().setExtracellularNode(self, xg, xc)
 
         # Compute half-section extracellular axial conductance
-        self.ga_half = 2 / (xr * (self.L / CM_TO_UM) * self.membraneArea())  # S/cm2
+        self.gp_half = self.ghalf(xr)  # S/cm2
 
-        # If section has an axial point-process (meaning that it is connected)
+        # If section has Iax point-process, assign all Vext pointers to section's vext
         if self.iax is not None:
-            # Assign pointer towards corresponding extracellular voltage
             self.iax.setVextPointer(self.getVextRef())
+            for i in range(MAX_CUSTOM_CON):
+                self.iax.set_Vextother(i, self.getVextRef())
 
-            # If section has parent and that parent has an extracellular mechanism
-            if self.has_parent() and self.parent().has_ext_mech:
-                # Connect the extracellular part of the two sections bidirectionally
-                self.connectExtracellular(self.parent())
-            else:
-                # Otherwise close the vext loop on the section's left-side
-                self.iax.set_Vextother(0, self.getVextRef())  # mV
-            # If section has no child or child section has no extracellular mechanism
-            if not self.has_child() or not self.child().has_ext_mech:
-                # Close the vext loop on the section's right-side
-                self.iax.set_Vextother(1, self.getVextRef())  # mV
+        # If section has parent/child with extracellular mechanism, connect the extracellular parts
+        if self.has_parent() and self.parent().has_ext_mech:
+            self.connectExtracellular(self.parent())
+        if self.has_child() and self.child().has_ext_mech:
+            self.child().connectExtracellular(self)
 
         # Inform section that it has an extracellular mechanism
         self.has_ext_mech = True
@@ -611,28 +670,22 @@ class Iax(hclass(h.Iax)):
             :param sec: section object
         '''
         super().__init__(sec)
-        # Determine section's resistance and half-section axial conductance
-        self.R = sec.axialResistance() if sec.rmin is None else sec.boundedAxialResistance()  # Ohm
-        self.Ghalf = 2 / (self.R * OHM_TO_MOHM)  # S
 
         # Initialize axial conductance vector with section's half conductance
+        self.Ghalf = 2 / (sec.boundedAxialResistance() * OHM_TO_MOHM)  # S
         for i in range(MAX_CUSTOM_CON):
             self.Gax[i] = self.Ghalf  # uS
 
-        # Set pointer to section's membrane potential
+        # Set Vm pointer to section's membrane potential and Vext pointer to ground
         self.setVmPointer(sec)
+        self.setVextPointer(h._ref_ground)
 
-        # Declare Vother and Vextother pointer arrays
+        # Declare Vother and Vextother pointer arrays, and set them to local membrane potential
+        # and ground, respectively
         self.declare_Vother()
         self.declare_Vextother()
-
-        # Set Vother pointers to point towards local membrane potential
         for i in range(MAX_CUSTOM_CON):
             self.set_Vother(i, sec.getVrefValue(x=0.5))
-
-        # Set Vext and Vextother pointers to point towards ground
-        self.setVextPointer(h._ref_ground)
-        for i in range(MAX_CUSTOM_CON):
             self.set_Vextother(i, h._ref_ground)
 
     def updateAxialConductance(self, i, G):

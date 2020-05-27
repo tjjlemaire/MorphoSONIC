@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-27 23:08:23
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-08 17:23:39
+# @Last Modified time: 2020-05-27 16:08:08
 
 import numpy as np
 
@@ -13,6 +13,7 @@ from PySONIC.utils import logger
 
 from ..constants import *
 from .nmodel import FiberNeuronModel
+from .sonic import addSonicFeatures
 
 # MRG lookup table from McIntyre 2002
 mrg_lkp = Lookup(
@@ -27,6 +28,7 @@ mrg_lkp = Lookup(
     interp_method='linear', extrapolate=True)
 
 
+@addSonicFeatures
 class MRGFiber(FiberNeuronModel):
     ''' Generic double-cable, myelinated fiber model based on McIntyre 2002, extended
         to allow use with any fiber diameter.
@@ -364,6 +366,7 @@ class MRGFiber(FiberNeuronModel):
             fiber's outer diameter), to ensure correct sections extensive membrane properties.
         '''
         logger.debug('setting sections biophysics')
+        super().setBiophysics()
         for sectype, secdict in self.inters.items():
             g = getattr(self, f'_g_{sectype.lower()}')
             if self.correction_level == 'axoplasm':
@@ -371,8 +374,9 @@ class MRGFiber(FiberNeuronModel):
                     sec.cm *= self.diameterRatio(sectype)
                 g *= self.diameterRatio(sectype)
             for sec in secdict.values():
-                sec.insertPassiveMech(g, self.pneuron.Vm0)
-        super().setBiophysics()
+                sec.insertPassive()
+                sec.setPassiveG(g)
+                sec.setPassiveE(self.pneuron.Vm0)
 
     def setExtracellular(self):
         ''' Set the sections' extracellular mechanisms.
@@ -408,15 +412,6 @@ class MRGFiber(FiberNeuronModel):
             self.connect('STIN', self._nstin_per_inter * (i + 1) - 1, 'FLUT', 2 * i + 1)
             self.connect('FLUT', 2 * i + 1, 'MYSA', 2 * i + 1)
             self.connect('MYSA', 2 * i + 1, 'node', i + 1)
-
-    def setFuncTables(self, *args, **kwargs):
-        super().setFuncTables(*args, **kwargs)
-        logger.debug(f'setting V functable in inter mechanism')
-        # self.setFuncTable(self.inter_mechname, 'V', self.lkp['V'], self.Aref, self.Qref)
-
-    def setOtherProbes(self):
-        return {sectype: {k: {'Vm': v.setProbe('v')} for k, v in secdict.items()}
-                for sectype, secdict in self.inters.items()}
 
     def toInjectedCurrents(self, Ve):
         # Extract and reshape STIN Ve to (6 x ninters) array to facilitate downstream computations
@@ -454,6 +449,3 @@ class MRGFiber(FiberNeuronModel):
                 -I_stin_stin[-1] + I_flut_stin[1]  # left-side boundary STIN
             )), order='F')
         }
-
-    def simulate(self, source, pp):
-        return super().simulate(source, pp, dt=FIXED_DT)

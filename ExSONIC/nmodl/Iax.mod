@@ -36,12 +36,15 @@ ASSIGNED {
 }
 
 BREAKPOINT {
+    compute()
+}
+
+PROCEDURE compute() {
     iax = 0
     FROM i=0 TO MAX_CON-1 {
         iax = iax + Gax[i] * (V - get_Vother(i) + Vext - get_Vextother(i))
     }
 }
-
 
 PROCEDURE declare_Vother() {
     LOCAL n

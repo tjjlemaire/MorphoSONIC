@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-18 20:36:56
+# @Last Modified time: 2020-05-27 16:03:31
 
 import abc
 from neuron import h
@@ -27,8 +27,8 @@ from ..constants import *
 class NeuronModel(metaclass=abc.ABCMeta):
     ''' Generic interface for NEURON models. '''
 
-    tscale = 'ms'                 # relevant temporal scale of the model
-    section_class = MechQSection  # default type of NEURON section
+    tscale = 'ms'  # relevant temporal scale of the model
+    refvar = 'Qm'  # default reference variable
     is_constructed = False
 
     # integration methods
@@ -168,10 +168,7 @@ class NeuronModel(metaclass=abc.ABCMeta):
 
     def setBiophysics(self):
         ''' Set the membrane biophysics of all model sections. '''
-        for sec in self.seclist:
-            if isinstance(sec, MechSection) and sec.mechname is not None:
-                sec.insert(sec.mechname)
-        if issubclass(self.section_class, QSection):
+        if self.refvar == 'Qm':
             self.setFuncTables()
 
     def setTopology(self):
@@ -192,12 +189,23 @@ class NeuronModel(metaclass=abc.ABCMeta):
         self.clear()
         self.construct()
 
+    def getSectionClass(self, mechname):
+        ''' Get the correct section class according to mechanism name. '''
+        if mechname is None:
+            d = {'Vm': VSection, 'Qm': QSection}
+        else:
+            d = {'Vm': MechVSection, 'Qm': MechQSection}
+        return d[self.refvar]
+
     def createSection(self, id, *args, mech=None, states=None, Cm0=None):
         ''' Create a model section with a given id. '''
+        args = [x for x in args if x is not None]
         if Cm0 is None:
             Cm0 = self.pneuron.Cm0 * F_M2_TO_UF_CM2  # uF/cm2
-        args = [x for x in args if x is not None]
-        return self.section_class(*args, mechname=mech, states=states, name=id, cell=self, Cm0=Cm0)
+        kwargs = {'name': 'id', 'cell': self, 'Cm0': Cm0}
+        if mech is not None:
+            kwargs.update({'mechname': mech, 'states': states})
+        return self.getSectionClass(mech)(*args, **kwargs)
 
     def getIntegrationMethod(self):
         ''' Get the method used by NEURON for the numerical integration of the system. '''
@@ -212,7 +220,7 @@ class NeuronModel(metaclass=abc.ABCMeta):
         ''' Initialize model variables to pre-stimulus resting state values. '''
         h.t = 0
         self.setStimValue(0)
-        if issubclass(self.section_class, QSection):
+        if self.refvar == 'Qm':
             x0 = self.pneuron.Qm0 * C_M2_TO_NC_CM2  # nC/cm2
         else:
             x0 = self.pneuron.Vm0  # mV
@@ -220,7 +228,7 @@ class NeuronModel(metaclass=abc.ABCMeta):
 
     def setTimeProbe(self):
         ''' Set time probe. '''
-        return Probe(h._ref_t)
+        return Probe(h._ref_t, factor=1 / S_TO_MS)
 
     def setStimValue(self, value):
         ''' Set stimulation ON or OFF.
@@ -240,12 +248,15 @@ class NeuronModel(metaclass=abc.ABCMeta):
             # If adaptive solver: re-initialize the integrator
             if self.cvode.active():
                 self.cvode.re_init()
-            # Otherwise, re-align currents with current states and potential
+            # Otherwise, re-align currents with states and potential
             else:
                 h.fcurrent()
 
     def createStimSetter(self, value):
         return lambda: self.setStimValue(value)
+
+    def fadvanceLogger(self):
+        logger.debug(f'fadvance return at t = {h.t:.3f} ms')
 
     @staticmethod
     def fixStimVec(stim, dt):
@@ -291,7 +302,7 @@ class NeuronModel(metaclass=abc.ABCMeta):
             if tevent == 0:
                 self.setStimValue(new_stim_value)
             else:
-                self.cvode.event((tevent - TRANSITION_DT) * S_TO_MS)
+                self.cvode.event((tevent - TRANSITION_DT) * S_TO_MS, self.fadvanceLogger)
                 self.cvode.event(tevent * S_TO_MS, self.createStimSetter(new_stim_value))
 
         # Integrate
@@ -371,6 +382,17 @@ class NeuronModel(metaclass=abc.ABCMeta):
         for k, v in self.lkp.items():
             self.setFuncTable(self.mechname, k, v, self.Aref, self.Qref)
 
+        # Add V func table to passive sections if custom passive mechanism is used
+        self.setFuncTable('custom_pas', 'V', self.lkp['V'], self.Aref, self.Qref)
+
+    @staticmethod
+    def outputDataFrame(t, stim, probes):
+        ''' Return output in dataframe with prepended initial conditions (prior to stimulation). '''
+        return prependDataFrame(pd.DataFrame({
+            't': t,  # s
+            'stimstate': stim,
+            **{k: v.to_array() for k, v in probes.items()}}))
+
     @Model.logNSpikes
     @Model.checkTitrate
     @Model.addMeta
@@ -393,21 +415,8 @@ class NeuronModel(metaclass=abc.ABCMeta):
         self.setDrive(drive)
         self.integrate(pp, dt, atol)
 
-        # Store output in dataframe
-        t = t.to_array() / S_TO_MS  # s
-        stim = self.fixStimVec(stim.to_array(), dt)
-        data = pd.DataFrame({
-            't': t,  # s
-            'stimstate': stim
-        })
-        for k, v in probes.items():
-            data[k] = v.to_array()
-        data.loc[:, 'Qm'] /= C_M2_TO_NC_CM2  # C/m2
-
-        # Prepend initial conditions (prior to stimulation)
-        data = prependDataFrame(data)
-
-        return data
+        # Return output dataframe
+        return self.outputDataFrame(t.to_array(), self.fixStimVec(stim.to_array(), dt), probes)
 
     @property
     def titrationFunc(self):
@@ -423,7 +432,7 @@ class NeuronModel(metaclass=abc.ABCMeta):
                 'desc': 'extracellular potential',
                 'label': 'V_{ext}',
                 'unit': 'mV',
-                'strictbounds': (-200, 200)
+                # 'strictbounds': (-200, 200)
             }
         }
 
@@ -441,6 +450,10 @@ class NeuronModel(metaclass=abc.ABCMeta):
 
     def simAndSave(self, *args, **kwargs):
         return simAndSave(self, *args, **kwargs)
+
+    @property
+    def has_ext_mech(self):
+        return any(sec.has_ext_mech for sec in self.seclist)
 
 
 class SpatiallyExtendedNeuronModel(NeuronModel):
@@ -520,6 +533,10 @@ class SpatiallyExtendedNeuronModel(NeuronModel):
     def logSectionsDetails(self):
         return f'sections details:\n{self.getSectionsDetails().to_markdown()}'
 
+    def printTopology(self):
+        ''' Print the model's topology. '''
+        h.topology()
+
     @property
     @abc.abstractmethod
     def nonlinear_sections(self):
@@ -540,9 +557,6 @@ class SpatiallyExtendedNeuronModel(NeuronModel):
             if not hasattr(item, 'set'):
                 raise ValueError(f'drive {item} has no "set" method')
         self._drives = value
-
-    def setOtherProbes(self):
-        return {}
 
     def desc(self, meta):
         return f'{self}: simulation @ {meta["source"]}, {meta["pp"].desc}'
@@ -640,44 +654,24 @@ class SpatiallyExtendedNeuronModel(NeuronModel):
             :param atol: absolute error tolerance for adaptive time step method.
             :return: output dataframe
         '''
+        # Set distributed drives
+        self.setDrives(source)
+
         # Set recording vectors
         t = self.setTimeProbe()
         stim = self.refsection.setStimProbe()
-        full_probes = {k: v.setProbesDict() for k, v in self.nonlinear_sections.items()}
-        other_probes = self.setOtherProbes()
-
-        # Set distributed drives
-        self.setDrives(source)
+        all_probes = {}
+        for sectype, secdict in self.sections.items():
+            for k, sec in secdict.items():
+                all_probes[k] = sec.setProbesDict()
 
         # Integrate model
         self.integrate(pp, dt, atol)
 
-        # Store output in dataframes
-        t = t.to_array() / S_TO_MS  # s
+        # Return output dataframe dictionary
+        t = t.to_array()  # s
         stim = self.fixStimVec(stim.to_array(), dt)
-        data = {}
-
-        # Full states data for sections with nonlinear mechanisms
-        for id, probes in full_probes.items():
-            data[id] = pd.DataFrame({
-                't': t,
-                'stimstate': stim,
-                **{k: v.to_array() for k, v in probes.items()}
-            })
-            data[id].loc[:, 'Qm'] /= C_M2_TO_NC_CM2  # C/m2
-
-        # Voltage data only for other sections
-        for sectype, probes_dict in other_probes.items():
-            for k, v in probes_dict.items():
-                data[k] = pd.DataFrame({
-                    't': t,
-                    'stimstate': stim,
-                    'Vm': v['Vm'].to_array()})
-
-        # Prepend initial conditions (prior to stimulation)
-        data = {id: prependDataFrame(df) for id, df in data.items()}
-
-        return data
+        return {id: self.outputDataFrame(t, stim, probes) for id, probes in all_probes.items()}
 
     def getSpikesTimings(self, data, zcross=True, spikematch='majority'):
         ''' Return an array containing occurence times of spikes detected on a collection of sections.
@@ -1024,3 +1018,12 @@ class FiberNeuronModel(SpatiallyExtendedNeuronModel):
         if source.is_cathodal:
             xthr = -xthr
         return xthr
+
+    def simulate(self, source, pp):
+        dt = None
+        if isinstance(source, (ExtracellularCurrent, GaussianVoltageSource)):
+            if not self.use_equivalent_currents:
+                dt = FIXED_DT
+        if self.has_ext_mech:
+            dt = FIXED_DT
+        return super().simulate(source, pp, dt=dt)

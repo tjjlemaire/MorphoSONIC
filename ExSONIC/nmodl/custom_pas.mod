@@ -12,8 +12,8 @@ NEURON {
 PARAMETER {
    stimon         : Stimulation state
    Adrive (kPa)   : Stimulation amplitude
-   gPas   (S/cm2)
-   EPas   (mV)
+   g      (S/cm2)
+   e      (mV)
 }
 
 ASSIGNED {
@@ -26,6 +26,5 @@ FUNCTION_TABLE V(A(kPa), Q(nC/cm2)) (mV)
 
 BREAKPOINT {
    Vm = V(Adrive * stimon, v)
-   Vm = v
-   iPas = gPas * (Vm - EPas)
+   iPas = g * (Vm - e)
 }

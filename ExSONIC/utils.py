@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 14:38:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-08 18:35:08
+# @Last Modified time: 2020-05-20 15:03:07
 
 import os
 import pickle
@@ -148,4 +148,6 @@ def seriesGeq(*G):
         :param G: list of conductances
         :return: equivalent series condictance.
     '''
+    if 0. in G:
+        return 0.
     return 1 / sum(map(lambda x: 1 / x, G))

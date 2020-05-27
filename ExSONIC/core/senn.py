@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-08 12:20:14
+# @Last Modified time: 2020-05-23 13:20:50
 
 import numpy as np
 
@@ -12,7 +12,6 @@ from PySONIC.utils import logger, isWithin
 
 from ..constants import *
 from .nmodel import FiberNeuronModel
-from .sources import ExtracellularCurrent, GaussianVoltageSource
 from .sonic import addSonicFeatures
 
 
@@ -131,13 +130,6 @@ class SingleCableFiber(FiberNeuronModel):
     def toInjectedCurrents(self, Ve):
         Iinj = np.diff(Ve['node'], 2) / (self.R_node + self.R_inter) * MA_TO_NA  # nA
         return {'node': np.pad(Iinj, (1, 1), 'constant')}  # zero-padding on both extremities
-
-    def simulate(self, source, pp):
-        dt = None
-        if isinstance(source, (ExtracellularCurrent, GaussianVoltageSource)):
-            if not self.use_equivalent_currents:
-                dt = FIXED_DT
-        return super().simulate(source, pp, dt=dt)
 
 
 @addSonicFeatures
