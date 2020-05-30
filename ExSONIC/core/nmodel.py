@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-27 17:37:32
+# @Last Modified time: 2020-05-30 14:01:38
 
 import abc
 from neuron import h
@@ -30,6 +30,7 @@ class NeuronModel(metaclass=abc.ABCMeta):
     tscale = 'ms'  # relevant temporal scale of the model
     refvar = 'Qm'  # default reference variable
     is_constructed = False
+    fixed_dt = FIXED_DT
 
     # integration methods
     int_methods = {
@@ -432,7 +433,7 @@ class NeuronModel(metaclass=abc.ABCMeta):
                 'desc': 'extracellular potential',
                 'label': 'V_{ext}',
                 'unit': 'mV',
-                # 'strictbounds': (-200, 200)
+                # 'strictbounds': (-0.2, 0.2)
             }
         }
 
@@ -1019,11 +1020,15 @@ class FiberNeuronModel(SpatiallyExtendedNeuronModel):
             xthr = -xthr
         return xthr
 
-    def simulate(self, source, pp):
-        dt = None
+    def needsFixedTimeStep(self, source):
         if isinstance(source, (ExtracellularCurrent, GaussianVoltageSource)):
             if not self.use_equivalent_currents:
-                dt = FIXED_DT
+                return True
         if self.has_ext_mech:
-            dt = FIXED_DT
-        return super().simulate(source, pp, dt=dt)
+            return True
+        return False
+
+    def simulate(self, source, pp):
+        return super().simulate(
+            source, pp,
+            dt=self.fixed_dt if self.needsFixedTimeStep(source) else None)

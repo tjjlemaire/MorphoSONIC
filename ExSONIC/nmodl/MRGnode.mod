@@ -23,6 +23,7 @@ NEURON {
    NONSPECIFIC_CURRENT iLeak : non-specific leakage current
    RANGE Adrive, Vm : section specific
    RANGE stimon     : common to all sections (but set as RANGE to be accessible from caller)
+   RANGE iNet
 }
 
 PARAMETER {
@@ -51,6 +52,7 @@ ASSIGNED {
    iNap (mA/cm2)
    iKs (mA/cm2)
    iLeak (mA/cm2)
+   iNet (mA/cm2)
 }
 
 FUNCTION_TABLE V(A(kPa), Q(nC/cm2)) (mV)
@@ -77,6 +79,7 @@ BREAKPOINT {
    iNap = gNapbar * p * p * p * (Vm - ENa)
    iKs = gKsbar * s * (Vm - EK)
    iLeak = gLeak * (Vm - ELeak)
+   iNet = iNaf + iNap + iKs + iLeak
 }
 
 DERIVATIVE states {

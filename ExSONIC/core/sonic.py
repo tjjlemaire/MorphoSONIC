@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-30 21:40:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-27 17:27:23
+# @Last Modified time: 2020-05-30 14:05:19
 
 from neuron import h
 import numpy as np
@@ -15,7 +15,7 @@ from ..constants import *
 from ..utils import array_print_options, seriesGeq
 from .sources import AcousticSource
 from .connectors import SerialConnectionScheme
-from .pyhoc import getCustomConnectSection, Matrix
+from .pyhoc import getCustomConnectSection, Vector, Matrix
 
 from .nmodel import NeuronModel, SpatiallyExtendedNeuronModel
 
@@ -218,10 +218,11 @@ def addSonicFeatures(Base):
 
     class SonicMorpho(SonicBase):
 
+        # use_iax_pp = False
+
         def __init__(self, *args, **kwargs):
             self.connection_scheme = SerialConnectionScheme(vref=f'Vm', rmin=self.rmin)
-            self.int_network = None
-            self.ext_network = None
+            self.network = None
             super().__init__(*args, **kwargs)
 
         def copy(self):
@@ -254,129 +255,221 @@ def addSonicFeatures(Base):
             kwargs.update({k: meta[k] for k in ['a', 'fs']})
             return args, kwargs
 
-        def setOrderedSecRefList(self):
-            ''' Return a list of ordered section references based on the model's topology. '''
-            ordered_secref_list = []
-            for sec in self.seclist:
-                if not sec.has_parent():
-                    ordered_secref_list = [sec]
-                    break
-            while ordered_secref_list[-1].child_ref is not None:
-                ordered_secref_list.append(ordered_secref_list[-1].child_ref.sec)
-            if len(ordered_secref_list) < len(self.seclist):
-                raise ValueError('There are some unconnected sections in the model...')
-            self.ordered_secref_list = ordered_secref_list
+        def createSections(self):
+            super().createSections()
+            self.initNetworkArrays(self.nsections)
+
+        def initNetworkArrays(self, n):
+            ''' Initialize arrays that will be used to set the voltage network.
+
+                Considering the following terms:
+                - vi: intracelular voltage
+                - vm: transmembrane voltage
+                - vx: extracellular voltage
+                - ex: imposed voltage outside of the surrounding extracellular membrane
+                - is: stimulating current
+                - cm: membrane capacitance
+                - i(vm): transmembrane ionic current
+                - ga: intracellular axial conductance between nodes
+                - cx: capacitance of surrounding extracellular membrane (i.e. myelin)
+                - gx: passive transverse conductance of surrounding extracellular membrane (i.e. myelin)
+                - gp: extracellular axial conductance between nodes (e.g. periaxonal space)
+                - j: index indicating the connection to a neighboring node
+
+                Governing equations for internal and external nodes are, respectively:
+                (1) cm * dvm/dt + i(vm) = is + ga_j * (vi_j - vi)
+                (2) cx * dvx/dt + gx * (vx - ex) = cm * dvm/dt + i(vm) + gp_j * (vx_j - vx)
+
+                Putting all voltage dependencies on the left-hand sides, and developing, we find:
+                (1) cm * dvm/dt + ga_j * vi - ga_j * vi_j = is - i(vm)
+                (2) cx * dvx/dt - cm * dvm/dt + (gx + gp_j) * vx - gp_j * vx_j = i(vm) + gx * ex
+
+                Re-expressing vi as (vm + vx), we find the matrix equation rows for the two nodes:
+                (1) cm * dvm/dt + ga_j * (vm + vx) - ga_j * (vm_j + vx_j) = is - i(vm)
+                (2) cx * dvx/dt - cm * dvm/dt + (gx + gp_j) * vx - gp_j * vx_j = i(vm) + gx * ex
+
+                ----------- VARIANT: removing membrane derivatives in second term -----------
+
+                Inserting the equivalence of (1) into (2), we obtain:
+                (1) cm * dvm/dt + i(vm) = is + ga_j * (vi_j - vi)
+                (2) cx * dvx/dt + gx * (vx - ex) = is + ga_j*(vi_j - vi) + gp_j * (vx_j - vx)
+
+                Putting all voltage dependencies on the left-hand sides, and developing, we find:
+                (1) cm * dvm/dt + ga_j * vi - ga_j * vi_j = is - i(vm)
+                (2) cx * dvx/dt + (gx + gp_j) * vx - gp_j * vx_j + ga_j * vi - ga_j * vi_j = gx * ex + is
+
+                Re-expressing vi as (vm + vx), we find:
+                (1) cm * dvm/dt + ga_j * (vm + vx) - ga_j * (vm_j + vx_j) = is - i(vm)
+                (2) cx * dvx/dt + (gx + gp_j) * vx - gp_j * vx_j + ga_j * (vm + vx) - ga_j * (vm_j + vx_j) = gx * ex + is
+
+                Developing each voltage separately, we find the matrix equation rows for the two nodes:
+                (1) cm * dvm/dt + ga_j * vm - ga_j * vm_j + ga_j * vx - ga_j * vx_j = is - i(vm)
+                (2) cx * dvx/dt + (gx + gp_j + ga_j) * vx - (gp_j + ga_j) * vx_j + ga_j * vm - ga_j * vm_j = gx * ex + is
+            '''
+            self.c_mat = Matrix(n, n)  # capacitance matrix (mF/cm2)
+            self.g_mat = Matrix(n, n)  # conductance matrix (S/cm2)
+            self.v_vec = Vector(n)     # voltage vector (mV)
+            self.i_vec = Vector(n)     # current vector (mA/cm2)
+
+        @property
+        def network_size(self):
+            return self.v_vec.size()
+
+        def expandNetworkArrays(self):
+            self.gx_vec = np.zeros(self.network_size)  # ext. transverse conductance vector (S/cm2)
+            self.Gp_vec = np.zeros(self.network_size)  # longitudinal half-conductance vector (S)
+            self.c_mat.expand(2)
+            self.g_mat.expand(2)
+            self.v_vec.expand(2)
+            self.i_vec.expand(2)
 
         def getSecIndex(self, sec):
             ''' Get index of section in the model's section list. '''
             return self.seclist.index(sec)
 
-        def initNetworkArrays(self, n):
-            ''' Initialize arrays that will be used to set the 1-layer extracellular network.
+        def setGeometry(self):
+            super().setGeometry()
+            self.Am_vec = np.array([sec.membraneArea() for sec in self.seclist])  # cm2
 
-                Governing equations for internal and external nodes are, respectively:
+        def setResistivity(self):
+            super().setResistivity()
+            self.Ga_vec = np.array([sec.Ga_half for sec in self.seclist])
 
-                (1) cm * dvm/dt + i(vm) = is - iax
-                (2) cx * dvx/dt + gx * (vx - ex) = cm * dvm/dt + i(vm) + ax_j * (vx_j - vx)
+        def setBiophysics(self):
+            super().setBiophysics()
+            self.Cm_vec = np.array([sec.Cm0 for sec in self.seclist])
 
-                Inserting (1) into (2), we obtain:
-
-                cx * dvx/dt + gx * (vx - ex) = is - iax + ax_j * (vx_j - vx)
-
-                Putting all vx dependencies on the left-hand side, and developing, we find the
-                matrix equation row for an external node:
-
-                cx * dvx/dt + (gx + ax_j) * vx - ax_j * vx_j = gx * ex + is - iax
-            '''
-            # Extracellular network
-            self.cx_mat = Matrix(n, n, 2)     # capacitance matrix (mF/cm2)
-            self.gx_mat = Matrix(n, n)        # conductance matrix (S/cm2)
-            self.gx_vec = h.Vector(n)         # transverse conductance vector (S/cm2)
-            self.ix_vec = h.Vector(n)         # currents (mA/cm2)
-            self.vx = h.Vector(n)             # extracellular voltage vector
-            self.vx0 = h.Vector(np.zeros(n))  # initial conditions vector
-
-            # Intracelullar network
-            self.null_mat = Matrix(n, n, 2)   # sparse-zero capacitance matrix (mF/cm2)
-            self.gi_mat = Matrix(n, n)        # conductance matrix (S/cm2)
-            self.vmcopy = h.Vector(n)         # copy of membrane potential vector (mV)
-            self.relx_vec = h.Vector([0.5] * self.nsections)
-            self.i_vec = h.Vector(self.nsections)
-
-        def setExtracellularNode(self, sec, g, c):
-            ''' Register the extracellular voltage node of a specific sections by updating
-                the appropriate elements of the extracellular network matrices and vectors.
-
-                :param sec: section object
-                :param g: conductance (S/cm2)
-                :param c: capacitance (uF/cm2)
-            '''
-            i = self.getSecIndex(sec)
-            self.cx_mat.addval(i, i, c * UF_CM2_TO_MF_CM2)  # mF/cm2
-            self.gx_mat.addval(i, i, g)                     # S/cm2
-            self.gx_vec.x[i] += g                           # S/cm2
-
-        def addLongitudinalLink(self, gmat, sec1, sec2, g):
-            ''' Add an longitudinal current with a specific conductance
-                between two sections in a conductance matrix.
-
-                :param gmat: conductance matrix (S/cm2)
-                :param sec1: first section object
-                :param sec2: second section object
-                :param g: conductance (S/cm2)
-            '''
+        def registerConnection(self, sec1, sec2):
             i, j = [self.getSecIndex(x) for x in [sec1, sec2]]
-            gmat.addval(i, i, g)
-            gmat.addval(j, j, g)
-            gmat.addval(i, j, -g)
-            gmat.addval(j, i, -g)
+            self.connection_pairs.append((i, j))
 
-        def connectIntracellularNodes(self, sec1, sec2):
-            self.addLongitudinalLink(self.gi_mat, sec1, sec2, seriesGeq(sec1.ga_half, sec2.ga_half))
+        def addLongitudinalLink(self, i, j, G, offset1=0, offset2=0):
+            ''' Add an longitudinal link between two nodes in the conductance matrix.
 
-        def connectExtracellularNodes(self, sec1, sec2):
-            self.addLongitudinalLink(self.gx_mat, sec1, sec2, seriesGeq(sec1.gp_half, sec2.gp_half))
+                :param i: first section index
+                :param j: second section index
+                :param g: connection conductance (S)
+            '''
+            self.g_mat.addval(i + offset1, i + offset2, G / self.Am_vec[i])
+            self.g_mat.addval(i + offset1, j + offset2, -G / self.Am_vec[i])
+            self.g_mat.addval(j + offset1, j + offset2, G / self.Am_vec[j])
+            self.g_mat.addval(j + offset1, i + offset2, -G / self.Am_vec[j])
 
-        def extCallback(self):
-            ''' LinearMechanism callback that updates the extracellular network. '''
-            for i, sec in enumerate(self.seclist):
-                # Propagate e_ext discontinuities into vx
-                if sec.ex != sec.ex_last:
-                    self.vx.x[i] += sec.ex - sec.ex_last
-                    sec.ex_last = sec.ex
-                self.ix_vec.x[i] = self.gx_vec.x[i] * sec.ex + sec.iStimDensity() - sec.iaxDensity()
+        def addIntracellularLink(self, i, j):
+            self.addLongitudinalLink(  # LHS-1: ga_j * vm - ga_j * vm_j
+                i, j, seriesGeq(self.Ga_vec[i] / self.Cm_vec[i], self.Ga_vec[j] / self.Cm_vec[j]),
+                offset1=0, offset2=0)
+            if self.has_ext_mech:
+                self.addLongitudinalLink(  # LHS-1: ga_j * vx - ga_j * vx_j
+                    i, j, seriesGeq(self.Ga_vec[i], self.Ga_vec[j]),
+                    offset1=0, offset2=self.nsections)
 
-        def printNetworkArrays(self):
-            print('cx_mat:')
-            self.cx_mat.printf()
-            print('gx_mat:')
-            self.gx_mat.printf()
-            print('gi_mat:')
-            self.gi_mat.printf()
+        def addExtracellularLink(self, i, j):
+            self.addLongitudinalLink(  # LHS-2: gp_j * vx - gp_j * vx_j
+                i, j, seriesGeq(self.Gp_vec[i], self.Gp_vec[j]),
+                offset1=self.nsections, offset2=self.nsections)
+            # Ga_ij = seriesGeq(self.Ga_vec[i], self.Ga_vec[j])
+            # self.addLongitudinalLink(  # LHS-2: ga_j * vx - ga_j * vx_j
+            #     i, j, Ga_ij, offset1=self.nsections, offset2=self.nsections)
+            # self.addLongitudinalLink(  # LHS-2: ga_j * vm - ga_j * vm_j
+            #     i, j, Ga_ij, offset1=0, offset2=0)
 
-        def initNetworks(self):
-            ''' Initialize a linear mechanism to represent the extracellular voltage network. '''
-            # self.printNetworkArrays()
-            # if self.int_network is None:
-            #     self.int_network = h.LinearMechanism(
-            #         self.intCallback, self.null_mat, self.gi_mat, self.vmcopy, self.i_vec,
-            #         h.SectionList(self.seclist), self.relx_vec)
-            if self.has_ext_mech and self.ext_network is None:
-                self.ext_network = h.LinearMechanism(
-                    self.extCallback, self.cx_mat, self.gx_mat, self.vx, self.vx0, self.ix_vec)
+        def addExtracellularTransverseWeight(self, i):
+            self.g_mat.addval(  # LHS-2: gx * vx
+                i + self.nsections, i + self.nsections, self.gx_vec[i])
 
-        def intCallback(self):
-            ''' LinearMechanism callback that updates the intracellular network. '''
-            pass
+        def setTopology(self):
+            self.connection_pairs = []
+            super().setTopology()
 
-        def createSections(self):
-            super().createSections()
-            self.initNetworkArrays(self.nsections)
+        def getOrderedSecIndexes(self):
+            l = []
+            for i, j in self.connection_pairs:
+                if len(l) == 0:
+                    l = [i, j]
+                else:
+                    if i in l and j in l:
+                        raise ValueError('pair error: both indexes already in list')
+                    elif i not in l and j not in l:
+                        raise ValueError('pair error: no index in list')
+                    elif i in l:
+                        l.insert(l.index(i) + 1, j)
+                    elif j in l:
+                        l.insert(l.index(j), i)
+            return l
 
         def printTopology(self):
             ''' Print the model's topology. '''
             logger.info('topology:')
-            print('\n|\n'.join([x.shortname() for x in self.ordered_secref_list]))
+            print('\n|\n'.join([self.seclist[i].shortname() for i in self.getOrderedSecIndexes()]))
+
+        def setExtracellularNode(self, sec):
+            ''' Register the extracellular voltage node of a specific sections by updating
+                the appropriate elements of the extracellular network matrices and vectors.
+
+                :param sec: section object
+            '''
+            if self.network_size == self.nsections:
+                self.expandNetworkArrays()
+            i = self.getSecIndex(sec)
+            self.gx_vec[i] = sec._xg      # S/cm2
+            self.Gp_vec[i] = sec.Gp_half  # S
+            self.c_mat.addval(  # LHS-2: cx * dvx/dt
+                i + self.nsections, i + self.nsections, sec._xc * UF_CM2_TO_MF_CM2)  # mF/cm2
+            self.c_mat.addval(  # LHS-2: -cm * dvm/dt
+                i + self.nsections, i, -sec.Cm0 * UF_CM2_TO_MF_CM2)  # mF/cm2
+
+        def getVextRef(self, sec):
+            return self.v_vec._ref_x[self.getSecIndex(sec) + self.nsections]
+
+        def printNetwork(self):
+            logger.info('c_mat:')
+            self.c_mat.printf()
+            logger.info('g_mat:')
+            self.g_mat.printf()
+
+        def initNetwork(self):
+            ''' Initialize a linear mechanism to represent the voltage network. '''
+            if self.network is None:
+                self.update_network_lhs()
+                self.v0_vec = h.Vector(self.v_vec.size())  # initial conditions vector
+                self.network = h.LinearMechanism(
+                    self.update, self.c_mat, self.g_mat, self.v_vec, self.v0_vec, self.i_vec,
+                    h.SectionList(self.seclist), h.Vector([0.5] * self.nsections))
+
+        def update_Cm_vec(self):
+            for i, sec in enumerate(self.seclist):
+                self.Cm_vec[i] = sec.getValue('v') / sec.getVm(x=0.5)
+
+        def update_network_lhs(self):
+            ''' Update the left-hand side of the network (conductance matrix). '''
+            self.g_mat.zero()
+            for i, j in self.connection_pairs:
+                self.addIntracellularLink(i, j)
+            if self.has_ext_mech:
+                for i in range(self.nsections):
+                    self.addExtracellularTransverseWeight(i)
+                for i, j in self.connection_pairs:
+                    self.addExtracellularLink(i, j)
+
+        def update_network_rhs(self):
+            ''' Update the right-hand side of the network (current vector). '''
+            for i, sec in enumerate(self.seclist):
+                # Propagate e_ext discontinuities into v_vec
+                if sec.ex != sec.ex_last:
+                    self.v_vec.x[i + self.nsections] += sec.ex - sec.ex_last
+                    sec.ex_last = sec.ex
+                # RHS-2: gx * ex + im
+                self.i_vec.x[i + self.nsections] = self.gx_vec[i] * sec.ex + sec.getIm(x=0.5)
+
+                # RHS-2: gx * ex + is
+                # self.i_vec.x[i + self.nsections] = self.gx_vec[i] * sec.ex + sec.iStimDensity()
+
+        def update(self):
+            ''' LinearMechanism callback that updates the conductance network. '''
+            self.update_Cm_vec()
+            self.update_network_lhs()
+            self.update_network_rhs()
 
         def setUSDrives(self, A_dict):
             logger.debug(f'Acoustic pressures:')
@@ -400,15 +493,10 @@ def addSonicFeatures(Base):
                 self.checkForSonophoreRadius()
                 self.setFuncTables(source.f)
             super().setDrives(source)
-            self.initNetworks()
+            self.initNetwork()
 
-        def simulate(self, *args, **kwargs):
-            return super().simulate(*args, **kwargs)
-
-        def advance(self):
-            h.fadvance()
-            # iax = np.array([sec.iax.iax for sec in self.nodes.values()])
-            # print(f't = {h.t} ms, iax = {iax} nA')
+        def needsFixedTimeStep(self, _):
+            return True
 
         @property
         def Aranges(self):

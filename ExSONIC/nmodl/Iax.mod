@@ -37,6 +37,7 @@ ASSIGNED {
 
 BREAKPOINT {
     compute()
+    iax = iax
 }
 
 PROCEDURE compute() {
