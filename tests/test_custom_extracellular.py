@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-30 14:01:45
+# @Last Modified time: 2020-05-30 18:04:09
 
 import logging
 import matplotlib.pyplot as plt
@@ -52,7 +52,7 @@ for lbl, fiber in fibers.items():
     # Disable use of equivalent currents to ensure that extracellular mechanism is used
     # fiber.use_equivalent_currents = False
 
-    # # Insert extracellular network in all sections
+    # Insert extracellular network in all sections
     for sec in fiber.seclist:
         sec.insertVext(xr=1e20, xg=1e0, xc=0)
 
