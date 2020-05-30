@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-30 18:04:09
+# @Last Modified time: 2020-05-30 18:29:45
 
 import logging
 import matplotlib.pyplot as plt
@@ -21,8 +21,8 @@ logger.setLevel(logging.INFO)
 # Create fiber models
 fiberD = 20e-6  # m
 nnodes = 11
-fiber_class = SennFiber
-# fiber_class = MRGFiber
+# fiber_class = SennFiber
+fiber_class = MRGFiber
 
 fibers = {k: v(fiberD, nnodes) for k, v in {
     'normal': fiber_class.__original__,
@@ -53,8 +53,8 @@ for lbl, fiber in fibers.items():
     # fiber.use_equivalent_currents = False
 
     # Insert extracellular network in all sections
-    for sec in fiber.seclist:
-        sec.insertVext(xr=1e20, xg=1e0, xc=0)
+    # for sec in fiber.seclist:
+    #     sec.insertVext(xr=1e20, xg=1e0, xc=0)
 
     # Simulate model
     data, meta = fiber.simulate(source, pp)

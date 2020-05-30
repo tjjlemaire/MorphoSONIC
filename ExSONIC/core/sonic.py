@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-30 21:40:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-30 18:01:57
+# @Last Modified time: 2020-05-30 18:26:00
 
 from neuron import h
 import numpy as np
@@ -333,12 +333,12 @@ def addSonicFeatures(Base):
                 (1) cm * dvm/dt + ga_j * (vm - vm_j) + ga_j * (vx - vx_j) = is - i(vm)
                 (2) cx * dvx/dt - cm * dvm/dt + gx * vx + gp_j * (vx - vx_j) = i(vm) + gx * ex
 
-                Among these equation rows, 3 elements are automatically set by NEURON, namely:
+                Among these equation rows, 3 terms are automatically handled by NEURON, namely:
                 - LHS-1: cm * dvm/dt
                 - RHS-1: is
                 - RHS-1: -i(vm)
 
-                Hence, 8 elements remain to be set as part of the additional network:
+                Hence, 8 terms remain to be handled as part of the additional network:
                 - LHS-1: ga_j * (vm - vm_j)
                 - LHS-1: ga_j * (vx - vx_j)
                 - LHS-2: cx * dvx/dt
@@ -347,6 +347,13 @@ def addSonicFeatures(Base):
                 - LHS-2: gp_j * (vx - vx_j)
                 - RHS-2: i(vm)
                 - RHS-2: gx * ex
+
+                Special attention must be brought on the fact that we use NEURONS's v variable as an
+                alias for the section's membrane charge density Qm. Hence, some network adaptation
+                is required in elements depending on membrane potential:
+
+                - LHS-1: ga_j * (vm - vm_j) = (ga_j / cm) * Qm - (ga_j / cm_j) * Qm_j
+                - LHS-2: -cm * dvm/dt = -d(cm vm) / dt = -dQm/dt
             '''
             n = self.nsections
             self.c_mat = Matrix(n, n)  # capacitance matrix (mF/cm2)
@@ -380,8 +387,8 @@ def addSonicFeatures(Base):
             self.Gp_vec[i] = sec.Gp_half  # S
             self.c_mat.addval(  # LHS-2: cx * dvx/dt
                 i + self.nsections, i + self.nsections, sec._xc * UF_CM2_TO_MF_CM2)  # mF/cm2
-            self.c_mat.addval(  # LHS-2: -cm * dvm/dt
-                i + self.nsections, i, -sec.Cm0 * UF_CM2_TO_MF_CM2)  # mF/cm2
+            self.c_mat.addval(  # LHS-2: -dQm/dt
+                i + self.nsections, i, -sec.cfac * UF_CM2_TO_MF_CM2)  # mF/cm2
 
         def addLongitudinalLink(self, i, j, G, row_offset=0, col_offset=0):
             ''' Add a longitudinal link between two nodes in the conductance matrix.
@@ -399,7 +406,7 @@ def addSonicFeatures(Base):
 
         def addIntracellularLink(self, i, j):
             ''' Add a link between two intracellular nodes in the conductance matrix. '''
-            self.addLongitudinalLink(  # LHS-1: ga_j * vm - ga_j * vm_j
+            self.addLongitudinalLink(  # LHS-1: (ga_j / cm) * Qm - (ga_j / cm_j) * Qm_j
                 i, j, seriesGeq(self.Ga_vec[i] / self.Cm_vec[i], self.Ga_vec[j] / self.Cm_vec[j]),
                 row_offset=0, col_offset=0)
             if self.has_ext_mech:
