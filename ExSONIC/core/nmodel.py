@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-30 16:43:35
+# @Last Modified time: 2020-06-03 16:51:43
 
 import abc
 from neuron import h
@@ -13,14 +13,14 @@ from scipy import stats
 from boltons.strutils import cardinalize
 
 from PySONIC.core import Model, PointNeuron
-from PySONIC.postpro import detectSpikes, prependDataFrame
-from PySONIC.utils import logger, si_format, filecode, simAndSave, isIterable
+from PySONIC.postpro import detectSpikes
+from PySONIC.utils import logger, si_format, filecode, simAndSave, isIterable, TimeSeries
 from PySONIC.constants import *
 from PySONIC.threshold import threshold, titrate, Thresholder
 
 from .pyhoc import *
 from .sources import *
-from ..utils import array_print_options, load_mechanisms, getNmodlDir
+from ..utils import array_print_options, load_mechanisms, getNmodlDir, SpatiallyExtendedTimeSeries
 from ..constants import *
 
 
@@ -389,10 +389,9 @@ class NeuronModel(metaclass=abc.ABCMeta):
     @staticmethod
     def outputDataFrame(t, stim, probes):
         ''' Return output in dataframe with prepended initial conditions (prior to stimulation). '''
-        return prependDataFrame(pd.DataFrame({
-            't': t,  # s
-            'stimstate': stim,
-            **{k: v.to_array() for k, v in probes.items()}}))
+        sol = TimeSeries(t, stim, {k: v.to_array() for k, v in probes.items()})
+        sol.prepend(t0=0)
+        return sol
 
     @Model.logNSpikes
     @Model.checkTitrate
@@ -672,7 +671,8 @@ class SpatiallyExtendedNeuronModel(NeuronModel):
         # Return output dataframe dictionary
         t = t.to_array()  # s
         stim = self.fixStimVec(stim.to_array(), dt)
-        return {id: self.outputDataFrame(t, stim, probes) for id, probes in all_probes.items()}
+        return SpatiallyExtendedTimeSeries({
+            id: self.outputDataFrame(t, stim, probes) for id, probes in all_probes.items()})
 
     def getSpikesTimings(self, data, zcross=True, spikematch='majority'):
         ''' Return an array containing occurence times of spikes detected on a collection of sections.

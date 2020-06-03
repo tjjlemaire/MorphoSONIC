@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-30 21:40:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-30 18:26:00
+# @Last Modified time: 2020-06-03 17:07:15
 
 from neuron import h
 import numpy as np
@@ -267,7 +267,7 @@ def addSonicFeatures(Base):
 
         def setBiophysics(self):
             super().setBiophysics()
-            self.Cm_vec = np.array([sec.Cm0 for sec in self.seclist])
+            self.cm_vec = np.array([sec.Cm0 for sec in self.seclist])
 
         def setTopology(self):
             self.connection_pairs = []
@@ -333,6 +333,12 @@ def addSonicFeatures(Base):
                 (1) cm * dvm/dt + ga_j * (vm - vm_j) + ga_j * (vx - vx_j) = is - i(vm)
                 (2) cx * dvx/dt - cm * dvm/dt + gx * vx + gp_j * (vx - vx_j) = i(vm) + gx * ex
 
+                or in developed form:
+
+                (1) cm * dvm/dt + ga_j * vm - ga_j * vm_j + ga_j * vx - ga_j * vx_j = is - i(vm)
+                (2) cx * dvx/dt - cm * dvm/dt + gx * vx + gp_j * vx - gp_j * vx_j = i(vm) + gx * ex
+
+
                 Among these equation rows, 3 terms are automatically handled by NEURON, namely:
                 - LHS-1: cm * dvm/dt
                 - RHS-1: is
@@ -349,11 +355,16 @@ def addSonicFeatures(Base):
                 - RHS-2: gx * ex
 
                 Special attention must be brought on the fact that we use NEURONS's v variable as an
-                alias for the section's membrane charge density Qm. Hence, some network adaptation
-                is required in elements depending on membrane potential:
+                alias for the section's membrane charge density Qm. Therefore, the system must be
+                adapted in consequence. To this effect, we introduce a change of variable:
 
-                - LHS-1: ga_j * (vm - vm_j) = (ga_j / cm) * Qm - (ga_j / cm_j) * Qm_j
-                - LHS-2: -cm * dvm/dt = -d(cm vm) / dt = -dQm/dt
+                Qm = cm * vm; dQm/dt = cm * dvm/dt  (cm considered time-invariant)
+
+                Recasting the system according to this change of variable thus yields:
+
+                (1) dQm/dt + ga_j/cm * Qm - ga_j/cm_j * Qm_j + ga_j * vx - ga_j * vx_j = is - i(vm)
+                (2) cx * dvx/dt - dQm/dt + gx * vx + gp_j * vx - gp_j * vx_j = i(vm) + gx * ex
+
             '''
             n = self.nsections
             self.c_mat = Matrix(n, n)  # capacitance matrix (mF/cm2)
@@ -366,8 +377,15 @@ def addSonicFeatures(Base):
             ''' Return size of linear mechanism network. '''
             return self.v_vec.size()
 
+        @property
+        def k(self):
+            return 1.
+            # return 1.3
+            # return 1.1505
+
         def expandNetworkArrays(self):
             ''' Expand the network arrays to add a connected extracellular layer. '''
+            self.cx_vec = np.zeros(self.network_size)  # ext. transverse capacitance vector (uF/cm2)
             self.gx_vec = np.zeros(self.network_size)  # ext. transverse conductance vector (S/cm2)
             self.Gp_vec = np.zeros(self.network_size)  # longitudinal half-conductance vector (S)
             self.c_mat.expand()
@@ -383,21 +401,30 @@ def addSonicFeatures(Base):
             if self.network_size == self.nsections:
                 self.expandNetworkArrays()
             i = self.getSecIndex(sec)
-            self.gx_vec[i] = sec._xg      # S/cm2
+            self.cx_vec[i] = sec.cx  # uF/cm2
+            self.gx_vec[i] = sec.gx  # S/cm2
             self.Gp_vec[i] = sec.Gp_half  # S
+
+        def setExtNodeCapacitance(self, i):
+            ''' Set transverse terms in the capacitance matrix for a given extracellular node. '''
             self.c_mat.addval(  # LHS-2: cx * dvx/dt
-                i + self.nsections, i + self.nsections, sec._xc * UF_CM2_TO_MF_CM2)  # mF/cm2
+                i + self.nsections, i + self.nsections, self.cx_vec[i] * UF_CM2_TO_MF_CM2)  # mF/cm2
             self.c_mat.addval(  # LHS-2: -dQm/dt
-                i + self.nsections, i, -sec.cfac * UF_CM2_TO_MF_CM2)  # mF/cm2
+                i + self.nsections, i, -self.k * UF_CM2_TO_MF_CM2)  # mF/cm2
+
+        def addExtNodeTransverseConductance(self, i):
+            ''' Add the transverse weight of an extracellular node in the conductance matrix. '''
+            self.g_mat.addval(  # LHS-2: gx * vx
+                i + self.nsections, i + self.nsections, self.gx_vec[i])
 
         def addLongitudinalLink(self, i, j, G, row_offset=0, col_offset=0):
             ''' Add a longitudinal link between two nodes in the conductance matrix.
 
-                :param i: first section index
-                :param j: second section index
+                :param i: first node index
+                :param j: second node index
                 :param G: connection conductance (S)
-                :param row_offset: matrix row index offset compared to section index
-                :param col_offset: matrix column index offset compared to section index
+                :param row_offset: matrix row index offset compared to node index
+                :param col_offset: matrix column index offset compared to node index
             '''
             self.g_mat.addval(i + row_offset, i + col_offset, G / self.Am_vec[i])
             self.g_mat.addval(i + row_offset, j + col_offset, -G / self.Am_vec[i])
@@ -407,7 +434,7 @@ def addSonicFeatures(Base):
         def addIntracellularLink(self, i, j):
             ''' Add a link between two intracellular nodes in the conductance matrix. '''
             self.addLongitudinalLink(  # LHS-1: (ga_j / cm) * Qm - (ga_j / cm_j) * Qm_j
-                i, j, seriesGeq(self.Ga_vec[i] / self.Cm_vec[i], self.Ga_vec[j] / self.Cm_vec[j]),
+                i, j, seriesGeq(self.Ga_vec[i] / self.cm_vec[i], self.Ga_vec[j] / self.cm_vec[j]),
                 row_offset=0, col_offset=0)
             if self.has_ext_mech:
                 self.addLongitudinalLink(  # LHS-1: ga_j * vx - ga_j * vx_j
@@ -420,32 +447,18 @@ def addSonicFeatures(Base):
                 i, j, seriesGeq(self.Gp_vec[i], self.Gp_vec[j]),
                 row_offset=self.nsections, col_offset=self.nsections)
 
-        def addExtracellularTransverseWeight(self, i):
-            ''' Add the transverse weight of an extracellular node in the conductance matrix. '''
-            self.g_mat.addval(  # LHS-2: gx * vx
-                i + self.nsections, i + self.nsections, self.gx_vec[i])
-
         def getVextRef(self, sec):
             return self.v_vec._ref_x[self.getSecIndex(sec) + self.nsections]
 
-        def printNetwork(self):
-            logger.info('c_mat:')
-            self.c_mat.printf()
-            logger.info('g_mat:')
-            self.g_mat.printf()
-
-        def initNetwork(self):
-            ''' Initialize a linear mechanism to represent the voltage network. '''
-            self.updateNetwork()
-            if self.network is None:
-                self.v0_vec = Vector(self.v_vec.size())  # initial conditions vector
-                self.network = h.LinearMechanism(
-                    self.updateNetwork, self.c_mat, self.g_mat, self.v_vec, self.v0_vec, self.i_vec,
-                    h.SectionList(self.seclist), Vector([0.5] * self.nsections))
+        def setCmat(self):
+            ''' Set the network capacitance matrix. '''
+            self.c_mat.zero()
+            for i in range(self.nsections):
+                self.setExtNodeCapacitance(i)
 
         def updateCm(self):
             for i, sec in enumerate(self.seclist):
-                self.Cm_vec[i] = sec.getValue('v') / sec.getVm(x=0.5)
+                self.cm_vec[i] = sec.getCm(x=0.5)
 
         def updateGmat(self):
             ''' Update the network conductance matrix. '''
@@ -454,7 +467,7 @@ def addSonicFeatures(Base):
                 self.addIntracellularLink(i, j)
             if self.has_ext_mech:
                 for i in range(self.nsections):
-                    self.addExtracellularTransverseWeight(i)
+                    self.addExtNodeTransverseConductance(i)
                 for i, j in self.connection_pairs:
                     self.addExtracellularLink(i, j)
 
@@ -475,6 +488,23 @@ def addSonicFeatures(Base):
             self.updateGmat()
             if self.has_ext_mech:
                 self.updateRHS()
+
+        def printNetwork(self):
+            logger.info('c_mat:')
+            self.c_mat.printf()
+            logger.info('g_mat:')
+            self.g_mat.printf()
+
+        def initNetwork(self):
+            ''' Initialize a linear mechanism to represent the voltage network. '''
+            self.setCmat()
+            self.updateNetwork()
+            # self.printNetwork()
+            if self.network is None:
+                self.v0_vec = Vector(self.v_vec.size())  # initial conditions vector
+                self.network = h.LinearMechanism(
+                    self.updateNetwork, self.c_mat, self.g_mat, self.v_vec, self.v0_vec, self.i_vec,
+                    h.SectionList(self.seclist), Vector([0.5] * self.nsections))
 
         def setUSDrives(self, A_dict):
             logger.debug(f'Acoustic pressures:')

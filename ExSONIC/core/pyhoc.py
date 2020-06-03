@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-30 17:20:43
+# @Last Modified time: 2020-06-03 15:02:51
 
 ''' Utilities to manipulate HOC objects. '''
 
@@ -110,19 +110,23 @@ class ExtField():
 class Section(hclass(h.Section)):
     ''' Interface to a Hoc Section with nseg=1. '''
 
-    passive_mechname = 'custom_pas'
-    # passive_mechname = 'pas'
+    # passive_mechname = 'custom_pas'
+    passive_mechname = 'pas'
 
-    def __init__(self, name=None, cell=None):
+    def __init__(self, name=None, cell=None, Cm0=1.):
         ''' Initialization.
 
             :param name: section name
             :param cell: section cell
+            :param Cm0: resting membrane capacitance (uF/cm2)
         '''
+        if name is None:
+            raise ValueError('section must have a name')
         if cell is not None:
             super().__init__(name=name, cell=cell)
         else:
             super().__init__(name=name)
+        self.Cm0 = Cm0
         self.nseg = 1
         self.has_ext_mech = False
         self.iclamp = None
@@ -254,13 +258,13 @@ class Section(hclass(h.Section)):
         '''
         super().connect(parent, 1, 0)
 
-    def hasPassive(self):
-        ''' Determine if section contains a passive membrane mechanism. '''
-        return h.ismembrane(self.passive_mechname, sec=self)
-
     def insertPassive(self):
         ''' Insert passive (leakage) mechanism. '''
         self.insert(self.passive_mechname)
+
+    def hasPassive(self):
+        ''' Determine if section contains a passive membrane mechanism. '''
+        return h.ismembrane(self.passive_mechname, sec=self)
 
     def setPassive(self, key, value):
         ''' Set an attribute of the passive (leakage) mechanism. '''
@@ -316,18 +320,13 @@ class Section(hclass(h.Section)):
 class VSection(Section):
     ''' Interface to a Hoc Section with voltage based transmembrane dynamics. '''
 
-    cfac = 1
-
-    def __init__(self, name=None, cell=None, Cm0=1.):
-        ''' Initialization.
-
-            :param mechname: mechanism name
-            :param states: list of mechanism time-varying states
-            :param Cm0: resting membrane capacitance (uF/cm2)
-        '''
-        super().__init__(name=name, cell=cell)
-        self.Cm0 = Cm0
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.cm = self.Cm0
+
+    @property
+    def cfac(self):
+        return 1.
 
     def setVmProbe(self):
         return self.setProbe('v')
@@ -341,16 +340,6 @@ class QSection(Section):
 
         In this section type, the differential variable "v" stands for charge density (in nC/cm2).
     '''
-
-    def __init__(self, name=None, cell=None, Cm0=1.):
-        ''' Initialization.
-
-            :param mechname: mechanism name
-            :param states: list of mechanism time-varying states
-            :param Cm0: resting membrane capacitance (uF/cm2)
-        '''
-        super().__init__(name=name, cell=cell)
-        self.Cm0 = Cm0
 
     @property
     def cfac(self):
@@ -489,9 +478,9 @@ def getCustomConnectSection(section_class):
 
         # Bounds of extracellular parameters (from extcelln.c)
         ext_bounds = {
-            'xr': (1e-3, 1e21),  # Ohm/cm
-            'xg': (0., 1e15),    # S/cm2
-            'xc': (0., 1e15)     # uF/cm2
+            'rx': (1e-3, 1e21),  # Ohm/cm
+            'gx': (0., 1e15),    # S/cm2
+            'cx': (0., 1e15)     # uF/cm2
         }
 
         def __init__(self, cs, *args, **kwargs):
@@ -538,6 +527,9 @@ def getCustomConnectSection(section_class):
             '''
             return self.getValue(f'_ref_{self.vref}', **kwargs)
 
+        def getCm(self, **kwargs):
+            return self.getValue('v', **kwargs) / self.getVm(**kwargs)
+
         def getVextRef(self):
             ''' Get reference to section's extracellular voltage. '''
             return self.cell().getVextRef(self)
@@ -545,10 +537,37 @@ def getCustomConnectSection(section_class):
         def connect(self, parent):
             self.cell().registerConnection(parent, self)
 
+        def checkXBounds(self, key, val):
+            return isWithin(key, val, self.ext_bounds[key])
+
+        @property
+        def rx(self):
+            return self._rx
+
+        @rx.setter
+        def rx(self, value):
+            self._rx = self.checkXBounds('rx', value) * self.cfac
+
+        @property
+        def gx(self):
+            return self._gx
+
+        @gx.setter
+        def gx(self, value):
+            self._gx = self.checkXBounds('gx', value) / self.cfac
+
+        @property
+        def cx(self):
+            return self._cx
+
+        @cx.setter
+        def cx(self, value):
+            self._cx = self.checkXBounds('cx', value) / self.cfac
+
         @property
         def Gp_half(self):
             ''' Half-section extracellular axial conductance (S). '''
-            return 2 / (self._xr * self.L / CM_TO_UM)
+            return 2 / (self.rx * self.L / CM_TO_UM)
 
         def insertVext(self, xr=1e20, xg=1e10, xc=0.):
             ''' Insert extracellular mechanism with specific parameters.
@@ -558,9 +577,9 @@ def getCustomConnectSection(section_class):
                 :param xc: transverse capacitance of first extracellular layer (uF/cm2)
             '''
             # Check input parameters before assignment, and set extracellular node
-            self._xr = isWithin('xr', xr, self.ext_bounds['xr']) * self.cfac
-            self._xg = isWithin('xg', xg, self.ext_bounds['xg']) / self.cfac
-            self._xc = isWithin('xc', xc, self.ext_bounds['xc']) / self.cfac
+            self.rx = xr
+            self.gx = xg
+            self.cx = xc
             self.cell().setExtracellularNode(self)
             self.has_ext_mech = True
 

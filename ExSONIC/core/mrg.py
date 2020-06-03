@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-27 23:08:23
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-27 16:08:08
+# @Last Modified time: 2020-05-31 14:18:25
 
 import numpy as np
 
@@ -449,3 +449,22 @@ class MRGFiber(FiberNeuronModel):
                 -I_stin_stin[-1] + I_flut_stin[1]  # left-side boundary STIN
             )), order='F')
         }
+
+
+class MRGFiberVbased(MRGFiber.__original__):
+    ''' Small class allowing to simulate the original MRG model with a V-based scheme. '''
+
+    @property
+    def refvar(self):
+        return 'Vm'
+
+    @property
+    def modfile(self):
+        return f'{self.pneuron.name}_clean.mod'
+
+    @property
+    def mechname(self):
+        return self.pneuron.name
+
+
+MRGFiber.__originalVbased__ = MRGFiberVbased

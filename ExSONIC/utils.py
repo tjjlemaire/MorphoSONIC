@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 14:38:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-20 15:03:07
+# @Last Modified time: 2020-06-03 16:29:28
 
 import os
 import pickle
@@ -151,3 +151,54 @@ def seriesGeq(*G):
     if 0. in G:
         return 0.
     return 1 / sum(map(lambda x: 1 / x, G))
+
+
+class SpatiallyExtendedTimeSeries:
+
+    def __init__(self, data):
+        self.data = data
+
+    def keys(self):
+        return self.data.keys()
+
+    def values(self):
+        return self.data.values()
+
+    def items(self):
+        return self.data.items()
+
+    def __getitem__(self, key):
+        return self.data[key]
+
+    def __delitem__(self, key):
+        del self.data[key]
+
+    def __setitem__(self, key, value):
+        self.data[key] = value
+
+    def checkAgainst(self, other):
+        assert isinstance(other, self.__class__), 'differing classes'
+        assert self.keys() == other.keys(), 'differing keys'
+        for k in self.keys():
+            self.data[k].checkAgainst(other.data[k])
+
+    def operate(self, other, op):
+        self.checkAgainst(other)
+        return self.__class__({
+            k: getattr(self.data[k], op)(other.data[k]) for k in self.keys()})
+
+    def __add__(self, other):
+        ''' Addition operator. '''
+        return self.operate(other, '__add__')
+
+    def __sub__(self, other):
+        ''' Subtraction operator. '''
+        return self.operate(other, '__sub__')
+
+    def __mul__(self, other):
+        ''' Multiplication operator. '''
+        return self.operate(other, '__mul__')
+
+    def __div__(self, other):
+        ''' Division operator. '''
+        return self.operate(other, '__div__')
