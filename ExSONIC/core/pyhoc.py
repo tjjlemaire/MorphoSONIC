@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-03 15:02:51
+# @Last Modified time: 2020-06-06 01:05:35
 
 ''' Utilities to manipulate HOC objects. '''
 
@@ -12,6 +12,7 @@ from neuron import h, hclass
 
 from PySONIC.utils import isWithin
 from ..constants import *
+from ..utils import seriesGeq
 
 
 class Probe(hclass(h.Vector)):
@@ -66,9 +67,164 @@ class Matrix(hclass(h.Matrix)):
         ''' Add value to an element. '''
         self.setval(irow, jcol, self.getval(irow, jcol) + val)
 
+    def adddiag(self, i, vin):
+        ''' Add values to a matrix diagonal. '''
+        self.setdiag(i, self.getdiag(i) + vin)
+
     def expand(self, n=2):
         ''' Expand by a factor n. '''
         self.resize(self.nrow() * n, self.ncol() * n)
+
+    def emptyClone(self):
+        ''' Return empty matrix of identical shape. '''
+        return Matrix(*self.shape())
+
+    def mulByRow(self, x):
+        ''' Return new matrix with rows multiplied by vector values. '''
+        assert x.size == self.nrow(), f'Input vector must be of size {self.nrow()}'
+        mout = self.emptyClone()
+        for i in range(self.nrow()):
+            mout.setrow(i, self.getrow(i) * x[i])
+        return mout
+
+    def copyTo(self, mout, i, j):
+        ''' Copy the current matrix to a destination matrix, starting at a specific
+            row and column index.
+        '''
+        self.bcopy(0, 0, self.nrow(), self.ncol(), i, j, mout)
+
+    def addTo(self, mout, i, j, fac=1):
+        ''' Add the current matrix to a destination matrix, starting at a specific
+            row and column index.
+        '''
+        for k in range(self.nrow()):
+            for l in range(self.ncol()):
+                mout.addval(k + i, l + j, self.getval(k, l) * fac)
+
+    def checkAgainst(self, other):
+        assert isinstance(other, self.__class__), 'differing classes'
+
+    def checkNullRows(self):
+        ''' Check that all rows sum up to zero (or close). '''
+        for i in range(self.nrow()):
+            rsum = self.getrow(i).sum()
+            assert np.isclose(rsum, .0, atol=1e-15), f'non-zero sum on line {i}: {rsum}'
+
+    def __add__(self, other):
+        ''' Addition operator. '''
+        self.checkAgainst(other)
+        mout = self.emptyClone()
+        self.add(other, mout)
+        return mout
+
+    def __sub__(self, other):
+        ''' Subtraction operator. '''
+        return self.__add__(-other)
+
+    def __mul__(self, other):
+        ''' Multiplication operator. '''
+        if isinstance(other, (float, int)):
+            mout = self.c()
+            mout.muls(other)
+            return mout
+        elif isinstance(other, Vector):
+            return self.mulv(other)
+        else:
+            self.checkAgainst(other)
+            mout = Matrix(self.nrow(), other.ncol())
+            self.mulm(other, mout)
+            return mout
+
+
+class SquareMatrix(Matrix):
+
+    def __new__(cls, n):
+        ''' Instanciation. '''
+        return super(SquareMatrix, cls).__new__(cls, n, n)
+
+    def nside(self):
+        ''' Return side of matrix side. '''
+        return self.nrow()
+
+    def emptyClone(self):
+        return SquareMatrix(self.nside())
+
+    def addLink(self, i, j, w):
+        ''' Add a bi-directional link between two nodes with a specific weight.
+
+            :param i: first node index
+            :param j: second node index
+            :param w: link weight
+        '''
+        self.addval(i, i, w)
+        self.addval(i, j, -w)
+        self.addval(j, j, w)
+        self.addval(j, i, -w)
+
+
+class DiagonalMatrix(SquareMatrix):
+
+    def __new__(cls, x):
+        ''' Instanciation. '''
+        return super(DiagonalMatrix, cls).__new__(cls, x.size)
+
+    def __init__(self, x):
+        self.setdiag(0, Vector(x))
+
+
+class ConductanceMatrix(SquareMatrix):
+
+    def __new__(cls, Gvec, **_):
+        ''' Instanciation. '''
+        return super(ConductanceMatrix, cls).__new__(cls, Gvec.size)
+
+    def __init__(self, Gvec, links=None):
+        self.Gvec = Gvec
+        self.links = links
+        if self.links is not None:
+            self.addLinks()
+
+    def addLink(self, i, j):
+        super().addLink(i, j, seriesGeq(self.Gvec[i], self.Gvec[j]))
+
+    def addLinks(self):
+        for i, j in self.links:
+            self.addLink(i, j)
+        self.checkNullRows()
+
+    def reset(self, gvec):
+        assert gvec.size == self.nrow(), f'Input vector must be of size {self.nrow()}'
+        self.gvec = gvec
+        self.zero()
+        self.addLinks()
+
+
+class SubMatrix:
+
+    def __init__(self, m, row_offset, col_offset):
+        self.mref = h.Pointer(m)
+        self.row_offset = row_offset
+        self.col_offset = col_offset
+
+    @property
+    def m(self):
+        return self.mref.val
+
+    @property
+    def diag_offset(self):
+        return self.col_offset - self.row_offset
+
+    def getval(self, i, j):
+        return self.m.getval(i + self.row_offset, j + self.col_offset)
+
+    def setval(self, i, j, x):
+        self.m.setval(i + self.row_offset, j + self.col_offset, x)
+
+    def getdiag(i):
+        return self.m.getdiag(i + self.diag_offset)
+
+    def setdiag(i, x):
+        self.m.setdiag(i + self.diag_offset, x)
 
 
 class IClamp(hclass(h.IClamp)):
@@ -86,9 +242,11 @@ class IClamp(hclass(h.IClamp)):
         self.dur = 1e9  # dur must be long enough to span all our changes
         self.amp = 0.  # initially, we set the amplitude to zero
         self.xamp = amplitude
+        self.secref = h.SectionRef(sec=section)
 
     def set(self, value):
         self.amp = value * self.xamp
+        self.secref.sec.istim = self.amp
 
 
 class ExtField():
@@ -110,8 +268,8 @@ class ExtField():
 class Section(hclass(h.Section)):
     ''' Interface to a Hoc Section with nseg=1. '''
 
-    # passive_mechname = 'custom_pas'
-    passive_mechname = 'pas'
+    passive_mechname = 'custom_pas'
+    # passive_mechname = 'pas'
 
     def __init__(self, name=None, cell=None, Cm0=1.):
         ''' Initialization.
@@ -129,11 +287,19 @@ class Section(hclass(h.Section)):
         self.Cm0 = Cm0
         self.nseg = 1
         self.has_ext_mech = False
-        self.iclamp = None
+        self.istim = 0.
 
     @property
     def cfac(self):
         raise NotImplementedError
+
+    @property
+    def istim(self):
+        return self._istim
+
+    @istim.setter
+    def istim(self, value):
+        self._istim = value / MA_TO_NA / self.membraneArea()
 
     def shortname(self):
         s = self.name()
@@ -230,6 +396,7 @@ class Section(hclass(h.Section)):
             :param xc: transverse capacitance of first extracellular layer (uF/cm2)
         '''
         self.insert('extracellular')
+
         self.xraxial[0] = xr * OHM_TO_MOHM  # MOhm/cm
         self.xg[0] = xg                     # S/cm2
         self.xc[0] = xc                     # S/cm2
@@ -483,6 +650,9 @@ def getCustomConnectSection(section_class):
             'cx': (0., 1e15)     # uF/cm2
         }
 
+        # Default transverse conductance of second extracellular layer (from online doc)
+        default_xg = 1e9  # S/cm2
+
         def __init__(self, cs, *args, **kwargs):
             ''' Initialization.
 
@@ -554,7 +724,8 @@ def getCustomConnectSection(section_class):
 
         @gx.setter
         def gx(self, value):
-            self._gx = self.checkXBounds('gx', value) / self.cfac
+            ''' Add NEURON's default xg in series to mimick 2nd extracellular layer. '''
+            self._gx = seriesGeq(self.checkXBounds('gx', value), self.default_xg) / self.cfac
 
         @property
         def cx(self):

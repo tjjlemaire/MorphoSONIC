@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-29 18:28:55
+# @Last Modified time: 2020-06-05 12:00:33
 
 import numpy as np
 
@@ -90,9 +90,9 @@ class SingleCableFiber(FiberNeuronModel):
     def sections(self):
         return {'node': self.nodes}
 
-    @property
-    def seclist(self):
-        return self.nodelist
+    # @property
+    # def seclist(self):
+    #     return self.nodelist
 
     def createSections(self):
         self.nodes = {k: self.createSection(
@@ -111,17 +111,17 @@ class SingleCableFiber(FiberNeuronModel):
         # for each connected side of each node
         if self.R_inter > 0:
             logger.debug('adding extra-resistivity to account for internodal resistance')
-            R_extra = np.hstack((
-                [self.R_inter / 2],
-                [self.R_inter] * (self.nnodes - 2),
-                [self.R_inter / 2]
-            ))  # Ohm
-            rho_extra = R_extra * self.rs / self.R_node  # Ohm.cm
+            rho_extra = self.R_extra * self.rs / self.R_node  # Ohm.cm
             rho_nodes += rho_extra  # Ohm.cm
 
         # Assigning resistivities to sections
         for sec, rho in zip(self.nodelist, rho_nodes):
             sec.setResistivity(rho)
+
+    @property
+    def R_extra(self):
+        ''' Vector of extra internodal resistances to add to nodal axial resistances. '''
+        return np.ones(self.nnodes) * self.R_inter  # Ohm
 
     def setTopology(self):
         for i in range(self.nnodes - 1):

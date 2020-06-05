@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-03 16:51:43
+# @Last Modified time: 2020-06-05 17:47:49
 
 import abc
 from neuron import h
@@ -135,10 +135,10 @@ class NeuronModel(metaclass=abc.ABCMeta):
                 raise ValueError('celsius value not provided and not found in PointNeuron class')
         h.celsius = celsius
 
-    @property
-    @abc.abstractmethod
-    def seclist(self):
-        raise NotImplementedError
+    # @property
+    # @abc.abstractmethod
+    # def seclist(self):
+    #     raise NotImplementedError
 
     @property
     def nsections(self):
@@ -146,6 +146,7 @@ class NeuronModel(metaclass=abc.ABCMeta):
 
     def construct(self):
         ''' Create, specify and connect morphological model sections. '''
+        self.seclist = []
         self.createSections()
         self.setGeometry()
         self.setResistivity()
@@ -206,7 +207,9 @@ class NeuronModel(metaclass=abc.ABCMeta):
         kwargs = {'name': id, 'cell': self, 'Cm0': Cm0}
         if mech is not None:
             kwargs.update({'mechname': mech, 'states': states})
-        return self.getSectionClass(mech)(*args, **kwargs)
+        sec = self.getSectionClass(mech)(*args, **kwargs)
+        self.seclist.append(sec)
+        return sec
 
     def getIntegrationMethod(self):
         ''' Get the method used by NEURON for the numerical integration of the system. '''

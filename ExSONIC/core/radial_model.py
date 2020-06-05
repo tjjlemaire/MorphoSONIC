@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-08 17:12:05
+# @Last Modified time: 2020-06-05 12:00:14
 
 import numpy as np
 
@@ -129,9 +129,9 @@ class RadialModel(SpatiallyExtendedNeuronModel):
     def refsection(self):
         return self.center
 
-    @property
-    def seclist(self):
-        return [self.center, self.periphery]
+    # @property
+    # def seclist(self):
+    #     return [self.center, self.periphery]
 
     @property
     def nonlinear_sections(self):

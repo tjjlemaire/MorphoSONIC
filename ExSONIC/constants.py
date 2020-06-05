@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-08 16:06:15
+# @Last Modified time: 2020-06-06 00:55:51
 
 # Conversions
 V_TO_MV = 1e3            # V to  mV
@@ -37,3 +37,11 @@ REL_START_POINT = 0.2       # relative position of starting point within search 
 
 # Model construction
 MAX_CUSTOM_CON = 2  # maximum number of custom intracellular connections to a given section
+
+# Extracellular mechanism parameters
+XR_DEFAULT = 1e9          # MOhm/cm
+XG_DEFAULT = 1e9          # S/cm2
+XC_DEFAULT = 0.           # uF/cm2
+XR_BOUNDS = (1e-9, 1e15)  # MOhm/cm
+XG_BOUNDS = (0., 1e15)    # S/cm2
+XC_BOUNDS = (0., 1e15)    # uF/cm2

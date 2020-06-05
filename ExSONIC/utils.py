@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 14:38:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-03 16:29:28
+# @Last Modified time: 2020-06-04 22:02:18
 
 import os
 import pickle
@@ -199,6 +199,6 @@ class SpatiallyExtendedTimeSeries:
         ''' Multiplication operator. '''
         return self.operate(other, '__mul__')
 
-    def __div__(self, other):
+    def __truediv__(self, other):
         ''' Division operator. '''
-        return self.operate(other, '__div__')
+        return self.operate(other, '__truediv__')

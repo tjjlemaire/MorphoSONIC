@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-22 13:19:47
+# @Last Modified time: 2020-06-05 12:00:06
 
 from PySONIC.core import PointNeuron, ElectricDrive
 from PySONIC.utils import logger
@@ -42,9 +42,9 @@ class Node(NeuronModel):
     def simkey(self):
         return self.pneuron.simkey
 
-    @property
-    def seclist(self):
-        return [self.section]
+    # @property
+    # def seclist(self):
+    #     return [self.section]
 
     @property
     def drives(self):
