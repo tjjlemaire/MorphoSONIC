@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-06 01:05:35
+# @Last Modified time: 2020-06-06 01:16:08
 
 ''' Utilities to manipulate HOC objects. '''
 
@@ -386,20 +386,19 @@ class Section(hclass(h.Section)):
         '''
         return Probe(self.getValue(f'_ref_{var}', x=loc), **kwargs)
 
-    def insertVext(self, xr=1e20, xg=1e10, xc=0.):
+    def insertVext(self, xr=None, xg=None, xc=None):
         ''' Insert extracellular mechanism with specific parameters.
 
             Applies cfac-correction to Q-based sections.
 
-            :param xr: axial resistance per unit length of first extracellular layer (Ohm/cm)
+            :param xr: axial resistance per unit length of first extracellular layer (MOhm/cm)
             :param xg: transverse conductance of first extracellular layer (S/cm2)
             :param xc: transverse capacitance of first extracellular layer (uF/cm2)
         '''
         self.insert('extracellular')
-
-        self.xraxial[0] = xr * OHM_TO_MOHM  # MOhm/cm
-        self.xg[0] = xg                     # S/cm2
-        self.xc[0] = xc                     # S/cm2
+        self.xraxial[0] = xr if xr is not None else XR_DEFAULT  # MOhm/cm
+        self.xg[0] = xg if xg is not None else XG_DEFAULT       # S/cm2
+        self.xc[0] = xc if xc is not None else XC_DEFAULT       # S/cm2
         for i in range(2):
             self.xraxial[i] *= self.cfac
             self.xc[i] /= self.cfac
@@ -643,16 +642,6 @@ def getCustomConnectSection(section_class):
 
         passive_mechname = 'custom_pas'
 
-        # Bounds of extracellular parameters (from extcelln.c)
-        ext_bounds = {
-            'rx': (1e-3, 1e21),  # Ohm/cm
-            'gx': (0., 1e15),    # S/cm2
-            'cx': (0., 1e15)     # uF/cm2
-        }
-
-        # Default transverse conductance of second extracellular layer (from online doc)
-        default_xg = 1e9  # S/cm2
-
         def __init__(self, cs, *args, **kwargs):
             ''' Initialization.
 
@@ -707,16 +696,13 @@ def getCustomConnectSection(section_class):
         def connect(self, parent):
             self.cell().registerConnection(parent, self)
 
-        def checkXBounds(self, key, val):
-            return isWithin(key, val, self.ext_bounds[key])
-
         @property
         def rx(self):
             return self._rx
 
         @rx.setter
         def rx(self, value):
-            self._rx = self.checkXBounds('rx', value) * self.cfac
+            self._rx = isWithin('rx', value, XR_BOUNDS) * self.cfac
 
         @property
         def gx(self):
@@ -725,7 +711,7 @@ def getCustomConnectSection(section_class):
         @gx.setter
         def gx(self, value):
             ''' Add NEURON's default xg in series to mimick 2nd extracellular layer. '''
-            self._gx = seriesGeq(self.checkXBounds('gx', value), self.default_xg) / self.cfac
+            self._gx = seriesGeq(isWithin('gx', value, XG_BOUNDS), XG_DEFAULT) / self.cfac
 
         @property
         def cx(self):
@@ -733,24 +719,17 @@ def getCustomConnectSection(section_class):
 
         @cx.setter
         def cx(self, value):
-            self._cx = self.checkXBounds('cx', value) / self.cfac
+            self._cx = isWithin('cx', value, XC_BOUNDS) / self.cfac
 
         @property
         def Gp_half(self):
             ''' Half-section extracellular axial conductance (S). '''
-            return 2 / (self.rx * self.L / CM_TO_UM)
+            return 2 / (self.rx / OHM_TO_MOHM * self.L / CM_TO_UM)
 
-        def insertVext(self, xr=1e20, xg=1e10, xc=0.):
-            ''' Insert extracellular mechanism with specific parameters.
-
-                :param xr: axial resistance per unit length of first extracellular layer (Ohm/cm)
-                :param xg: transverse conductance of first extracellular layer (S/cm2)
-                :param xc: transverse capacitance of first extracellular layer (uF/cm2)
-            '''
-            # Check input parameters before assignment, and set extracellular node
-            self.rx = xr
-            self.gx = xg
-            self.cx = xc
+        def insertVext(self, xr=None, xg=None, xc=None):
+            self.rx = xr if xr is not None else XR_DEFAULT  # MOhm/cm
+            self.gx = xg if xg is not None else XG_DEFAULT  # S/cm2
+            self.cx = xc if xc is not None else XC_DEFAULT  # S/cm2
             self.cell().setExtracellularNode(self)
             self.has_ext_mech = True
 

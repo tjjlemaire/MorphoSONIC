@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-27 23:08:23
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-06 01:05:44
+# @Last Modified time: 2020-06-06 01:12:08
 
 import numpy as np
 
@@ -389,7 +389,7 @@ class MRGFiber(FiberNeuronModel):
         logger.debug('setting extracellular mechanisms')
         Rp_node = self.Rp_node
         for sec in self.nodes.values():
-            sec.insertVext(xr=Rp_node)
+            sec.insertVext(xr=Rp_node * OHM_TO_MOHM)
         for sectype, secdict in self.inters.items():
             xr = getattr(self, f'Rp_{sectype.lower()}')
             xc, xg = self.C_myelin, self.g_myelin
@@ -397,7 +397,7 @@ class MRGFiber(FiberNeuronModel):
                 xc /= self.diameterRatio(sectype)
                 xg /= self.diameterRatio(sectype)
             for sec in secdict.values():
-                sec.insertVext(xr=xr, xc=xc, xg=xg)
+                sec.insertVext(xr=xr * OHM_TO_MOHM, xc=xc, xg=xg)
 
     def setTopology(self):
         ''' Connect the sections together '''

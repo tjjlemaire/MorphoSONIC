@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-06 01:03:52
+# @Last Modified time: 2020-06-06 01:17:49
 
 import logging
 import matplotlib.pyplot as plt
@@ -29,8 +29,8 @@ fiber_classes = {
     'Q-based normal': fiber_class.__original__,
     'Q-based sonic': fiber_class
 }
-if hasattr(fiber_class, '__originalVbased__'):
-    fiber_classes['V-based normal'] = fiber_class.__originalVbased__
+# if hasattr(fiber_class, '__originalVbased__'):
+#     fiber_classes['V-based normal'] = fiber_class.__originalVbased__
 fibers = {k: v(fiberD, nnodes) for k, v in fiber_classes.items()}
 ref_fiber = list(fibers.values())[0]
 
@@ -41,7 +41,7 @@ ref_fiber = list(fibers.values())[0]
 #     mode='cathode',                 # electrode polarity
 #     I=-0.8e-6
 # )
-source = IntracellularCurrent(ref_fiber.central_ID, I=0., mode='cathode')
+source = IntracellularCurrent(ref_fiber.central_ID, I=1e-9)
 # pp = PulsedProtocol(100e-6, 3e-3, tstart=0.1e-3)
 
 # source = GaussianVoltageSource(

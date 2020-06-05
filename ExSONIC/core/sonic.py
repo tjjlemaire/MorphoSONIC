@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-30 21:40:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-06 00:42:20
+# @Last Modified time: 2020-06-06 01:25:34
 
 from neuron import h
 import numpy as np
@@ -218,9 +218,6 @@ def addSonicFeatures(Base):
 
     class SonicMorpho(SonicBase):
 
-        use_ga_alias = True
-        ordered_network = True
-
         def __init__(self, *args, **kwargs):
             self.connection_scheme = SerialConnectionScheme(vref=f'Vm', rmin=self.rmin)
             self.network = None
@@ -280,14 +277,6 @@ def addSonicFeatures(Base):
             super().setTopology()
             self.isec_ordered = self.getOrderedSecIndexes()
             self.ordered_seclist = [self.seclist[i] for i in self.isec_ordered]
-            self.ordered_connection_pairs = list(zip(
-                range(self.nsections - 1), range(1, self.nsections)))
-
-            # Re-order if specified
-            if self.ordered_network:
-                self.Am_vec = self.Am_vec[self.isec_ordered]
-                self.Ga_vec = self.Ga_vec[self.isec_ordered]
-                self.cm_vec = self.cm_vec[self.isec_ordered]
 
         def getOrderedSecIndexes(self):
             l = []
@@ -310,21 +299,9 @@ def addSonicFeatures(Base):
             logger.info('topology:')
             print('\n|\n'.join([sec.shortname() for sec in self.ordered_seclist]))
 
-        def getSecList(self):
-            if self.ordered_network:
-                return self.ordered_seclist
-            else:
-                return self.seclist
-
-        def getConnectionPairs(self):
-            if self.ordered_network:
-                return self.ordered_connection_pairs
-            else:
-                return self.connection_pairs
-
         def getSecIndex(self, sec):
             ''' Get index of section in a model's section list. '''
-            return self.getSecList().index(sec)
+            return self.seclist.index(sec)
 
         def initNetworkArrays(self):
             ''' Initialize arrays that will be used to set the voltage network.
@@ -380,10 +357,6 @@ def addSonicFeatures(Base):
                     + gp_j * vx - gp_j * vx_j
                     = i(vm) + gx * ex
 
-                With the following vx steady-state, for a defined set of Qm:
-
-                (gx + gp_j) * vx - gp_j * vx_j = i(vm) + gx * ex
-
                 Finally, we replace dQm/dt + i(vm) in (2) by equivalents intracellular axial and
                 stimulation currents, in order to remove the need to access net membrane current.
                 After re-arranging all linear voltage terms on the left-hand side, we have:
@@ -398,11 +371,6 @@ def addSonicFeatures(Base):
                     + gp_j * vx - gp_j * vx_j
                     + gx * vx
                     = is + gx * ex
-
-                With the following vx steady-state, for a defined set of Qm:
-
-                (ga_j + gp_j + gx) * vx - (ga_j + gp_j) * vx_j
-                    = is + gx * ex - (ga_j/cm * Qm - ga_j/cm * Qm_j)
 
                 Among these equation rows, 2 terms are automatically handled by NEURON, namely:
                 - LHS-1: dQm/dt
@@ -480,13 +448,9 @@ def addSonicFeatures(Base):
             # Lower-right diagonal: cx
             self.c_mat.setdiag(0, Vector(np.hstack((
                 np.zeros(self.nsections), self.cx_vec * UF_CM2_TO_MF_CM2))))
-            if not self.use_ga_alias:
-                # Lower-left diagonal: -1
-                self.c_mat.setdiag(-self.nsections, Vector(np.hstack((
-                    np.zeros(self.nsections), -np.ones(self.nsections) * UF_CM2_TO_MF_CM2))))
 
         def updateCm(self):
-            for i, sec in enumerate(self.getSecList()):
+            for i, sec in enumerate(self.seclist):
                 self.cm_vec[i] = sec.getCm(x=0.5)
 
         @property
@@ -520,25 +484,20 @@ def addSonicFeatures(Base):
                 self.gp_mat.addTo(self.g_mat, self.nsections, self.nsections)
                 # LHS-2: gx * vx    (lower-right)
                 self.gx_mat.addTo(self.g_mat, self.nsections, self.nsections)
-                if self.use_ga_alias:
-                    # LHS-2: ga_j/cm * Qm - ga_j/cm_j * Qm_j    (lower-left)
-                    self.gacm_mat.addTo(self.g_mat, self.nsections, 0)
-                    # LHS-2: ga_j * vx - ga_j * vx_j (lower-right)
-                    self.ga_mat.addTo(self.g_mat, self.nsections, self.nsections)
+                # LHS-2: ga_j/cm * Qm - ga_j/cm_j * Qm_j    (lower-left)
+                self.gacm_mat.addTo(self.g_mat, self.nsections, 0)
+                # LHS-2: ga_j * vx - ga_j * vx_j (lower-right)
+                self.ga_mat.addTo(self.g_mat, self.nsections, self.nsections)
 
         def updateRHS(self):
             ''' Update the right-hand side of the network (current vector). '''
-            for i, sec in enumerate(self.getSecList()):
+            for i, sec in enumerate(self.seclist):
                 # Propagate e_ext discontinuities into v_vec
                 if sec.ex != sec.ex_last:
                     self.v_vec.x[i + self.nsections] += sec.ex - sec.ex_last
                     sec.ex_last = sec.ex
-                if self.use_ga_alias:
-                    # RHS-2: gx * ex + is
-                    self.i_vec.x[i + self.nsections] = self.gx_vec[i] * sec.ex + sec.istim
-                else:
-                    # RHS-2: gx * ex + i(vm)
-                    self.i_vec.x[i + self.nsections] = self.gx_vec[i] * sec.ex + sec.getIm(x=0.5)
+                # RHS-2: gx * ex + is
+                self.i_vec.x[i + self.nsections] = self.gx_vec[i] * sec.ex + sec.istim
 
         def updateNetwork(self):
             ''' Update the linear mechanism network components before the call to fadvance. '''
@@ -571,41 +530,11 @@ def addSonicFeatures(Base):
                 logger.info(f'g_mat: ({self.g_mat.nrow()} x {self.g_mat.ncol()})')
                 self.g_mat.printf(fmt)
 
-        @property
-        def Qm_vec(self):
-            ''' Get membrane charge density vector (nC/cm2). '''
-            return np.array([sec.v for sec in self.getSecList()])
-            # return self.v_vec.as_numpy()[self.nsections:]
-
-        @property
-        def Vm_vec(self):
-            ''' Get membrane potential vector (mV). '''
-            return np.array([sec.getVm() for sec in self.getSecList()])
-
-        def getSteadyStateVx(self):
-            ''' Find the steady-state distribution of extracellular voltage for a given
-                distribution of transmembrane charge density.
-
-                [ga + gp + gx] * vx = is + gx * ex - [ga_cm] * Qm.
-            '''
-            iga = np.array(self.gacm_mat * Vector(self.Qm_vec))
-            isge = np.array([gx * s.ex + s.istim for gx, s in zip(self.gx_vec, self.getSecList())])
-            vx0 = (self.ga_mat + self.gp_mat + self.gx_mat).solv(Vector(isge - iga)).as_numpy()
-            # with np.printoptions(**array_print_options):
-            print('Qm:', self.Qm_vec)
-            print('Vm:', self.Vm_vec)
-            print('Cm:', self.cm_vec)
-            print('iga:', iga)
-            print('isge:', isge)
-            print('i:', isge + iga)
-            print('vx:', vx0)
-            return vx0
-
         def initNetwork(self):
             ''' Initialize a linear mechanism to represent the voltage network. '''
             self.initToSteadyState()
-            self.Ga_mat = ConductanceMatrix(self.Ga_vec, links=self.getConnectionPairs())
-            self.Gp_mat = ConductanceMatrix(self.Gp_vec, links=self.getConnectionPairs())
+            self.Ga_mat = ConductanceMatrix(self.Ga_vec, links=self.connection_pairs)
+            self.Gp_mat = ConductanceMatrix(self.Gp_vec, links=self.connection_pairs)
             self.updateGmat()
             if self.has_ext_mech:
                 self.updateCmat()
@@ -613,13 +542,10 @@ def addSonicFeatures(Base):
             self.printNetwork()
 
             if self.network is None:
-                # initial conditions vector
-                # vx0 = self.getSteadyStateVx()
-                vx0 = np.zeros(self.nsections)
-                self.v0_vec = Vector(np.hstack((np.zeros(self.nsections), vx0)))
+                self.v0_vec = Vector(np.zeros(self.nsections * 2))  # initial conditions vector
                 self.network = h.LinearMechanism(
                     self.updateNetwork, self.c_mat, self.g_mat, self.v_vec, self.v0_vec, self.i_vec,
-                    h.SectionList(self.getSecList()), Vector([0.5] * self.nsections))
+                    h.SectionList(self.seclist), Vector([0.5] * self.nsections))
 
         def setUSDrives(self, A_dict):
             logger.debug(f'Acoustic pressures:')
