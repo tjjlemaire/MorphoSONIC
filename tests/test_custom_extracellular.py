@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-06 01:17:49
+# @Last Modified time: 2020-06-07 23:17:21
 
 import logging
 import matplotlib.pyplot as plt
@@ -20,8 +20,8 @@ logger.setLevel(logging.INFO)
 
 # Create fiber models
 fiberD = 10e-6  # m
-# nnodes = 11
-# fiber_class = SennFiber
+nnodes = 11
+fiber_class = SennFiber
 nnodes = 5
 fiber_class = MRGFiber
 
@@ -41,14 +41,14 @@ ref_fiber = list(fibers.values())[0]
 #     mode='cathode',                 # electrode polarity
 #     I=-0.8e-6
 # )
-source = IntracellularCurrent(ref_fiber.central_ID, I=1e-9)
+# source = IntracellularCurrent(ref_fiber.central_ID, I=1e-9)
 # pp = PulsedProtocol(100e-6, 3e-3, tstart=0.1e-3)
 
-# source = GaussianVoltageSource(
-#     0,                       # gaussian center (m)
-#     ref_fiber.length / 10.,  # gaussian width (m)
-#     Ve=-80.                  # peak extracellular voltage (mV)
-# )
+source = GaussianVoltageSource(
+    0,                       # gaussian center (m)
+    ref_fiber.length / 10.,  # gaussian width (m)
+    Ve=-80.                  # peak extracellular voltage (mV)
+)
 pp = PulsedProtocol(3e-3, 3e-3, tstart=1e-3)
 
 data, meta = {}, {}
@@ -56,12 +56,12 @@ data, meta = {}, {}
 for lbl, fiber in fibers.items():
 
     # Disable use of equivalent currents to ensure that extracellular mechanism is used
-    fiber.use_equivalent_currents = False
+    # fiber.use_equivalent_currents = False
 
     # If required: insert extracellular network in all sections
     if fiber_class != MRGFiber:
         for sec in fiber.seclist:
-            sec.insertVext(xr=1e5, xg=1e3, xc=1e2)
+            sec.insertVext(xr=1e5, xg=1e3, xc=1e5)
 
     # Simulate model
     data[lbl], meta[lbl] = fiber.simulate(source, pp)
@@ -69,7 +69,6 @@ for lbl, fiber in fibers.items():
 compkey = 'comp'
 data[compkey] = data['Q-based sonic'] - data['Q-based normal']
 meta[compkey] = meta['Q-based normal']
-# data = {compkey: data[compkey]}
 
 for lbl in data.keys():
     # Plot resulting voltage traces (transmembrane and extracellular)

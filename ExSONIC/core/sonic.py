@@ -3,9 +3,8 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-30 21:40:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-06 01:25:34
+# @Last Modified time: 2020-06-07 16:15:28
 
-from neuron import h
 import numpy as np
 
 from PySONIC.core import PointNeuron, NeuronalBilayerSonophore, AcousticDrive, ElectricDrive
@@ -16,6 +15,7 @@ from ..utils import array_print_options
 from .sources import AcousticSource
 from .connectors import SerialConnectionScheme
 from .pyhoc import *
+from .cgi_network import HybridNetwork
 
 from .nmodel import NeuronModel, SpatiallyExtendedNeuronModel
 
@@ -253,34 +253,16 @@ def addSonicFeatures(Base):
             kwargs.update({k: meta[k] for k in ['a', 'fs']})
             return args, kwargs
 
-        def createSections(self):
-            super().createSections()
-            self.initNetworkArrays()
-
-        def setGeometry(self):
-            super().setGeometry()
-            self.Am_vec = np.array([sec.membraneArea() for sec in self.seclist])  # cm2
-
-        def setResistivity(self):
-            super().setResistivity()
-            self.Ga_vec = np.array([sec.Ga_half for sec in self.seclist])
-
-        def setBiophysics(self):
-            super().setBiophysics()
-            self.cm_vec = np.array([sec.Cm0 for sec in self.seclist])
+        def setTopology(self):
+            self.connections = []
+            super().setTopology()
 
         def registerConnection(self, sec1, sec2):
-            self.connection_pairs.append(tuple([self.seclist.index(x) for x in [sec1, sec2]]))
-
-        def setTopology(self):
-            self.connection_pairs = []
-            super().setTopology()
-            self.isec_ordered = self.getOrderedSecIndexes()
-            self.ordered_seclist = [self.seclist[i] for i in self.isec_ordered]
+            self.connections.append(tuple([self.seclist.index(x) for x in [sec1, sec2]]))
 
         def getOrderedSecIndexes(self):
             l = []
-            for i, j in self.connection_pairs:
+            for i, j in self.connections:
                 if len(l) == 0:
                     l = [i, j]
                 else:
@@ -297,255 +279,10 @@ def addSonicFeatures(Base):
         def printTopology(self):
             ''' Print the model's topology. '''
             logger.info('topology:')
-            print('\n|\n'.join([sec.shortname() for sec in self.ordered_seclist]))
-
-        def getSecIndex(self, sec):
-            ''' Get index of section in a model's section list. '''
-            return self.seclist.index(sec)
-
-        def initNetworkArrays(self):
-            ''' Initialize arrays that will be used to set the voltage network.
-
-                Considering the following terms:
-                - vi: intracelular voltage
-                - vm: transmembrane voltage
-                - vx: extracellular voltage
-                - ex: imposed voltage outside of the surrounding extracellular membrane
-                - is: stimulating current
-                - cm: membrane capacitance
-                - i(vm): transmembrane ionic current
-                - ga: intracellular axial conductance between nodes
-                - cx: capacitance of surrounding extracellular membrane (i.e. myelin)
-                - gx: transverse conductance of surrounding extracellular membrane (i.e. myelin)
-                - gp: extracellular axial conductance between nodes (e.g. periaxonal space)
-                - j: index indicating the connection to a neighboring node
-
-                Governing equations for internal and external nodes are, respectively:
-
-                (1) cm * dvm/dt + i(vm) = is + ga_j * (vi_j - vi)
-                (2) cx * dvx/dt + gx * (vx - ex) = cm * dvm/dt + i(vm) + gp_j * (vx_j - vx)
-
-                Putting all voltage dependencies on the left-hand sides, and developing, we find:
-
-                (1) cm * dvm/dt + ga_j * (vi - vi_j) = is - i(vm)
-                (2) cx * dvx/dt - cm * dvm/dt + gx * vx + gp_j * (vx - vx_j) = i(vm) + gx * ex
-
-                Re-expressing vi as (vm + vx), we find the matrix equation rows for the two nodes:
-
-                (1) cm * dvm/dt + ga_j * (vm - vm_j) + ga_j * (vx - vx_j) = is - i(vm)
-                (2) cx * dvx/dt - cm * dvm/dt + gx * vx + gp_j * (vx - vx_j) = i(vm) + gx * ex
-
-                or in developed form:
-
-                (1) cm * dvm/dt + ga_j * vm - ga_j * vm_j + ga_j * vx - ga_j * vx_j = is - i(vm)
-                (2) cx * dvx/dt - cm * dvm/dt + gx * vx + gp_j * vx - gp_j * vx_j = i(vm) + gx * ex
-
-                Special attention must be brought on the fact that we use NEURONS's v variable as an
-                alias for the section's membrane charge density Qm. Therefore, the system must be
-                adapted in consequence. To this effect, we introduce a change of variable:
-
-                Qm = cm * vm; dQm/dt = cm * dvm/dt  (cm considered time-invariant)
-
-                Recasting the system according to this change of variable thus yields:
-
-                (1) dQm/dt
-                    + ga_j/cm * Qm - ga_j/cm_j * Qm_j
-                    + ga_j * vx - ga_j * vx_j
-                    = is - i(vm)
-                (2) cx * dvx/dt - dQm/dt
-                    + gx * vx
-                    + gp_j * vx - gp_j * vx_j
-                    = i(vm) + gx * ex
-
-                Finally, we replace dQm/dt + i(vm) in (2) by equivalents intracellular axial and
-                stimulation currents, in order to remove the need to access net membrane current.
-                After re-arranging all linear voltage terms on the left-hand side, we have:
-
-                (1) dQm/dt
-                    + ga_j/cm * Qm - ga_j/cm_j * Qm_j
-                    + ga_j * vx - ga_j * vx_j
-                    = is - i(vm)
-                (2) cx * dvx/dt
-                    + ga_j/cm * Qm - ga_j/cm * Qm_j
-                    + ga_j * vx - ga_j * vx_j
-                    + gp_j * vx - gp_j * vx_j
-                    + gx * vx
-                    = is + gx * ex
-
-                Among these equation rows, 2 terms are automatically handled by NEURON, namely:
-                - LHS-1: dQm/dt
-                - RHS-1: is - i(vm)
-
-                Hence, 8 terms remain to be handled as part of the additional network:
-                - LHS-1: ga_j/cm * Qm - ga_j/cm_j * Qm_j
-                - LHS-1: ga_j * vx - ga_j * vx_j
-                - LHS-2: cx * dvx/dt
-                - LHS-2: ga_j/cm * Qm - ga_j/cm_j * Qm_j
-                - LHS-2: ga_j * vx - ga_j * vx_j
-                - LHS-2: gp_j * (vx - vx_j)
-                - LHS-2: gx * vx
-                - RHS-2: is + gx * ex
-
-                Note that axial conductance terms (ga and gp) must be normalized by the
-                appropriate section membrane area in order to obtain a consistent system.
-
-                How do we do this?
-
-                The above equations describe a partial differential system of the form:
-
-                    C * dy/dt + G * y = I
-
-                with C a capacitance matrix, G a conductance matrix, y a hybrid vector
-                of transmembrane charge density and external voltage, and I a current vector.
-
-                Thankfully, NEURON provides a so-called "LinearMechanism" class that allows
-                to define such a system, where the first n elements of the y vector
-                can be mapped to the "v" variable of a specific list of sections. This allows
-                us to add a linear network atop of NEURON's native network, in which we define
-                the additional terms.
-
-                Note also that the gx conductance is connected in series with another transverse
-                conductance of value 1e9, to mimick NEURON's default 2nd extracellular layer.
-            '''
-            self.c_mat = SquareMatrix(self.nsections)  # capacitance matrix (mF/cm2)
-            self.g_mat = SquareMatrix(self.nsections)  # conductance matrix (S/cm2)
-            self.v_vec = Vector(self.nsections)     # voltage vector (mV)
-            self.i_vec = Vector(self.nsections)     # current vector (mA/cm2)
-
-        @property
-        def network_size(self):
-            ''' Return size of linear mechanism network. '''
-            return self.v_vec.size()
-
-        def expandNetworkArrays(self):
-            ''' Expand the network arrays to add a connected extracellular layer. '''
-            self.cx_vec = np.zeros(self.network_size)  # ext. transverse capacitance vector (uF/cm2)
-            self.gx_vec = np.zeros(self.network_size)  # ext. transverse conductance vector (S/cm2)
-            self.Gp_vec = np.zeros(self.network_size)  # longitudinal half-conductance vector (S)
-            self.c_mat.expand()
-            self.g_mat.expand()
-            self.v_vec.expand()
-            self.i_vec.expand()
-
-        def setExtracellularNode(self, sec):
-            ''' Register the extracellular voltage node of a specific section.
-
-                :param sec: section object
-            '''
-            if self.network_size == self.nsections:
-                self.expandNetworkArrays()
-            i = self.getSecIndex(sec)
-            self.cx_vec[i] = sec.cx       # uF/cm2
-            self.gx_vec[i] = sec.gx       # S/cm2
-            self.Gp_vec[i] = sec.Gp_half  # S
+            print('\n|\n'.join([self.seclist[i].shortname() for i in self.getOrderedSecIndexes()]))
 
         def getVextRef(self, sec):
-            return self.v_vec._ref_x[self.getSecIndex(sec) + self.nsections]
-
-        def updateCmat(self):
-            ''' Set the network capacitance matrix. '''
-            self.c_mat.zero()
-            # Lower-right diagonal: cx
-            self.c_mat.setdiag(0, Vector(np.hstack((
-                np.zeros(self.nsections), self.cx_vec * UF_CM2_TO_MF_CM2))))
-
-        def updateCm(self):
-            for i, sec in enumerate(self.seclist):
-                self.cm_vec[i] = sec.getCm(x=0.5)
-
-        @property
-        def ga_mat(self):
-            ''' Ga matrix normalized by Am. '''
-            return self.Ga_mat.mulByRow(1 / self.Am_vec)
-
-        @property
-        def gacm_mat(self):
-            ''' Ga matrix normalized by cm * Am. '''
-            return self.Ga_mat.mulByRow(1 / (self.cm_vec * self.Am_vec))
-
-        @property
-        def gp_mat(self):
-            ''' Gp matrix normalized by Am. '''
-            return self.Gp_mat.mulByRow(1 / self.Am_vec)
-
-        @property
-        def gx_mat(self):
-            return DiagonalMatrix(self.gx_vec)
-
-        def updateGmat(self):
-            ''' Update the network conductance matrix. '''
-            self.g_mat.zero()
-            # LHS-1: ga_j/cm * Qm - ga_j/cm_j * Qm_j  (upper-left)
-            self.gacm_mat.addTo(self.g_mat, 0, 0)
-            if self.has_ext_mech:
-                # # LHS-1: ga_j * (vx - vx_j)  (upper-right)
-                self.ga_mat.addTo(self.g_mat, 0, self.nsections)
-                # LHS-2: gp_j * (vx - vx_j)    (lower-right)
-                self.gp_mat.addTo(self.g_mat, self.nsections, self.nsections)
-                # LHS-2: gx * vx    (lower-right)
-                self.gx_mat.addTo(self.g_mat, self.nsections, self.nsections)
-                # LHS-2: ga_j/cm * Qm - ga_j/cm_j * Qm_j    (lower-left)
-                self.gacm_mat.addTo(self.g_mat, self.nsections, 0)
-                # LHS-2: ga_j * vx - ga_j * vx_j (lower-right)
-                self.ga_mat.addTo(self.g_mat, self.nsections, self.nsections)
-
-        def updateRHS(self):
-            ''' Update the right-hand side of the network (current vector). '''
-            for i, sec in enumerate(self.seclist):
-                # Propagate e_ext discontinuities into v_vec
-                if sec.ex != sec.ex_last:
-                    self.v_vec.x[i + self.nsections] += sec.ex - sec.ex_last
-                    sec.ex_last = sec.ex
-                # RHS-2: gx * ex + is
-                self.i_vec.x[i + self.nsections] = self.gx_vec[i] * sec.ex + sec.istim
-
-        def updateNetwork(self):
-            ''' Update the linear mechanism network components before the call to fadvance. '''
-            self.updateCm()
-            # self.updateGmat()
-            if self.has_ext_mech:
-                self.updateRHS()
-
-        def printNetwork(self):
-            if self.nsections > 23:
-                logger.warning('exceeding max number of sections to print network correctly')
-                return
-            fmt = '%-8g' if self.nsections <= 11 else '%-4g'
-            with np.printoptions(**array_print_options):
-                logger.info(f'cm_vec: {self.cm_vec} uF/cm2')
-                logger.info(f'cx_vec: {self.cx_vec} uF/cm2')
-                logger.info('c_mat (mF/cm2):')
-                self.c_mat.printf(fmt)
-                logger.info(f'Ga_vec: {self.Ga_vec}')
-                logger.info('Ga_mat:')
-                self.Ga_mat.printf()
-                logger.info('ga_mat:')
-                self.ga_mat.printf()
-                logger.info(f'Gp_vec: {self.Gp_vec}')
-                logger.info('Gp_mat:')
-                self.Gp_mat.printf()
-                logger.info('gp_mat:')
-                self.gp_mat.printf()
-                logger.info(f'gx_vec: {self.gx_vec}')
-                logger.info(f'g_mat: ({self.g_mat.nrow()} x {self.g_mat.ncol()})')
-                self.g_mat.printf(fmt)
-
-        def initNetwork(self):
-            ''' Initialize a linear mechanism to represent the voltage network. '''
-            self.initToSteadyState()
-            self.Ga_mat = ConductanceMatrix(self.Ga_vec, links=self.connection_pairs)
-            self.Gp_mat = ConductanceMatrix(self.Gp_vec, links=self.connection_pairs)
-            self.updateGmat()
-            if self.has_ext_mech:
-                self.updateCmat()
-            self.updateNetwork()
-            self.printNetwork()
-
-            if self.network is None:
-                self.v0_vec = Vector(np.zeros(self.nsections * 2))  # initial conditions vector
-                self.network = h.LinearMechanism(
-                    self.updateNetwork, self.c_mat, self.g_mat, self.v_vec, self.v0_vec, self.i_vec,
-                    h.SectionList(self.seclist), Vector([0.5] * self.nsections))
+            return self.network.getVextRef(sec)
 
         def setUSDrives(self, A_dict):
             logger.debug(f'Acoustic pressures:')
@@ -565,11 +302,17 @@ def addSonicFeatures(Base):
             return d
 
         def setDrives(self, source):
+            is_dynamic_cm = False
             if isinstance(source, AcousticSource):
                 self.checkForSonophoreRadius()
                 self.setFuncTables(source.f)
+                is_dynamic_cm = True
             super().setDrives(source)
-            self.initNetwork()
+            self.network = HybridNetwork(
+                self.seclist,
+                self.connections,
+                self.has_ext_mech,
+                is_dynamic_cm=is_dynamic_cm)
 
         def needsFixedTimeStep(self, _):
             return True

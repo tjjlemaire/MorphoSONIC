@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-05 12:00:33
+# @Last Modified time: 2020-06-07 16:04:52
 
 import numpy as np
 
@@ -90,9 +90,9 @@ class SingleCableFiber(FiberNeuronModel):
     def sections(self):
         return {'node': self.nodes}
 
-    # @property
-    # def seclist(self):
-    #     return self.nodelist
+    @property
+    def seclist(self):
+        return self.nodelist
 
     def createSections(self):
         self.nodes = {k: self.createSection(

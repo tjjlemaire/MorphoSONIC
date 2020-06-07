@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-05 12:00:06
+# @Last Modified time: 2020-06-07 22:32:09
 
 from PySONIC.core import PointNeuron, ElectricDrive
 from PySONIC.utils import logger
@@ -42,9 +42,9 @@ class Node(NeuronModel):
     def simkey(self):
         return self.pneuron.simkey
 
-    # @property
-    # def seclist(self):
-    #     return [self.section]
+    @property
+    def seclist(self):
+        return [self.section]
 
     @property
     def drives(self):
@@ -52,7 +52,7 @@ class Node(NeuronModel):
 
     def getAreaNormalizationFactor(self):
         ''' Return area normalization factor '''
-        A0 = self.section.membraneArea() / M_TO_CM**2  # section area (m2)
+        A0 = self.section.Am / M_TO_CM**2  # section area (m2)
         A = self.pneuron.area                          # neuron membrane area (m2)
         return A0 / A
 
@@ -73,7 +73,7 @@ class Node(NeuronModel):
             :param i: current density (mA/m2)
             :return: current (nA)
         '''
-        Iinj = i * self.section.membraneArea() / M_TO_CM**2 * MA_TO_NA  # nA
+        Iinj = i * self.section.Am / M_TO_CM**2 * MA_TO_NA  # nA
         logger.debug(f'Equivalent injected current: {Iinj:.1f} nA')
         return Iinj
 

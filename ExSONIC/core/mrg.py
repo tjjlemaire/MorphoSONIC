@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-27 23:08:23
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-06 01:12:08
+# @Last Modified time: 2020-06-07 16:04:29
 
 import numpy as np
 
@@ -248,16 +248,16 @@ class MRGFiber(FiberNeuronModel):
     def sections(self):
         return {'node': self.nodes, **self.inters}
 
-    # @property
-    # def interlist(self):
-    #     d = []
-    #     for secdict in self.inters.values():
-    #         d += list(secdict.values())
-    #     return d
+    @property
+    def interlist(self):
+        d = []
+        for secdict in self.inters.values():
+            d += list(secdict.values())
+        return d
 
-    # @property
-    # def seclist(self):
-    #     return self.nodelist + self.interlist
+    @property
+    def seclist(self):
+        return self.nodelist + self.interlist
 
     @property
     def length(self):
