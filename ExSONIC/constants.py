@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-08 15:20:20
+# @Last Modified time: 2020-06-08 20:25:45
 
 # Conversions
 V_TO_MV = 1e3            # V to  mV
@@ -34,9 +34,6 @@ IINJ_RANGE = (1e-12, 1e-7)  # intracellular current range allowed at the fiber l
 VEXT_RANGE = (1e0, 1e5)     # extracellular potential range allowed at the fiber level (mV)
 REL_EPS_THR = 1e-2          # relative convergence threshold
 REL_START_POINT = 0.2       # relative position of starting point within search range
-
-# Model construction
-MAX_CUSTOM_CON = 2  # maximum number of custom intracellular connections to a given section
 
 # Passive mechanism
 CLASSIC_PASSIVE_MECHNAME = 'pas'
