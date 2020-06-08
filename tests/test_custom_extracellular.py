@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-08 20:04:53
+# @Last Modified time: 2020-06-09 01:09:02
 
 import logging
 import matplotlib.pyplot as plt
@@ -22,17 +22,17 @@ logger.setLevel(logging.INFO)
 fiberD = 10e-6  # m
 nnodes = 11
 fiber_class = SennFiber
-nnodes = 5
+nnodes = 3
 fiber_class = MRGFiber
 
 fiber_classes = {
-    'Q-based normal': fiber_class.__original__,
-    'Q-based sonic': fiber_class
+    'normal': fiber_class.__original__,
+    'sonic': fiber_class
 }
-if hasattr(fiber_class, '__originalVbased__'):
-    fiber_classes['V-based normal'] = fiber_class.__originalVbased__
+# if hasattr(fiber_class, '__originalVbased__'):
+#     fiber_classes['normal'] = fiber_class.__originalVbased__
 fibers = {k: v(fiberD, nnodes) for k, v in fiber_classes.items()}
-ref_fiber = list(fibers.values())[0]
+ref_fiber = fibers['normal']
 
 # Stimulation parameters
 # source = ExtracellularCurrent(
@@ -67,8 +67,8 @@ for lbl, fiber in fibers.items():
     data[lbl], meta[lbl] = fiber.simulate(source, pp)
 
 compkey = 'comp'
-data[compkey] = data['Q-based sonic'] - data['Q-based normal']
-meta[compkey] = meta['Q-based normal']
+data[compkey] = data['sonic'] - data['normal']
+meta[compkey] = meta['normal']
 
 for lbl in data.keys():
     # Plot resulting voltage traces (transmembrane and extracellular)

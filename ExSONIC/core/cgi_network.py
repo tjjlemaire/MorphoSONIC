@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-06-07 14:42:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-08 21:18:34
+# @Last Modified time: 2020-06-09 01:17:09
 
 import numpy as np
 from neuron import h, hclass
@@ -11,7 +11,7 @@ from neuron import h, hclass
 from PySONIC.utils import logger
 
 from .pyhoc import Matrix
-from ..utils import seriesGeq
+from ..utils import seriesGeq, array_print_options
 from ..constants import *
 
 
@@ -25,18 +25,6 @@ class SquareMatrix(Matrix):
     def emptyClone(self):
         ''' Return empty matrix of identical shape. '''
         return SquareMatrix(int(self.nrow()))
-
-    def addLink(self, i, j, w):
-        ''' Add a bi-directional link between two nodes with a specific weight.
-
-            :param i: first node index
-            :param j: second node index
-            :param w: link weight
-        '''
-        self.addVal(i, i, w)
-        self.addVal(i, j, -w)
-        self.addVal(j, j, w)
-        self.addVal(j, i, -w)
 
 
 class DiagonalMatrix(SquareMatrix):
@@ -69,7 +57,7 @@ class ConductanceMatrix(SquareMatrix):
         '''
         self.Gvec = Gvec
         if links is not None:
-            self.addLinks(links)
+            self.setLinks(links)
 
     @property
     def Gvec(self):
@@ -84,29 +72,37 @@ class ConductanceMatrix(SquareMatrix):
         ''' Half conductance in series. '''
         return 2 * seriesGeq(self.Gvec[i], self.Gvec[j])
 
-    def addLink(self, i, j):
-        ''' Add a link between two nodes.
+    def addLink(self, i, j, w):
+        ''' Add a bi-directional link between two nodes with a specific weight.
 
             :param i: first node index
             :param j: second node index
+            :param w: link weight
         '''
-        super().addLink(i, j, self.Gij(i, j))
+        self.addVal(i, i, w)
+        self.addVal(i, j, -w)
+        self.addVal(j, j, w)
+        self.addVal(j, i, -w)
 
-    def removeLink(self, i, j):
+    def link(self, i, j):
+        ''' Add a link between two nodes. '''
+        self.addLink(i, j, self.Gij(i, j))
+
+    def unlink(self, i, j):
         ''' Remove a link between two nodes.
 
             :param i: first node index
             :param j: second node index
         '''
-        super().addLink(i, j, -self.Gij(i, j))
+        self.addLink(i, j, -self.Gij(i, j))
 
-    def addLinks(self, links):
+    def setLinks(self, links):
         ''' Add cross-nodes links to the matrix.
 
             :param links: list of paired indexes inicating links across nodes.
         '''
         for i, j in links:
-            self.addLink(i, j)
+            self.link(i, j)
         self.checkNullRows()
 
     def checkNullRows(self):
@@ -378,6 +374,8 @@ class HybridNetwork:
         conductance of value 1e9, to mimick NEURON's default 2nd extracellular layer.
     '''
 
+    max_size_log = 46
+
     def __init__(self, seclist, connections, has_ext_layer, is_dynamic_cm=False):
         ''' Initialization.
 
@@ -395,6 +393,7 @@ class HybridNetwork:
         self.setBaseLayer()
         if self.has_ext_layer:
             self.setExtracellularLayer()
+        self.log(details=True)
         self.startLM()
 
     def __repr__(self):
@@ -550,25 +549,28 @@ class HybridNetwork:
         self.vx.addVal(i, new_ex - old_ex)
         self.iex.setVal(i, self.gx[i] * new_ex)
 
-    def log(self):
+    def log(self, details=False):
         ''' Print network components. '''
-        if self.size > 40:
-            logger.warning('exceeding max number of sections to print network correctly')
+        if self.size > self.max_size_log:
+            logger.warning(
+                f'number of nodes ({self.size}) exceeding logging limit ({self.max_size_log})')
             return
         fmt = '%-8g' if self.size <= 22 else '%-4g'
         with np.printoptions(**array_print_options):
-            logger.info(f'cm: {self.cm} uF/cm2')
-            if self.has_ext_layer:
-                logger.info(f'cx: {self.cx} uF/cm2')
+            if details:
+                logger.info(f'cm = {self.cm} uF/cm2')
+                if self.has_ext_layer:
+                    logger.info(f'cx = {self.cx} uF/cm2')
             logger.info('C (mF/cm2):')
             self.C.printf(fmt)
-            logger.info(f'ga: {self.ga}')
-            logger.info('Ga:')
-            self.Ga.printf()
-            if self.has_ext_layer:
-                logger.info(f'gp: {self.gp}')
-                logger.info('Gp:')
-                self.Gp.printf()
-                logger.info(f'gx: {self.gx}')
-            logger.info(f'G:')
+            if details:
+                logger.info(f'ga = {self.ga} S/cm2')
+                logger.info('Ga (S/cm2):')
+                self.Ga.printf()
+                if self.has_ext_layer:
+                    logger.info(f'gp = {self.gp} S/cm2')
+                    logger.info('Gp (S/cm2):')
+                    self.Gp.printf()
+                    logger.info(f'gx = {self.gx}')
+            logger.info(f'G (S/cm2):')
             self.G.printf(fmt)
