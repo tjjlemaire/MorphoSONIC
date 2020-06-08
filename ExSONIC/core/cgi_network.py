@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-06-07 14:42:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-08 18:44:39
+# @Last Modified time: 2020-06-08 21:05:42
 
 import numpy as np
 from neuron import h, hclass
@@ -24,7 +24,7 @@ class SquareMatrix(Matrix):
 
     def emptyClone(self):
         ''' Return empty matrix of identical shape. '''
-        return SquareMatrix(self.nrow())
+        return SquareMatrix(int(self.nrow()))
 
     def addLink(self, i, j, w):
         ''' Add a bi-directional link between two nodes with a specific weight.
@@ -77,7 +77,7 @@ class ConductanceMatrix(SquareMatrix):
 
     @Gvec.setter
     def Gvec(self, value):
-        assert value.size == self.nrow(), 'conductance vector does not match number of rows'
+        assert value.size == int(self.nrow()), 'conductance vector does not match number of rows'
         self._Gvec = value
 
     def Gij(self, i, j):
@@ -111,7 +111,7 @@ class ConductanceMatrix(SquareMatrix):
 
     def checkNullRows(self):
         ''' Check that all rows sum up to zero (or close). '''
-        for i in range(self.nrow()):
+        for i in range(int(self.nrow())):
             rsum = self.getrow(i).sum()
             assert np.isclose(rsum, .0, atol=1e-12), f'non-zero sum on line {i}: {rsum}'
 
@@ -133,8 +133,8 @@ class NormalizedConductanceMatrix(ConductanceMatrix):
 
     def setNorm(self, value):
         ''' Set a new row-normalization vector. '''
-        assert value.size == self.nrow(), 'normalizing vector does not match number of rows'
-        for i in range(self.nrow()):
+        assert value.size == int(self.nrow()), 'normalizing vector does not match number of rows'
+        for i in range(int(self.nrow())):
             self.setrow(i, self.getrow(i) * self.xnorm[i] / value[i])
         self.xnorm = value
 
@@ -148,9 +148,9 @@ class NormalizedConductanceMatrix(ConductanceMatrix):
 
     def mulByRow(self, x):
         ''' Return new matrix with rows multiplied by vector values. '''
-        assert x.size == self.nrow(), f'Input vector must be of size {self.nrow()}'
+        assert x.size == int(self.nrow()), f'Input vector must be of size {int(self.nrow())}'
         mout = self.emptyClone()
-        for i in range(self.nrow()):
+        for i in range(int(self.nrow())):
             mout.setrow(i, self.getrow(i) * x[i])
         return mout
 
@@ -227,14 +227,14 @@ def pointerMatrix(MatrixBase):
             ''' Add the current matrix to a destination matrix, starting at a specific
                 row and column index.
             '''
-            for k in range(self.nrow()):
-                for l in range(self.ncol()):
+            for k in range(int(self.nrow())):
+                for l in range(int(self.ncol())):
                     mout.addVal(k + i, l + j, self.getval(k, l) * fac)
 
         def addRef(self, m, row_offset, col_offset):
             ''' Add a reference matrix to "point" towards. '''
-            assert self.nrow() + row_offset <= m.nrow(), 'exceeds reference dimensions'
-            assert self.ncol() + col_offset <= m.ncol(), 'exceeds reference dimensions'
+            assert int(self.nrow()) + row_offset <= int(m.nrow()), 'exceeds reference dimensions'
+            assert int(self.ncol()) + col_offset <= int(m.ncol()), 'exceeds reference dimensions'
             self.addTo(m, row_offset, col_offset)
             self.refs.append((m, row_offset, col_offset))
 

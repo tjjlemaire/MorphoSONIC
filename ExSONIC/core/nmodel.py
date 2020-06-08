@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-08 15:20:47
+# @Last Modified time: 2020-06-08 21:04:08
 
 import abc
 from neuron import h
@@ -367,7 +367,7 @@ class NeuronModel(metaclass=abc.ABCMeta):
         '''
         # Check conformity of inputs
         dims_not_matching = 'reference vector size ({}) does not match matrix {} dimension ({})'
-        nx, ny = matrix.nrow(), matrix.ncol()
+        nx, ny = int(matrix.nrow()), int(matrix.ncol())
         assert xref.size() == nx, dims_not_matching.format(xref.size(), '1st', nx)
         assert yref.size() == ny, dims_not_matching.format(yref.size(), '2nd', nx)
 

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-08 18:35:56
+# @Last Modified time: 2020-06-08 21:03:46
 
 ''' Utilities to manipulate HOC objects. '''
 
@@ -41,7 +41,7 @@ class Matrix(hclass(h.Matrix)):
 
     def to_array(self):
         ''' Return itself as a numpy array. '''
-        return np.array([self.getrow(i).to_python() for i in range(self.nrow())])
+        return np.array([self.getrow(i).to_python() for i in range(int(self.nrow()))])
 
     @classmethod
     def from_array(cls, arr):
