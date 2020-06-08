@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-09 01:09:02
+# @Last Modified time: 2020-06-09 01:57:11
 
 import logging
 import matplotlib.pyplot as plt
@@ -47,21 +47,15 @@ ref_fiber = fibers['normal']
 source = GaussianVoltageSource(
     0,                       # gaussian center (m)
     ref_fiber.length / 10.,  # gaussian width (m)
-    Ve=-80.                  # peak extracellular voltage (mV)
+    Ve=-0.                  # peak extracellular voltage (mV)
 )
 pp = PulsedProtocol(3e-3, 3e-3, tstart=1e-3)
 
 data, meta = {}, {}
 # For each fiber model
 for lbl, fiber in fibers.items():
-
     # Disable use of equivalent currents to ensure that extracellular mechanism is used
     # fiber.use_equivalent_currents = False
-
-    # If required: insert extracellular network in all sections
-    if fiber_class != MRGFiber:
-        for sec in fiber.seclist:
-            sec.insertVext(xr=1e5, xg=1e3, xc=1e5)
 
     # Simulate model
     data[lbl], meta[lbl] = fiber.simulate(source, pp)

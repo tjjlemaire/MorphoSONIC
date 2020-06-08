@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-06-07 14:42:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-09 01:17:09
+# @Last Modified time: 2020-06-09 01:42:07
 
 import numpy as np
 from neuron import h, hclass
@@ -374,7 +374,7 @@ class HybridNetwork:
         conductance of value 1e9, to mimick NEURON's default 2nd extracellular layer.
     '''
 
-    max_size_log = 46
+    log_nmax = 46
 
     def __init__(self, seclist, connections, has_ext_layer, is_dynamic_cm=False):
         ''' Initialization.
@@ -549,28 +549,27 @@ class HybridNetwork:
         self.vx.addVal(i, new_ex - old_ex)
         self.iex.setVal(i, self.gx[i] * new_ex)
 
+    def logMat(self, k, unit):
+        logger.info(f'{k} ({unit}):')
+        getattr(self, k).printf('%-8g' if self.size <= 22 else '%-5g')
+
+    def logCmat(self, k):
+        self.logMat(k, 'mF/cm2')
+
+    def logGmat(self, k):
+        self.logMat(k, 'S/cm2')
+
     def log(self, details=False):
         ''' Print network components. '''
-        if self.size > self.max_size_log:
-            logger.warning(
-                f'number of nodes ({self.size}) exceeding logging limit ({self.max_size_log})')
+        if self.size > self.log_nmax:
+            logger.warning(f'number of nodes ({self.size}) exceeds logging limit ({self.log_nmax})')
             return
-        fmt = '%-8g' if self.size <= 22 else '%-4g'
-        with np.printoptions(**array_print_options):
-            if details:
-                logger.info(f'cm = {self.cm} uF/cm2')
-                if self.has_ext_layer:
-                    logger.info(f'cx = {self.cx} uF/cm2')
-            logger.info('C (mF/cm2):')
-            self.C.printf(fmt)
-            if details:
-                logger.info(f'ga = {self.ga} S/cm2')
-                logger.info('Ga (S/cm2):')
-                self.Ga.printf()
-                if self.has_ext_layer:
-                    logger.info(f'gp = {self.gp} S/cm2')
-                    logger.info('Gp (S/cm2):')
-                    self.Gp.printf()
-                    logger.info(f'gx = {self.gx}')
-            logger.info(f'G (S/cm2):')
-            self.G.printf(fmt)
+        if details and self.has_ext_layer:
+            self.logCmat('Cx')
+        self.logCmat('C')
+        if details:
+            self.logGmat('Ga')
+            if self.has_ext_layer:
+                self.logGmat('Gp')
+                self.logGmat('Gx')
+        self.logGmat('G')
