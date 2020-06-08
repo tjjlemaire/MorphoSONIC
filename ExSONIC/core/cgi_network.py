@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-06-07 14:42:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-08 21:05:42
+# @Last Modified time: 2020-06-08 21:18:34
 
 import numpy as np
 from neuron import h, hclass
@@ -135,7 +135,7 @@ class NormalizedConductanceMatrix(ConductanceMatrix):
         ''' Set a new row-normalization vector. '''
         assert value.size == int(self.nrow()), 'normalizing vector does not match number of rows'
         for i in range(int(self.nrow())):
-            self.setrow(i, self.getrow(i) * self.xnorm[i] / value[i])
+            self.getrow(i).mul(self.xnorm[i] / value[i])
         self.xnorm = value
 
     def setVal(self, i, j, x):
@@ -151,7 +151,7 @@ class NormalizedConductanceMatrix(ConductanceMatrix):
         assert x.size == int(self.nrow()), f'Input vector must be of size {int(self.nrow())}'
         mout = self.emptyClone()
         for i in range(int(self.nrow())):
-            mout.setrow(i, self.getrow(i) * x[i])
+            mout.setrow(i, self.getrow(i).c().mul(x[i]))
         return mout
 
     def scaled(self):
@@ -171,22 +171,11 @@ class PointerVector(hclass(h.Vector)):
         self.refs = []
         super().__init__(*args, **kwargs)
 
-    # def __setitem__(self, i, x):
-    #     ''' Item setter, adding the difference between the old an new value to all
-    #         reference vectors with their respective offsets.
-    #     '''
-    #     xdiff = x - self.get(i)
-    #     print(i, x, xdiff)
-    #     self.set(i, x)
-    #     for v, offset in self.refs:
-    #         v.set(i + offset, v.get(i + offset) + xdiff)
-
     def setVal(self, i, x):
         ''' Item setter, adding the difference between the old an new value to all
             reference vectors with their respective offsets.
         '''
         xdiff = x - self.get(i)
-        # print(i, x, xdiff)
         self.set(i, x)
         for v, offset in self.refs:
             v.set(i + offset, v.get(i + offset) + xdiff)
