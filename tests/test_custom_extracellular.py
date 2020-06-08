@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-07 23:17:21
+# @Last Modified time: 2020-06-08 15:30:11
 
 import logging
 import matplotlib.pyplot as plt
@@ -29,8 +29,8 @@ fiber_classes = {
     'Q-based normal': fiber_class.__original__,
     'Q-based sonic': fiber_class
 }
-# if hasattr(fiber_class, '__originalVbased__'):
-#     fiber_classes['V-based normal'] = fiber_class.__originalVbased__
+if hasattr(fiber_class, '__originalVbased__'):
+    fiber_classes['V-based normal'] = fiber_class.__originalVbased__
 fibers = {k: v(fiberD, nnodes) for k, v in fiber_classes.items()}
 ref_fiber = list(fibers.values())[0]
 

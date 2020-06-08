@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-07 16:04:13
+# @Last Modified time: 2020-06-08 15:20:47
 
 import abc
 from neuron import h
@@ -31,6 +31,7 @@ class NeuronModel(metaclass=abc.ABCMeta):
     refvar = 'Qm'  # default reference variable
     is_constructed = False
     fixed_dt = FIXED_DT
+    use_custom_passive = False
 
     # integration methods
     int_methods = {
@@ -96,6 +97,13 @@ class NeuronModel(metaclass=abc.ABCMeta):
     @property
     def mechname(self):
         return f'{self.pneuron.name}auto'
+
+    @property
+    def passive_mechname(self):
+        return {
+            False: CLASSIC_PASSIVE_MECHNAME,
+            True: CUSTOM_PASSIVE_MECHNAME
+        }[self.use_custom_passive]
 
     @staticmethod
     def axialSectionArea(d_out, d_in=0.):
@@ -384,7 +392,8 @@ class NeuronModel(metaclass=abc.ABCMeta):
             self.setFuncTable(self.mechname, k, v, self.Aref, self.Qref)
 
         # Add V func table to passive sections if custom passive mechanism is used
-        self.setFuncTable('custom_pas', 'V', self.lkp['V'], self.Aref, self.Qref)
+        if self.use_custom_passive:
+            self.setFuncTable(CUSTOM_PASSIVE_MECHNAME, 'V', self.lkp['V'], self.Aref, self.Qref)
 
     @staticmethod
     def outputDataFrame(t, stim, probes):

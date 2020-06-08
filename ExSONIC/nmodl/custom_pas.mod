@@ -4,9 +4,10 @@ INDEPENDENT {t FROM 0 TO 1 WITH 1 (ms)}
 
 NEURON {
    SUFFIX custom_pas
-   NONSPECIFIC_CURRENT iPas : passive leakage current
+   NONSPECIFIC_CURRENT i : passive leakage current
    RANGE Adrive, Vm : section specific
    RANGE stimon     : common to all sections (but set as RANGE to be accessible from caller)
+   RANGE g, e
 }
 
 PARAMETER {
@@ -17,14 +18,14 @@ PARAMETER {
 }
 
 ASSIGNED {
-   v    (nC/cm2)
-   Vm   (mV)
-   iPas (mA/cm2)
+   v   (nC/cm2)
+   Vm  (mV)
+   i   (mA/cm2)
 }
 
 FUNCTION_TABLE V(A(kPa), Q(nC/cm2)) (mV)
 
 BREAKPOINT {
    Vm = V(Adrive * stimon, v)
-   iPas = g * (Vm - e)
+   i = g * (Vm - e)
 }

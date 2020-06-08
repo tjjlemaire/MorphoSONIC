@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-30 21:40:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-07 16:15:28
+# @Last Modified time: 2020-06-08 15:18:22
 
 import numpy as np
 
@@ -27,6 +27,8 @@ def addSonicFeatures(Base):
 
     class SonicBase(Base):
         ''' Generic class inheriting from a NeuronModel class and adding gneric SONIC features. '''
+
+        use_custom_passive = True
 
         def __init__(self, *args, a=None, fs=1., d=0., **kwargs):
             ''' Initialization.

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-07 23:23:18
+# @Last Modified time: 2020-06-08 15:16:32
 
 ''' Utilities to manipulate HOC objects. '''
 
@@ -103,9 +103,6 @@ class ExtField():
 class Section(hclass(h.Section)):
     ''' Interface to a Hoc Section with nseg=1. '''
 
-    passive_mechname = 'custom_pas'
-    # passive_mechname = 'pas'
-
     def __init__(self, name=None, cell=None, Cm0=1.):
         ''' Initialization.
 
@@ -113,6 +110,7 @@ class Section(hclass(h.Section)):
             :param cell: section cell
             :param Cm0: resting membrane capacitance (uF/cm2)
         '''
+        self.passive_mechname = cell.passive_mechname
         if name is None:
             raise ValueError('section must have a name')
         if cell is not None:
@@ -160,26 +158,17 @@ class Section(hclass(h.Section)):
 
     @property
     def Am(self):
-        ''' Compute section membrane surface area.
-
-            :return: membrane area (cm2)
-         '''
+        ''' membrane surface area (cm2). '''
         return np.pi * self.diam * self.L / CM_TO_UM**2
 
     @property
     def Ax(self):
-        ''' Compute section axial area.
-
-            :return: axial area (cm2)
-        '''
+        ''' axial area (cm2). '''
         return 1 / 4 * np.pi * self.diam**2 / CM_TO_UM**2
 
     @property
     def Ga(self):
-        ''' Compute section axial conductance.
-
-            :return: axial conductance (S)
-        '''
+        ''' axial conductance (S). '''
         return self.Ax / (self.Ra * self.L / CM_TO_UM)
 
     def target(self, x):
@@ -280,11 +269,15 @@ class Section(hclass(h.Section)):
 
     def setPassiveG(self, value):
         ''' Set the passive conductance (S/cm2). '''
+        if self.passive_mechname != CUSTOM_PASSIVE_MECHNAME:
+            value /= self.cfac
         self.setPassive('g', value)
 
     def setPassiveE(self, value):
         ''' Set the passive reversal potential (mV). '''
-        self.setPassive('e', value * self.cfac)
+        if self.passive_mechname != CUSTOM_PASSIVE_MECHNAME:
+            value *= self.cfac
+        self.setPassive('e', value)
 
     def getDetails(self):
         ''' Get details of section parameters. '''
@@ -481,8 +474,6 @@ class MechQSection(MechSection, QSection):
 def getCustomConnectSection(section_class):
 
     class CustomConnectSection(section_class):
-
-        passive_mechname = 'custom_pas'
 
         def __init__(self, cs, *args, **kwargs):
             ''' Initialization.

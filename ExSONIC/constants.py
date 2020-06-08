@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-06 00:55:51
+# @Last Modified time: 2020-06-08 15:20:20
 
 # Conversions
 V_TO_MV = 1e3            # V to  mV
@@ -37,6 +37,10 @@ REL_START_POINT = 0.2       # relative position of starting point within search 
 
 # Model construction
 MAX_CUSTOM_CON = 2  # maximum number of custom intracellular connections to a given section
+
+# Passive mechanism
+CLASSIC_PASSIVE_MECHNAME = 'pas'
+CUSTOM_PASSIVE_MECHNAME = 'custom_pas'
 
 # Extracellular mechanism parameters
 XR_DEFAULT = 1e9          # MOhm/cm
