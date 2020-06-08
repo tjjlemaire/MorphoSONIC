@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-30 21:40:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-08 15:18:22
+# @Last Modified time: 2020-06-08 18:35:35
 
 import numpy as np
 
@@ -231,6 +231,25 @@ def addSonicFeatures(Base):
             return other
 
         @property
+        def network(self):
+            return self._network
+
+        @network.setter
+        def network(self, value):
+            if hasattr(self, '_network') and isinstance(self._network, HybridNetwork):
+                self._network.clear()
+            if value is not None:
+                if isinstance(value, HybridNetwork):
+                    logger.debug(f'initialized {value}')
+                else:
+                    raise ValueError(f'network must be a {HybridNetwork.__name__} instance')
+            self._network = value
+
+        @property
+        def has_network(self):
+            return self._network is not None
+
+        @property
         def connection_scheme(self):
             return self._connection_scheme
 
@@ -286,6 +305,14 @@ def addSonicFeatures(Base):
         def getVextRef(self, sec):
             return self.network.getVextRef(sec)
 
+        def setEx(self, *args, **kwargs):
+            if self.has_network:
+                self.network.setEx(*args, **kwargs)
+
+        def setIstim(self, *args, **kwargs):
+            if self.has_network:
+                self.network.setIstim(*args, **kwargs)
+
         def setUSDrives(self, A_dict):
             logger.debug(f'Acoustic pressures:')
             with np.printoptions(**array_print_options):
@@ -310,6 +337,7 @@ def addSonicFeatures(Base):
                 self.setFuncTables(source.f)
                 is_dynamic_cm = True
             super().setDrives(source)
+            self.initToSteadyState()
             self.network = HybridNetwork(
                 self.seclist,
                 self.connections,

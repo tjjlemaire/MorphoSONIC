@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-06-07 14:42:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-07 23:15:17
+# @Last Modified time: 2020-06-08 18:44:39
 
 import numpy as np
 from neuron import h, hclass
@@ -171,14 +171,28 @@ class PointerVector(hclass(h.Vector)):
         self.refs = []
         super().__init__(*args, **kwargs)
 
-    def __setitem__(self, i, x):
+    # def __setitem__(self, i, x):
+    #     ''' Item setter, adding the difference between the old an new value to all
+    #         reference vectors with their respective offsets.
+    #     '''
+    #     xdiff = x - self.get(i)
+    #     print(i, x, xdiff)
+    #     self.set(i, x)
+    #     for v, offset in self.refs:
+    #         v.set(i + offset, v.get(i + offset) + xdiff)
+
+    def setVal(self, i, x):
         ''' Item setter, adding the difference between the old an new value to all
             reference vectors with their respective offsets.
         '''
         xdiff = x - self.get(i)
+        # print(i, x, xdiff)
         self.set(i, x)
         for v, offset in self.refs:
             v.set(i + offset, v.get(i + offset) + xdiff)
+
+    def addVal(self, i, x):
+        self.setVal(i, self.get(i) + x)
 
     def addTo(self, v, offset, fac=1):
         ''' Add the vector to a destination vector with a specific offset and factor. '''
@@ -394,6 +408,10 @@ class HybridNetwork:
             self.setExtracellularLayer()
         self.startLM()
 
+    def __repr__(self):
+        cm = {False: 'static', True: 'dynamic'}[self.is_dynamic_cm]
+        return f'{self.__class__.__name__}({self.nsec} sections, {self.nlayers} layers, {cm} cm)'
+
     @property
     def seclist(self):
         return self._seclist
@@ -424,9 +442,14 @@ class HybridNetwork:
         return len(self.seclist)
 
     @property
+    def nlayers(self):
+        ''' Number of layers in the network. '''
+        return 1 if not self.has_ext_layer else 2
+
+    @property
     def size(self):
         ''' Overall size if the network (i.e. number of nodes). '''
-        return self.nsec if not self.has_ext_layer else 2 * self.nsec
+        return self.nsec * self.nlayers
 
     def getVector(self, k):
         ''' Get a vector of values of a given parameter for each section in the list.
@@ -477,42 +500,66 @@ class HybridNetwork:
         self.Ga.addRef(self.G, self.nsec, self.nsec)  # Bottom-right: Ga * vx
         self.Gx.addRef(self.G, self.nsec, self.nsec)  # Bottom-right: Gx * vx
 
-        # Define pointing vectors toward extracellular voltage and current
-        self.ix = PointerVector(self.nsec)
-        self.ix.addRef(self.I, self.nsec)
+        # Define pointing vectors toward extracellular voltage and currents
+        self.istim = PointerVector(self.nsec)
+        self.istim.addRef(self.I, self.nsec)
+        self.iex = PointerVector(self.nsec)
+        self.iex.addRef(self.I, self.nsec)
         self.vx = PointerVector(self.nsec)
         self.vx.addRef(self.y, self.nsec)
+
+    def index(self, sec):
+        return self.seclist.index(sec)
 
     def getVextRef(self, sec):
         ''' Get reference to a section's extracellular voltage variable. '''
         if not self.has_ext_layer:
             raise ValueError('Network does not have an extracellular layer')
-        return self.y._ref_x[self.seclist.index(sec) + self.nsec]
+        return self.y._ref_x[self.index(sec) + self.nsec]
+
+    @property
+    def relx(self):
+        return h.Vector([0.5] * self.nsec)
+
+    @property
+    def sl(self):
+        return h.SectionList(self.seclist)
 
     def startLM(self):
         ''' Feed network into a LinearMechanism object. '''
-        self.y0 = h.Vector(self.size)  # initial conditions vector
-        self.lm = h.LinearMechanism(
-            self.update, self.C, self.G, self.y, self.y0, self.I,
-            h.SectionList(self.seclist), h.Vector([0.5] * self.nsec))
-
-    def update(self):
-        ''' Update network components (before the call to fadvance). '''
+        # Set initial conditions vector
+        self.y0 = h.Vector(self.size)
+        # Define linear mechanism arguments
+        lm_args = [self.C, self.G, self.y, self.y0, self.I, self.sl, self.relx]
+        # Add update callback only if dynamic cm or extracellular layer
         if self.is_dynamic_cm:
-            # Update membrane capacitance vector
-            for i, sec in enumerate(self.seclist):
-                self.cm[i] = sec.getCm(x=0.5)
-            # Modify Gacm matrix accordingly
-            self.Gacm.setNorm(self.cm * self.Am)
-        # If there is an extracellular layer
-        if self.has_ext_layer:
-            for i, sec in enumerate(self.seclist):
-                # Propagate ex discontinuities into vx
-                if sec.ex != sec.ex_last:
-                    self.vx[i] += sec.ex - sec.ex_last
-                    sec.ex_last = sec.ex
-                # Update ix vector
-                self.ix[i] = self.gx[i] * sec.ex + sec.istim
+            lm_args = [self.updateCmTerms] + lm_args
+        # Create LinearMechanism object
+        self.lm = h.LinearMechanism(*lm_args)
+
+    def clear(self):
+        ''' Delete the network's LinearMechanism object. '''
+        del self.lm
+
+    def updateCmTerms(self):
+        ''' Update capacitance-dependent network components. '''
+        # Update membrane capacitance vector
+        for i, sec in enumerate(self.seclist):
+            self.cm[i] = sec.getCm(x=0.5)
+        # Modify Gacm matrix accordingly
+        self.Gacm.setNorm(self.cm * self.Am)
+
+    def setIstim(self, sec, I):
+        ''' Set the stimulation current of a given section to a new value. '''
+        self.istim.setVal(self.index(sec), I / MA_TO_NA / sec.Am)
+
+    def setEx(self, sec, old_ex, new_ex):
+        ''' Set the imposed extracellular potential of a given section to a new value
+            (propagating the discontinuity into the vx vector).
+        '''
+        i = self.index(sec)
+        self.vx.addVal(i, new_ex - old_ex)
+        self.iex.setVal(i, self.gx[i] * new_ex)
 
     def log(self):
         ''' Print network components. '''

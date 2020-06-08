@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-08 15:16:32
+# @Last Modified time: 2020-06-08 18:35:56
 
 ''' Utilities to manipulate HOC objects. '''
 
@@ -120,16 +120,13 @@ class Section(hclass(h.Section)):
         self.Cm0 = Cm0
         self.nseg = 1
         self.has_ext_mech = False
-        self.istim = 0.
 
     @property
     def cfac(self):
         raise NotImplementedError
 
     def setIstim(self, I):
-        ''' Set the stimulation current density (in mA/cm2) corresponding
-            to a stimulation current clamp (in nA) '''
-        self.istim = I / MA_TO_NA / self.Am
+        pass
 
     def shortname(self):
         s = self.name()
@@ -516,12 +513,12 @@ def getCustomConnectSection(section_class):
         def getCm(self, **kwargs):
             return self.getValue('v', **kwargs) / self.getVm(**kwargs)
 
+        def connect(self, parent):
+            self.cell().registerConnection(parent, self)
+
         def getVextRef(self):
             ''' Get reference to section's extracellular voltage. '''
             return self.cell().getVextRef(self)
-
-        def connect(self, parent):
-            self.cell().registerConnection(parent, self)
 
         @property
         def rx(self):
@@ -559,9 +556,16 @@ def getCustomConnectSection(section_class):
             self.cx = xc if xc is not None else XC_DEFAULT  # S/cm2
             self.has_ext_mech = True
 
+        def setIstim(self, I):
+            ''' Set the stimulation current density (in mA/cm2) corresponding
+                to a stimulation current clamp (in nA) '''
+            self.cell().setIstim(self, I)
+
         def setVext(self, Ve):
             ''' Set the extracellular potential just outside of a section. '''
-            self.ex = Ve * self.cfac  # mV
+            new_ex = Ve * self.cfac  # mV
+            self.cell().setEx(self, self.ex, new_ex)
+            self.ex = new_ex
 
     # Correct class name for consistency with input class
     CustomConnectSection.__name__ = f'CustomConnect{section_class.__name__}'
