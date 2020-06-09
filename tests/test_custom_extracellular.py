@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-09 01:57:11
+# @Last Modified time: 2020-06-09 14:42:07
 
 import logging
 import matplotlib.pyplot as plt
@@ -26,13 +26,13 @@ nnodes = 3
 fiber_class = MRGFiber
 
 fiber_classes = {
-    'normal': fiber_class.__original__,
+    # 'normal': fiber_class.__original__,
     'sonic': fiber_class
 }
 # if hasattr(fiber_class, '__originalVbased__'):
 #     fiber_classes['normal'] = fiber_class.__originalVbased__
 fibers = {k: v(fiberD, nnodes) for k, v in fiber_classes.items()}
-ref_fiber = fibers['normal']
+ref_fiber = fibers['sonic']
 
 # Stimulation parameters
 # source = ExtracellularCurrent(
@@ -60,18 +60,18 @@ for lbl, fiber in fibers.items():
     # Simulate model
     data[lbl], meta[lbl] = fiber.simulate(source, pp)
 
-compkey = 'comp'
-data[compkey] = data['sonic'] - data['normal']
-meta[compkey] = meta['normal']
+# compkey = 'comp'
+# data[compkey] = data['sonic'] - data['normal']
+# meta[compkey] = meta['normal']
 
 for lbl in data.keys():
     # Plot resulting voltage traces (transmembrane and extracellular)
     var_keys = ['Vm', 'Vext'] if fiber.has_ext_mech else ['Vm']
     for k in var_keys:
         for stype, sdict in fiber.sections.items():
-            if stype == 'node':
-                fig = SectionCompTimeSeries([(data[lbl], meta[lbl])], k, sdict.keys()).render()
-                fig.axes[0].set_title(f'{lbl} fiber - {stype}s {k} profiles')
+            # if stype == 'node':
+            fig = SectionCompTimeSeries([(data[lbl], meta[lbl])], k, sdict.keys()).render()
+            fig.axes[0].set_title(f'{lbl} fiber - {stype}s {k} profiles')
 
 
 plt.show()

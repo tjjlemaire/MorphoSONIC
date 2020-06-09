@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-06-07 14:42:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-09 01:42:07
+# @Last Modified time: 2020-06-09 14:50:21
 
 import numpy as np
 from neuron import h, hclass
@@ -568,8 +568,9 @@ class HybridNetwork:
             self.logCmat('Cx')
         self.logCmat('C')
         if details:
-            self.logGmat('Ga')
+            self.logGmat('Gacm')
             if self.has_ext_layer:
+                self.logGmat('Ga')
                 self.logGmat('Gp')
                 self.logGmat('Gx')
         self.logGmat('G')

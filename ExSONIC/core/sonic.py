@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-30 21:40:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-08 18:35:35
+# @Last Modified time: 2020-06-09 14:48:50
 
 import numpy as np
 
@@ -310,7 +310,7 @@ def addSonicFeatures(Base):
                 self.network.setEx(*args, **kwargs)
 
         def setIstim(self, *args, **kwargs):
-            if self.has_network:
+            if self.has_network and self.network.has_ext_layer:
                 self.network.setIstim(*args, **kwargs)
 
         def setUSDrives(self, A_dict):
