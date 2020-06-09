@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-06-07 14:42:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-09 14:50:21
+# @Last Modified time: 2020-06-09 15:39:04
 
 import numpy as np
 from neuron import h, hclass
@@ -11,20 +11,25 @@ from neuron import h, hclass
 from PySONIC.utils import logger
 
 from .pyhoc import Matrix
-from ..utils import seriesGeq, array_print_options
+from ..utils import seriesGeq
 from ..constants import *
 
 
 class SquareMatrix(Matrix):
     ''' Interface to a square matrix object. '''
 
-    def __new__(cls, n):
+    def __new__(cls, n, mtype=MFULL):
         ''' Instanciation. '''
-        return super(SquareMatrix, cls).__new__(cls, n, n)
+        return super(SquareMatrix, cls).__new__(cls, n, n, mtype)
+
+    def __init__(self, n, mtype=MFULL):
+        ''' Instanciation. '''
+        self.mtype = mtype
+        super().__init__(n, n, mtype)
 
     def emptyClone(self):
         ''' Return empty matrix of identical shape. '''
-        return SquareMatrix(int(self.nrow()))
+        return SquareMatrix(int(self.nrow()), self.mtype)
 
 
 class DiagonalMatrix(SquareMatrix):
@@ -32,29 +37,32 @@ class DiagonalMatrix(SquareMatrix):
 
     def __new__(cls, x):
         ''' Instanciation. '''
-        return super(DiagonalMatrix, cls).__new__(cls, x.size)
+        return super(DiagonalMatrix, cls).__new__(cls, x.size, mtype=MSPARSE)
 
     def __init__(self, x):
         ''' Initialization.
 
             :param x: vector used to fill the diagonal.
         '''
+        super().__init__(x.size, mtype=MSPARSE)
+        print(self.mtype)
         self.setdiag(0, h.Vector(x))
 
 
 class ConductanceMatrix(SquareMatrix):
     ''' Interface to an axial conductance matrix. '''
 
-    def __new__(cls, Gvec, **_):
+    def __new__(cls, Gvec, links=None, **kwargs):
         ''' Instanciation. '''
-        return super(ConductanceMatrix, cls).__new__(cls, Gvec.size)
+        return super(ConductanceMatrix, cls).__new__(cls, Gvec.size, **kwargs)
 
-    def __init__(self, Gvec, links=None):
+    def __init__(self, Gvec, links=None, **kwargs):
         ''' Initialization.
 
             :param Gvec: vector of reference conductances for each element (S)
             :param links: list of paired indexes inicating links across nodes.
         '''
+        super().__init__(Gvec.size, **kwargs)
         self.Gvec = Gvec
         if links is not None:
             self.setLinks(links)
@@ -115,9 +123,9 @@ class ConductanceMatrix(SquareMatrix):
 class NormalizedConductanceMatrix(ConductanceMatrix):
     ''' Interface to an normalized axial conductance matrix. '''
 
-    def __new__(cls, Gvec, *args, **kwargs):
+    def __new__(cls, Gvec, xnorm=None, **kwargs):
         ''' Instanciation. '''
-        return super(NormalizedConductanceMatrix, cls).__new__(cls, Gvec)
+        return super(NormalizedConductanceMatrix, cls).__new__(cls, Gvec, **kwargs)
 
     def __init__(self, Gvec, xnorm=None, **kwargs):
         ''' Initialization.
@@ -449,7 +457,7 @@ class HybridNetwork:
 
     def setGlobalComponents(self):
         ''' Set the network's global components used by NEURON's linear Mechanism. '''
-        self.C = SquareMatrix(self.size)  # capacitance matrix (mF/cm2)
+        self.C = SquareMatrix(self.size, mtype=MSPARSE)  # capacitance matrix (mF/cm2)
         self.G = SquareMatrix(self.size)  # conductance matrix (S/cm2)
         self.y = h.Vector(self.size)      # charge density / extracellular voltage vector (mV)
         self.I = h.Vector(self.size)      # current vector (mA/cm2)

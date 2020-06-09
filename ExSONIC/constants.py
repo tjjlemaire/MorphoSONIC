@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-08 20:25:45
+# @Last Modified time: 2020-06-09 14:58:45
 
 # Conversions
 V_TO_MV = 1e3            # V to  mV
@@ -46,3 +46,8 @@ XC_DEFAULT = 0.           # uF/cm2
 XR_BOUNDS = (1e-9, 1e15)  # MOhm/cm
 XG_BOUNDS = (0., 1e15)    # S/cm2
 XC_BOUNDS = (0., 1e15)    # uF/cm2
+
+# NEURON matrix types
+MFULL = 1
+MSPARSE = 2
+MBAND = 3
