@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-06-07 14:42:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-09 15:39:04
+# @Last Modified time: 2020-06-09 16:06:11
 
 import numpy as np
 from neuron import h, hclass
@@ -52,17 +52,17 @@ class DiagonalMatrix(SquareMatrix):
 class ConductanceMatrix(SquareMatrix):
     ''' Interface to an axial conductance matrix. '''
 
-    def __new__(cls, Gvec, links=None, **kwargs):
+    def __new__(cls, Gvec, links=None):
         ''' Instanciation. '''
-        return super(ConductanceMatrix, cls).__new__(cls, Gvec.size, **kwargs)
+        return super(ConductanceMatrix, cls).__new__(cls, Gvec.size, mtype=MFULL)
 
-    def __init__(self, Gvec, links=None, **kwargs):
+    def __init__(self, Gvec, links=None):
         ''' Initialization.
 
             :param Gvec: vector of reference conductances for each element (S)
             :param links: list of paired indexes inicating links across nodes.
         '''
-        super().__init__(Gvec.size, **kwargs)
+        super().__init__(Gvec.size, mtype=MFULL)
         self.Gvec = Gvec
         if links is not None:
             self.setLinks(links)
@@ -343,6 +343,10 @@ class HybridNetwork:
         system of size 2*n, where the first n items correspond to membrane charge density
         nodes, and the following n items correspond to external voltage nodes.
 
+                -------------------------------
+        y =     |       Qm      |     vx      |
+                -------------------------------
+
         The corresponding linear mechanism added atop of NEURON's native linear network
         would then consist of the following capacitance and conductance matrices C and G,
         and current vector I:
@@ -351,7 +355,7 @@ class HybridNetwork:
                 |              |              |
                 |       0      |       0      |
                 |              |              |
-        C  =    -------------------------------
+        C  =    |-----------------------------|
                 |              |              |
                 |        0     |      Cx      |
                 |              |              |
@@ -361,14 +365,14 @@ class HybridNetwork:
                 |              |              |
                 |     Ga/cm    |      Ga      |
                 |              |              |
-        G =     -------------------------------
+        G =     |-----------------------------|
                 |              |              |
                 |     Ga/cm    | Ga + Gp + Gx |
                 |              |              |
                 -------------------------------
 
                 -------------------------------
-        I =     |        0     |  gx*ex + is  |
+        I =     |       0      |  gx*ex + is  |
                 -------------------------------
 
         Where internal terms are defined as:
