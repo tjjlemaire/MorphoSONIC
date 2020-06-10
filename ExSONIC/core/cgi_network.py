@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-06-07 14:42:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-09 16:06:11
+# @Last Modified time: 2020-06-10 22:16:42
 
 import numpy as np
 from neuron import h, hclass
@@ -45,7 +45,6 @@ class DiagonalMatrix(SquareMatrix):
             :param x: vector used to fill the diagonal.
         '''
         super().__init__(x.size, mtype=MSPARSE)
-        print(self.mtype)
         self.setdiag(0, h.Vector(x))
 
 
@@ -405,7 +404,7 @@ class HybridNetwork:
         self.setBaseLayer()
         if self.has_ext_layer:
             self.setExtracellularLayer()
-        self.log(details=True)
+        # self.log(details=True)
         self.startLM()
 
     def __repr__(self):
@@ -523,7 +522,10 @@ class HybridNetwork:
 
     @property
     def sl(self):
-        return h.SectionList(self.seclist)
+        sl = h.SectionList()
+        for sec in self.seclist:
+            sl.append(sec=sec)
+        return sl
 
     def startLM(self):
         ''' Feed network into a LinearMechanism object. '''
