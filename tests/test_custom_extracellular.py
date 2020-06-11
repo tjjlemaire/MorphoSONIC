@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-09 14:42:07
+# @Last Modified time: 2020-06-11 16:02:20
 
 import logging
 import matplotlib.pyplot as plt
@@ -47,7 +47,7 @@ ref_fiber = fibers['sonic']
 source = GaussianVoltageSource(
     0,                       # gaussian center (m)
     ref_fiber.length / 10.,  # gaussian width (m)
-    Ve=-0.                  # peak extracellular voltage (mV)
+    Ve=-80.                  # peak extracellular voltage (mV)
 )
 pp = PulsedProtocol(3e-3, 3e-3, tstart=1e-3)
 
@@ -69,9 +69,9 @@ for lbl in data.keys():
     var_keys = ['Vm', 'Vext'] if fiber.has_ext_mech else ['Vm']
     for k in var_keys:
         for stype, sdict in fiber.sections.items():
-            # if stype == 'node':
-            fig = SectionCompTimeSeries([(data[lbl], meta[lbl])], k, sdict.keys()).render()
-            fig.axes[0].set_title(f'{lbl} fiber - {stype}s {k} profiles')
+            if stype == 'node':
+                fig = SectionCompTimeSeries([(data[lbl], meta[lbl])], k, sdict.keys()).render()
+                fig.axes[0].set_title(f'{lbl} fiber - {stype}s {k} profiles')
 
 
 plt.show()
