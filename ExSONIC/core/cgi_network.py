@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-06-07 14:42:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-15 19:48:46
+# @Last Modified time: 2020-06-15 20:31:57
 
 import numpy as np
 from neuron import h, hclass
