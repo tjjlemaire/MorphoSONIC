@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-15 11:21:43
+# @Last Modified time: 2020-06-15 12:01:32
 
 import abc
 from neuron import h
@@ -280,12 +280,19 @@ class NeuronModel(metaclass=abc.ABCMeta):
 
     def update(self, value, new_dt):
         self.setStimValue(value)
+        self.resetIntegrator()
         if new_dt is not None:
             self.setTimeStep(new_dt)
-        self.resetIntegrator()
 
     def createStimSetter(self, value, new_dt):
         return lambda: self.update(value, new_dt)
+
+    def setDrivingVector(self, times, values, tstop):
+        ''' Driving vector. '''
+        self.tmod = h.Vector(np.append(np.sort(np.hstack((
+            times - TRANSITION_DT / 2, times + TRANSITION_DT / 2))), tstop) * S_TO_MS)
+        self.xmod = h.Vector(np.hstack((0., values.repeat(2))))
+        self.xmod.play(self.setStimValue, self.tmod, True)
 
     def setTransitionEvent(self, t, value, new_dt):
         self.cvode.event((t - TRANSITION_DT) * S_TO_MS, self.fadvanceLogger)
@@ -295,15 +302,6 @@ class NeuronModel(metaclass=abc.ABCMeta):
         ''' Set integration events for transitions. '''
         times, values = zip(*events)
         times, values = np.array(times), np.array(values)
-
-        # # Driving vector
-        # self.tmod = h.Vector(np.append(np.sort(np.hstack((
-        #     times - TRANSITION_DT / 2, times + TRANSITION_DT / 2))), tstop) * S_TO_MS)
-        # self.xmod = h.Vector(np.hstack((0., values.repeat(2))) * 1e12)
-        # print(self.xmod.as_numpy())
-        # # self.xmod.play(self.setStimValue, self.tmod, True)
-        # self.xmod.play(self.drives[0].amp, self.tmod, True)
-
         if dt is not None:
             Dts = np.diff(np.append(times, tstop))
             dts = np.array([min(dt, Dt / MIN_NSAMPLES_PER_INTERVAL) for Dt in Dts])
@@ -1054,11 +1052,11 @@ class FiberNeuronModel(SpatiallyExtendedNeuronModel):
         return xthr
 
     def needsFixedTimeStep(self, source):
-        if isinstance(source, (ExtracellularCurrent, GaussianVoltageSource)):
-            if not self.use_equivalent_currents:
-                return True
-        if self.has_ext_mech:
-            return True
+        # if isinstance(source, (ExtracellularCurrent, GaussianVoltageSource)):
+        #     if not self.use_equivalent_currents:
+        #         return True
+        # if self.has_ext_mech:
+        #     return True
         return False
 
     def simulate(self, source, pp):

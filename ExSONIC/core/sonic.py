@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-30 21:40:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-09 14:48:50
+# @Last Modified time: 2020-06-15 11:59:27
 
 import numpy as np
 
@@ -337,15 +337,15 @@ def addSonicFeatures(Base):
                 self.setFuncTables(source.f)
                 is_dynamic_cm = True
             super().setDrives(source)
-            self.initToSteadyState()
+            # self.initToSteadyState()
             self.network = HybridNetwork(
                 self.seclist,
                 self.connections,
                 self.has_ext_mech,
                 is_dynamic_cm=is_dynamic_cm)
 
-        def needsFixedTimeStep(self, _):
-            return True
+        # def needsFixedTimeStep(self, _):
+        #     return True
 
         @property
         def Aranges(self):
