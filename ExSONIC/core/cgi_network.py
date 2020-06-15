@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-06-07 14:42:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-10 22:16:42
+# @Last Modified time: 2020-06-15 16:20:58
 
 import numpy as np
 from neuron import h, hclass
@@ -387,13 +387,14 @@ class HybridNetwork:
 
     log_nmax = 46
 
-    def __init__(self, seclist, connections, has_ext_layer, is_dynamic_cm=False):
+    def __init__(self, seclist, connections, has_ext_layer, is_dynamic_cm=False, verbose=False):
         ''' Initialization.
 
             :param seclist: list of sections.
             :param connections: list of index pairs (tuples) indicating connections across sections
             :param has_ext_layer: boolean indicating whether to implement an extracellular layer
             :param is_dynamic_cm: boolean indicating whether membrane capacitance is time-varying
+            :param verbose: boolean stating whether to log details about the network
         '''
         # Assign attributes
         self.seclist = seclist
@@ -404,7 +405,8 @@ class HybridNetwork:
         self.setBaseLayer()
         if self.has_ext_layer:
             self.setExtracellularLayer()
-        # self.log(details=True)
+        if verbose:
+            self.log(details=True)
         self.startLM()
 
     def __repr__(self):

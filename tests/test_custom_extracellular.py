@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-15 10:00:54
+# @Last Modified time: 2020-06-15 16:24:20
 
 import logging
 import matplotlib.pyplot as plt
@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from PySONIC.core import PulsedProtocol
 from PySONIC.utils import logger
 
-from ExSONIC.core import SennFiber, MRGFiber
+from ExSONIC.core import MRGFiber
 from ExSONIC.core.sources import *
 from ExSONIC.plt import SectionCompTimeSeries
 
@@ -20,49 +20,22 @@ logger.setLevel(logging.INFO)
 
 # Create fiber models
 fiberD = 10e-6  # m
-nnodes = 11
-fiber_class = SennFiber
-nnodes = 3
-fiber_class = MRGFiber
-
+nnodes = 21
 fiber_classes = {
-    # 'normal': fiber_class.__original__,
-    'sonic': fiber_class
-}
-# if hasattr(fiber_class, '__originalVbased__'):
-#     fiber_classes['normal'] = fiber_class.__originalVbased__
+    'normal': MRGFiber.__original__,
+    'sonic': MRGFiber}
 fibers = {k: v(fiberD, nnodes) for k, v in fiber_classes.items()}
-ref_fiber = fibers['sonic']
+ref_fiber = fibers[list(fibers.keys())[0]]
 
 # Stimulation parameters
-# source = ExtracellularCurrent(
-#     (0., ref_fiber.length.interL),  # electrode position (mm)
-#     rho=300.0,                      # extracellular resistivity (Ohm.cm)
-#     mode='cathode',                 # electrode polarity
-#     I=-0.8e-6
-# )
-# source = IntracellularCurrent(ref_fiber.central_ID, I=1e-9)
-# pp = PulsedProtocol(100e-6, 3e-3, tstart=0.1e-3)
-
-source = GaussianVoltageSource(
-    0,                       # gaussian center (m)
-    ref_fiber.length / 10.,  # gaussian width (m)
-    Ve=-80.                  # peak extracellular voltage (mV)
-)
-pp = PulsedProtocol(3e-3, 3e-3, tstart=1e-3)
+source = IntracellularCurrent(ref_fiber.central_ID, I=1.1e-9)
+pp = PulsedProtocol(100e-6, 3e-3, tstart=0.1e-3)
 
 data, meta = {}, {}
 # For each fiber model
 for lbl, fiber in fibers.items():
-    # Disable use of equivalent currents to ensure that extracellular mechanism is used
-    # fiber.use_equivalent_currents = False
-
     # Simulate model
     data[lbl], meta[lbl] = fiber.simulate(source, pp)
-
-# compkey = 'comp'
-# data[compkey] = data['sonic'] - data['normal']
-# meta[compkey] = meta['normal']
 
 for lbl in data.keys():
     # Plot resulting voltage traces (transmembrane and extracellular)

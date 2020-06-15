@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-15 12:01:32
+# @Last Modified time: 2020-06-15 16:14:00
 
 import abc
 from neuron import h
@@ -14,7 +14,7 @@ from boltons.strutils import cardinalize
 
 from PySONIC.core import Model, PointNeuron
 from PySONIC.postpro import detectSpikes
-from PySONIC.utils import logger, si_format, filecode, simAndSave, isIterable, TimeSeries, pairwise
+from PySONIC.utils import logger, si_format, filecode, simAndSave, isIterable, TimeSeries
 from PySONIC.constants import *
 from PySONIC.threshold import threshold, titrate, Thresholder
 
@@ -287,12 +287,18 @@ class NeuronModel(metaclass=abc.ABCMeta):
     def createStimSetter(self, value, new_dt):
         return lambda: self.update(value, new_dt)
 
-    def setDrivingVector(self, times, values, tstop):
-        ''' Driving vector. '''
-        self.tmod = h.Vector(np.append(np.sort(np.hstack((
-            times - TRANSITION_DT / 2, times + TRANSITION_DT / 2))), tstop) * S_TO_MS)
-        self.xmod = h.Vector(np.hstack((0., values.repeat(2))))
-        self.xmod.play(self.setStimValue, self.tmod, True)
+    # def setDriveModulator(self, events, tstop):
+    #     ''' Drive temporal modulation vector. '''
+    #     times, values = zip(*events)
+    #     times, values = np.array(times), np.array(values)
+    #     if times[0] > 0:
+    #         times = np.hstack(([0.], times))
+    #         values = np.hstack(([0.], values))
+    #     self.tmod = h.Vector(np.append(np.sort(np.hstack((
+    #         times - TRANSITION_DT / 2, times + TRANSITION_DT / 2))), tstop) * S_TO_MS)
+    #     self.xmod = h.Vector(np.hstack((0., values.repeat(2))))
+    #     h('stimflag = 0')  # reference stim flag HOC variable
+    #     self.xmod.play(h._ref_stimflag, self.tmod, True)
 
     def setTransitionEvent(self, t, value, new_dt):
         self.cvode.event((t - TRANSITION_DT) * S_TO_MS, self.fadvanceLogger)
@@ -336,6 +342,7 @@ class NeuronModel(metaclass=abc.ABCMeta):
         '''
         self.setIntegrator(dt, atol)
         self.initToSteadyState()
+        # self.setDriveModulator(pp.stimEvents(), pp.tstop)
         self.setTransitionEvents(pp.stimEvents(), pp.tstop, dt)
         self.integrateUntil(pp.tstop * S_TO_MS)
         return 0
@@ -1052,11 +1059,11 @@ class FiberNeuronModel(SpatiallyExtendedNeuronModel):
         return xthr
 
     def needsFixedTimeStep(self, source):
-        # if isinstance(source, (ExtracellularCurrent, GaussianVoltageSource)):
-        #     if not self.use_equivalent_currents:
-        #         return True
-        # if self.has_ext_mech:
-        #     return True
+        if isinstance(source, (ExtracellularCurrent, GaussianVoltageSource)):
+            if not self.use_equivalent_currents:
+                return True
+        if self.has_ext_mech:
+            return True
         return False
 
     def simulate(self, source, pp):

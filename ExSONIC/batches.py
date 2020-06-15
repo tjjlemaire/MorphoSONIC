@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-17 12:19:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-08 20:22:49
+# @Last Modified time: 2020-06-15 16:29:55
 
 import numpy as np
 
@@ -90,7 +90,7 @@ class StrengthDurationBatch(LogBatch):
         codes = self.source.filecodes
         if 'sec_id' in codes and self.source.sec_id == self.fiber.central_ID:
             codes['sec_id'] = 'centralnode'
-        return f'{self.source.key}{"_".join(codes.values())}'
+        return f'{self.source.key}_{"_".join(codes.values())}'
 
     def corecode(self):
         return f'{self.fiber.modelcode}_{self.sourcecode()}'
