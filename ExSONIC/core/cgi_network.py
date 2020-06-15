@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-06-07 14:42:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-15 16:20:58
+# @Last Modified time: 2020-06-15 19:48:46
 
 import numpy as np
 from neuron import h, hclass
@@ -18,18 +18,26 @@ from ..constants import *
 class SquareMatrix(Matrix):
     ''' Interface to a square matrix object. '''
 
-    def __new__(cls, n, mtype=MFULL):
+    def __new__(cls, n):
         ''' Instanciation. '''
-        return super(SquareMatrix, cls).__new__(cls, n, n, mtype)
-
-    def __init__(self, n, mtype=MFULL):
-        ''' Instanciation. '''
-        self.mtype = mtype
-        super().__init__(n, n, mtype)
+        return super(SquareMatrix, cls).__new__(cls, n, n)
 
     def emptyClone(self):
         ''' Return empty matrix of identical shape. '''
-        return SquareMatrix(int(self.nrow()), self.mtype)
+        return SquareMatrix(int(self.nrow()))
+
+    # def __new__(cls, n, mtype=MFULL):
+    #     ''' Instanciation. '''
+    #     return super(SquareMatrix, cls).__new__(cls, n, n, mtype)
+
+    # def __init__(self, n, mtype=MFULL):
+    #     ''' Instanciation. '''
+    #     self.mtype = mtype
+    #     super().__init__(n, n, mtype)
+
+    # def emptyClone(self):
+    #     ''' Return empty matrix of identical shape. '''
+    #     return SquareMatrix(int(self.nrow()), self.mtype)
 
 
 class DiagonalMatrix(SquareMatrix):
@@ -37,23 +45,34 @@ class DiagonalMatrix(SquareMatrix):
 
     def __new__(cls, x):
         ''' Instanciation. '''
-        return super(DiagonalMatrix, cls).__new__(cls, x.size, mtype=MSPARSE)
+        return super(DiagonalMatrix, cls).__new__(cls, x.size)
 
     def __init__(self, x):
         ''' Initialization.
 
             :param x: vector used to fill the diagonal.
         '''
-        super().__init__(x.size, mtype=MSPARSE)
         self.setdiag(0, h.Vector(x))
+
+    # def __new__(cls, x):
+    #     ''' Instanciation. '''
+    #     return super(DiagonalMatrix, cls).__new__(cls, x.size, mtype=MSPARSE)
+
+    # def __init__(self, x):
+    #     ''' Initialization.
+
+    #         :param x: vector used to fill the diagonal.
+    #     '''
+    #     super().__init__(x.size, mtype=MSPARSE)
+    #     self.setdiag(0, h.Vector(x))
 
 
 class ConductanceMatrix(SquareMatrix):
     ''' Interface to an axial conductance matrix. '''
 
-    def __new__(cls, Gvec, links=None):
+    def __new__(cls, Gvec, **_):
         ''' Instanciation. '''
-        return super(ConductanceMatrix, cls).__new__(cls, Gvec.size, mtype=MFULL)
+        return super(ConductanceMatrix, cls).__new__(cls, Gvec.size)
 
     def __init__(self, Gvec, links=None):
         ''' Initialization.
@@ -61,10 +80,24 @@ class ConductanceMatrix(SquareMatrix):
             :param Gvec: vector of reference conductances for each element (S)
             :param links: list of paired indexes inicating links across nodes.
         '''
-        super().__init__(Gvec.size, mtype=MFULL)
         self.Gvec = Gvec
         if links is not None:
             self.setLinks(links)
+
+    # def __new__(cls, Gvec, links=None):
+    #     ''' Instanciation. '''
+    #     return super(ConductanceMatrix, cls).__new__(cls, Gvec.size, mtype=MFULL)
+
+    # def __init__(self, Gvec, links=None):
+    #     ''' Initialization.
+
+    #         :param Gvec: vector of reference conductances for each element (S)
+    #         :param links: list of paired indexes inicating links across nodes.
+    #     '''
+    #     super().__init__(Gvec.size, mtype=MFULL)
+    #     self.Gvec = Gvec
+    #     if links is not None:
+    #         self.setLinks(links)
 
     @property
     def Gvec(self):
@@ -122,9 +155,13 @@ class ConductanceMatrix(SquareMatrix):
 class NormalizedConductanceMatrix(ConductanceMatrix):
     ''' Interface to an normalized axial conductance matrix. '''
 
-    def __new__(cls, Gvec, xnorm=None, **kwargs):
+    def __new__(cls, Gvec, *args, **kwargs):
         ''' Instanciation. '''
-        return super(NormalizedConductanceMatrix, cls).__new__(cls, Gvec, **kwargs)
+        return super(NormalizedConductanceMatrix, cls).__new__(cls, Gvec)
+
+    # def __new__(cls, Gvec, xnorm=None, **kwargs):
+    #     ''' Instanciation. '''
+    #     return super(NormalizedConductanceMatrix, cls).__new__(cls, Gvec, **kwargs)
 
     def __init__(self, Gvec, xnorm=None, **kwargs):
         ''' Initialization.
@@ -462,7 +499,8 @@ class HybridNetwork:
 
     def setGlobalComponents(self):
         ''' Set the network's global components used by NEURON's linear Mechanism. '''
-        self.C = SquareMatrix(self.size, mtype=MSPARSE)  # capacitance matrix (mF/cm2)
+        self.C = SquareMatrix(self.size)  # capacitance matrix (mF/cm2)
+        # self.C = SquareMatrix(self.size, mtype=MSPARSE)  # capacitance matrix (mF/cm2)
         self.G = SquareMatrix(self.size)  # conductance matrix (S/cm2)
         self.y = h.Vector(self.size)      # charge density / extracellular voltage vector (mV)
         self.I = h.Vector(self.size)      # current vector (mA/cm2)
