@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-06-07 14:42:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-15 20:31:57
+# @Last Modified time: 2020-06-15 20:57:17
 
 import numpy as np
 from neuron import h, hclass
@@ -444,7 +444,6 @@ class HybridNetwork:
             self.setExtracellularLayer()
         if verbose:
             self.log(details=True)
-        self.startLM()
 
     def __repr__(self):
         cm = {False: 'static', True: 'dynamic'}[self.is_dynamic_cm]

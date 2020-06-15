@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-30 21:40:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-15 20:40:59
+# @Last Modified time: 2020-06-15 21:00:31
 
 import numpy as np
 
@@ -331,20 +331,20 @@ def addSonicFeatures(Base):
             return d
 
         def initToSteadyState(self):
+            self.network.startLM()
             super().initToSteadyState()
-            # Initialize network after call to finitialize to make sure capacitances are correct.
+
+        def setDrives(self, source):
+            is_dynamic_cm = False
+            if isinstance(source, AcousticSource):
+                self.checkForSonophoreRadius()
+                self.setFuncTables(source.f)
+                is_dynamic_cm = True
             self.network = HybridNetwork(
                 self.seclist,
                 self.connections,
                 self.has_ext_mech,
-                is_dynamic_cm=self.is_dynamic_cm)
-
-        def setDrives(self, source):
-            self.is_dynamic_cm = False
-            if isinstance(source, AcousticSource):
-                self.checkForSonophoreRadius()
-                self.setFuncTables(source.f)
-                self.is_dynamic_cm = True
+                is_dynamic_cm=is_dynamic_cm)
             super().setDrives(source)
 
         def needsFixedTimeStep(self, source):
