@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-09 14:58:45
+# @Last Modified time: 2020-06-12 16:15:23
 
 # Conversions
 V_TO_MV = 1e3            # V to  mV
@@ -26,8 +26,9 @@ UF_CM2_TO_MF_CM2 = 1e-3  # F/m2 -> uF/cm2
 OHM_TO_MOHM = 1e-6       # Ohm-> MOhm
 
 # Numerical integration
-FIXED_DT = 1e-5        # default time step for fixed integration (s)
-TRANSITION_DT = 1e-15  # time step for ON-OFF and OFF-ON sharp transitions (s)
+FIXED_DT = 1e-5                 # default time step for fixed integration (s)
+MIN_NSAMPLES_PER_INTERVAL = 10  # minimum number of integration steps per interval
+TRANSITION_DT = 1e-15           # time step for ON-OFF and OFF-ON sharp transitions (s)
 
 # Titration
 IINJ_RANGE = (1e-12, 1e-7)  # intracellular current range allowed at the fiber level (A)

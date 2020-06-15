@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-10 22:09:22
+# @Last Modified time: 2020-06-15 11:21:43
 
 import abc
 from neuron import h
@@ -14,7 +14,7 @@ from boltons.strutils import cardinalize
 
 from PySONIC.core import Model, PointNeuron
 from PySONIC.postpro import detectSpikes
-from PySONIC.utils import logger, si_format, filecode, simAndSave, isIterable, TimeSeries
+from PySONIC.utils import logger, si_format, filecode, simAndSave, isIterable, TimeSeries, pairwise
 from PySONIC.constants import *
 from PySONIC.threshold import threshold, titrate, Thresholder
 
@@ -216,6 +216,31 @@ class NeuronModel(metaclass=abc.ABCMeta):
             kwargs.update({'mechname': mech, 'states': states})
         return self.getSectionClass(mech)(*args, **kwargs)
 
+    def setTimeProbe(self):
+        ''' Set time probe. '''
+        return Probe(h._ref_t, factor=1 / S_TO_MS)
+
+    def setIntegrator(self, dt, atol):
+        ''' Set CVODE integration parameters. '''
+        self.cvode = h.CVode()
+        if dt is not None:
+            h.secondorder = 0  # using backward Euler method if fixed time step
+            h.dt = dt * S_TO_MS
+            self.cvode.active(0)
+        else:
+            self.cvode.active(1)
+            if atol is not None:
+                self.cvode.atol(atol)
+
+    def resetIntegrator(self):
+        ''' Re-initialize the integrator. '''
+        # If adaptive solver: re-initialize the integrator
+        if self.cvode.active():
+            self.cvode.re_init()
+        # Otherwise, re-align currents with states and potential
+        else:
+            h.fcurrent()
+
     def getIntegrationMethod(self):
         ''' Get the method used by NEURON for the numerical integration of the system. '''
         method_type_code = self.cvode.current_method() % 1000 // 100
@@ -227,7 +252,6 @@ class NeuronModel(metaclass=abc.ABCMeta):
 
     def initToSteadyState(self):
         ''' Initialize model variables to pre-stimulus resting state values. '''
-        h.t = 0
         self.setStimValue(0)
         if self.refvar == 'Qm':
             x0 = self.pneuron.Qm0 * C_M2_TO_NC_CM2  # nC/cm2
@@ -235,9 +259,8 @@ class NeuronModel(metaclass=abc.ABCMeta):
             x0 = self.pneuron.Vm0  # mV
         h.finitialize(x0)
 
-    def setTimeProbe(self):
-        ''' Set time probe. '''
-        return Probe(h._ref_t, factor=1 / S_TO_MS)
+    def fadvanceLogger(self):
+        logger.debug(f'fadvance return at t = {h.t:.3f} ms')
 
     def setStimValue(self, value):
         ''' Set stimulation ON or OFF.
@@ -252,28 +275,50 @@ class NeuronModel(metaclass=abc.ABCMeta):
         for drive in self.drives:
             drive.set(value)
 
-        # For all transitions except the one at time zero
-        if h.t > 0:
-            # If adaptive solver: re-initialize the integrator
-            if self.cvode.active():
-                self.cvode.re_init()
-            # Otherwise, re-align currents with states and potential
-            else:
-                h.fcurrent()
+    def setTimeStep(self, dt):
+        h.dt = dt * S_TO_MS
 
-    def createStimSetter(self, value):
-        return lambda: self.setStimValue(value)
+    def update(self, value, new_dt):
+        self.setStimValue(value)
+        if new_dt is not None:
+            self.setTimeStep(new_dt)
+        self.resetIntegrator()
 
-    def fadvanceLogger(self):
-        logger.debug(f'fadvance return at t = {h.t:.3f} ms')
+    def createStimSetter(self, value, new_dt):
+        return lambda: self.update(value, new_dt)
 
-    @staticmethod
-    def fixStimVec(stim, dt):
-        ''' Quick fix for stimulus vector discrepancy for fixed time step simulations. '''
-        if dt is None:
-            return stim
+    def setTransitionEvent(self, t, value, new_dt):
+        self.cvode.event((t - TRANSITION_DT) * S_TO_MS, self.fadvanceLogger)
+        self.cvode.event(t * S_TO_MS, self.createStimSetter(value, new_dt))
+
+    def setTransitionEvents(self, events, tstop, dt):
+        ''' Set integration events for transitions. '''
+        times, values = zip(*events)
+        times, values = np.array(times), np.array(values)
+
+        # # Driving vector
+        # self.tmod = h.Vector(np.append(np.sort(np.hstack((
+        #     times - TRANSITION_DT / 2, times + TRANSITION_DT / 2))), tstop) * S_TO_MS)
+        # self.xmod = h.Vector(np.hstack((0., values.repeat(2))) * 1e12)
+        # print(self.xmod.as_numpy())
+        # # self.xmod.play(self.setStimValue, self.tmod, True)
+        # self.xmod.play(self.drives[0].amp, self.tmod, True)
+
+        if dt is not None:
+            Dts = np.diff(np.append(times, tstop))
+            dts = np.array([min(dt, Dt / MIN_NSAMPLES_PER_INTERVAL) for Dt in Dts])
         else:
-            return np.hstack((stim[1:], stim[-1]))
+            dts = [None] * len(times)
+        for t, value, new_dt in zip(times, values, dts):
+            if t == 0:
+                self.update(value, new_dt)
+            else:
+                self.setTransitionEvent(t, value, new_dt)
+
+    def integrateUntil(self, tstop):
+        logger.debug(f'integrating system using {self.getIntegrationMethod()}')
+        while h.t < tstop:
+            self.advance()
 
     def advance(self):
         ''' Advance simulation onto the next time step. '''
@@ -291,39 +336,10 @@ class NeuronModel(metaclass=abc.ABCMeta):
             :param atol: absolute error tolerance. If provided, the adaptive
                 time step method is used.
         '''
-        # Set integration parameters
-        self.cvode = h.CVode()
-        if dt is not None:
-            h.secondorder = 0  # using backward Euler method if fixed time step
-            h.dt = dt * S_TO_MS
-            self.cvode.active(0)
-        else:
-            self.cvode.active(1)
-            if atol is not None:
-                def_atol = self.cvode.atol()
-                self.cvode.atol(atol)
-
-        # Initialize
+        self.setIntegrator(dt, atol)
         self.initToSteadyState()
-
-        # Set events
-        for tevent, new_stim_value in pp.stimEvents():
-            if tevent == 0:
-                self.setStimValue(new_stim_value)
-            else:
-                self.cvode.event((tevent - TRANSITION_DT) * S_TO_MS, self.fadvanceLogger)
-                self.cvode.event(tevent * S_TO_MS, self.createStimSetter(new_stim_value))
-
-        # Integrate
-        logger.debug(f'integrating system using {self.getIntegrationMethod()}')
-        tstop = pp.tstop * S_TO_MS
-        while h.t < tstop:
-            self.advance()
-
-        # Set absolute error tolerance back to default value if changed
-        if atol is not None:
-            self.cvode.atol(def_atol)
-
+        self.setTransitionEvents(pp.stimEvents(), pp.tstop, dt)
+        self.integrateUntil(pp.tstop * S_TO_MS)
         return 0
 
     def setPyLookup(self):
@@ -394,6 +410,14 @@ class NeuronModel(metaclass=abc.ABCMeta):
         # Add V func table to passive sections if custom passive mechanism is used
         if self.use_custom_passive:
             self.setFuncTable(CUSTOM_PASSIVE_MECHNAME, 'V', self.lkp['V'], self.Aref, self.Qref)
+
+    @staticmethod
+    def fixStimVec(stim, dt):
+        ''' Quick fix for stimulus vector discrepancy for fixed time step simulations. '''
+        if dt is None:
+            return stim
+        else:
+            return np.hstack((stim[1:], stim[-1]))
 
     @staticmethod
     def outputDataFrame(t, stim, probes):
