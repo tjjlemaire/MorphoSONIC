@@ -3,14 +3,14 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-05 17:32:27
+# @Last Modified time: 2020-06-16 15:41:41
 
 import numpy as np
 
 from PySONIC.core import PulsedProtocol
 from PySONIC.utils import logger, si_format
 from ExSONIC.test import TestFiber
-from ExSONIC.core import SennFiber, UnmyelinatedFiber
+from ExSONIC.core import SennFiber, UnmyelinatedFiber, MRGFiber
 from ExSONIC.core.sources import *
 from ExSONIC.plt import SectionCompTimeSeries, strengthDurationCurve
 
@@ -82,7 +82,11 @@ class TestFiberAstim(TestFiber):
         }
 
         # Plot membrane potential and membrane charge density traces
-        fig1 = SectionCompTimeSeries([(data, meta)], 'Vm', fiber.nodeIDs).render()
+        varkeys = ['Vm']  #, 'Vext']
+        for stype, sdict in fiber.sections.items():
+            for k in varkeys:
+                fig = SectionCompTimeSeries([(data, meta)], k, sdict.keys()).render()
+                fig.axes[0].set_title(f'{fiber} - {stype}s {k} traces')
 
         # # Comparative SD curve
         # durations = np.logspace(-5, -3, 20)  # s
@@ -108,6 +112,12 @@ class TestFiberAstim(TestFiber):
         logger.info('Test: gaussian distribution source on unmyelinated fiber')
         fiber = UnmyelinatedFiber(0.8e-6, a=self.a, fs=self.fs)
         pp = PulsedProtocol(10e-3, 3e-3)
+        return self.gaussian(fiber, pp)
+
+    def test_gaussian3(self, is_profiled=False):
+        logger.info('Test: gaussian distribution source on myelinated MRG fiber')
+        fiber = MRGFiber(20e-6, 21, a=self.a, fs=self.fs)
+        pp = PulsedProtocol(3e-3, 3e-3)
         return self.gaussian(fiber, pp)
 
     def transducer(self, fiber, pp):

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-08 21:03:46
+# @Last Modified time: 2020-06-16 11:59:15
 
 ''' Utilities to manipulate HOC objects. '''
 
@@ -102,6 +102,8 @@ class ExtField():
 
 class Section(hclass(h.Section)):
     ''' Interface to a Hoc Section with nseg=1. '''
+
+    stimon_var = 'stimon'
 
     def __init__(self, name=None, cell=None, Cm0=1.):
         ''' Initialization.
@@ -255,6 +257,18 @@ class Section(hclass(h.Section)):
     def insertPassive(self):
         ''' Insert passive (leakage) mechanism. '''
         self.insert(self.passive_mechname)
+        if self.passive_mechname == CUSTOM_PASSIVE_MECHNAME:
+            self.mechname = self.passive_mechname
+
+    @property
+    def mechname(self):
+        if not hasattr(self, '_mechname'):
+            raise AttributeError(f'{self} does not have an attached mechanism')
+        return self._mechname
+
+    @mechname.setter
+    def mechname(self, value):
+        self._mechname = value
 
     def hasPassive(self):
         ''' Determine if section contains a passive membrane mechanism. '''
@@ -311,8 +325,42 @@ class Section(hclass(h.Section)):
             d['Vext'] = self.setVextProbe()
         return d
 
+    def setMechValue(self, key, value, **kwargs):
+        ''' Set the value of the section's mechanism attribute.
+
+            :param key: attribute name
+            :param value: attribute value
+        '''
+        self.setValue(f'{key}_{self.mechname}', value, **kwargs)
+
+    def getMechValue(self, key, **kwargs):
+        ''' Get the value of an attribute related to the section's mechanism.
+
+            :param key: attribute name
+            :return: attribute value
+        '''
+        return self.getValue(f'{key}_{self.mechname}', **kwargs)
+
     def setStimON(self, value):
-        pass
+        ''' Set stimulation ON or OFF.
+
+            :param value: new stimulation state (0 = OFF, 1 = ON)
+        '''
+        try:
+            self.setMechValue(self.stimon_var, value)
+        except AttributeError as err:
+            if self.hasPassive() and self.passive_mechname == CLASSIC_PASSIVE_MECHNAME:
+                pass
+            else:
+                raise err
+
+    def setMechProbe(self, var, loc=0.5, **kwargs):
+        ''' Set recording vector for a mechanism specific variable. '''
+        return self.setProbe(f'{var}_{self.mechname}', loc=loc, **kwargs)
+
+    def setStimProbe(self):
+        ''' Set recording vector for stimulation state. '''
+        return self.setMechProbe(self.stimon_var)
 
 
 class VSection(Section):
@@ -361,7 +409,6 @@ class MechSection(Section):
 
     # Aliases for NMODL-protected variable names
     NEURON_aliases = {'O': 'O1', 'C': 'C1'}
-    stimon_var = 'stimon'
 
     def __init__(self, mechname, states=None, **kwargs):
         ''' Initialization.
@@ -395,43 +442,12 @@ class MechSection(Section):
             value = []
         self._states = value
 
-    def setMechValue(self, key, value, **kwargs):
-        ''' Set the value of the section's mechanism attribute.
-
-            :param key: attribute name
-            :param value: attribute value
-        '''
-        self.setValue(f'{key}_{self.mechname}', value, **kwargs)
-
-    def getMechValue(self, key, **kwargs):
-        ''' Get the value of an attribute related to the section's mechanism.
-
-            :param key: attribute name
-            :return: attribute value
-        '''
-        return self.getValue(f'{key}_{self.mechname}', **kwargs)
-
     def alias(self, state):
         ''' Return NEURON state alias.
 
             :param state: state name
         '''
         return self.NEURON_aliases.get(state, state)
-
-    def setStimON(self, value):
-        ''' Set stimulation ON or OFF.
-
-            :param value: new stimulation state (0 = OFF, 1 = ON)
-        '''
-        self.setMechValue(self.stimon_var, value)
-
-    def setMechProbe(self, var, loc=0.5, **kwargs):
-        ''' Set recording vector for a mechanism specific variable. '''
-        return self.setProbe(f'{var}_{self.mechname}', loc=loc, **kwargs)
-
-    def setStimProbe(self):
-        ''' Set recording vector for stimulation state. '''
-        return self.setMechProbe(self.stimon_var)
 
     def setProbes(self):
         return {
