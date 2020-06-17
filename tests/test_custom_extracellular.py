@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-16 11:15:10
+# @Last Modified time: 2020-06-17 15:10:22
 
 import logging
 import matplotlib.pyplot as plt
@@ -22,12 +22,13 @@ logger.setLevel(logging.INFO)
 fiberD = 10e-6  # m
 nnodes = 21
 fiber_classes = {
-    'normal': MRGFiber.__original__,
+    'original': MRGFiber.__originalVbased__,
+    # 'normal': MRGFiber.__original__,
     'sonic': MRGFiber}
 fibers = {k: v(fiberD, nnodes) for k, v in fiber_classes.items()}
 
 # Stimulation parameters
-source = IntracellularCurrent(fibers['normal'].central_ID, I=1.1e-9)
+source = IntracellularCurrent(fibers['sonic'].central_ID, I=1.1e-9)
 pp = PulsedProtocol(100e-6, 3e-3, tstart=0.1e-3)
 
 # For each fiber model

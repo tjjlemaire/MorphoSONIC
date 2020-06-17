@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-17 12:19:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-15 16:29:55
+# @Last Modified time: 2020-06-17 15:54:29
 
 import numpy as np
 
@@ -306,3 +306,83 @@ class CoverageTitrationBatch(LogBatch):
         xthr = model.titrate(self.source, self.pp)
         model.clear()
         return [self.convert_func(xthr)]
+
+
+class ConductionVelocityBatch(LogBatch):
+    ''' Generic interface to a fiber convergence study. '''
+
+    in_key = 'fiberD'
+    unit = 'm'
+    out_keys = ['CV (m/s)']
+    suffix = 'cv'
+
+    def __init__(self, fiber_func, source_func, diameters, pp, root='.'):
+        ''' Construtor.
+
+            :param in_key: string defining the batch input key
+            :param fiber_func: function used to create the fiber object
+            :param source_func: function used to create the source object
+            :param diameters: list of fiber diameters (m)
+            :param pp: pulsing protocol object
+            :param root: root for IO operations
+        '''
+        self.fiber_func = fiber_func
+        self.source_func = source_func
+        self.pp = pp
+        super().__init__(diameters, root=root)
+
+    def fibercode(self):
+        ''' String fully describing the fiber object. '''
+        codes = self.getFiber(self.inputs[0]).modelcodes
+        del codes['fiberD']
+        return '_'.join(codes.values())
+
+    def corecode(self):
+        return f'{self.fibercode()}_{si_format(self.pp.tstim, 1, "")}s'
+
+    def getFiber(self, x):
+        ''' Initialize fiber with specific diameter parameter. '''
+        logger.info(f'creating model with fiberD = {si_format(x, 2)}m ...')
+        return self.fiber_func(x)
+
+    def compute(self, x):
+        ''' Create a fiber with a specific diameter, simulate it upon application
+            of a supra-threshold stimulus, and compute the resulting conduction velocity.
+
+            :param x: fiber diameter (m)
+            :return: conduction velocity (m/s)
+        '''
+        # Initialize fiber and source
+        fiber = self.getFiber(x)
+        source = self.source_func(fiber)
+
+        # Perform titration to find threshold excitation amplitude
+        logger.info(f'Running titration with intracellular current injected at {source.sec_id}')
+        Ithr = fiber.titrate(source, self.pp)  # A
+
+        if not np.isnan(Ithr):
+            # If fiber is excited
+            logger.info(f'Ithr = {si_format(Ithr, 2)}A')
+
+            # Simulate fiber at 1.1 times threshold current
+            data, meta = fiber.simulate(source.updatedX(1.1 * Ithr), self.pp)
+
+            # Filter out stimulation artefact from dataframe
+            data = {k: boundDataFrame(df, (self.pp.tstim, self.pp.tstop))
+                    for k, df in data.items()}
+
+            # Compute CV
+            cv = fiber.getConductionVelocity(data, out='median')  # m/s
+            logger.info(f'CV = {cv:.2f} m/s')
+        else:
+            # Otherwise, assign NaN value
+            cv = np.nan
+
+        return cv
+
+    def run(self):
+        logger.info('running fiberD parameter sweep ({0}{2} - {1}{2})'.format(
+            *si_format([self.inputs.min(), self.inputs.max()], 2), self.unit))
+        out = super().run()
+        logger.info('parameter sweep successfully completed')
+        return out

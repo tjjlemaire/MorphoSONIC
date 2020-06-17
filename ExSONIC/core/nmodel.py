@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-15 20:30:08
+# @Last Modified time: 2020-06-16 17:05:05
 
 import abc
 from neuron import h
@@ -1062,8 +1062,8 @@ class FiberNeuronModel(SpatiallyExtendedNeuronModel):
         if isinstance(source, (ExtracellularCurrent, GaussianVoltageSource)):
             if not self.use_equivalent_currents:
                 return True
-        # if self.has_ext_mech:
-        #     return True
+        if self.has_ext_mech:
+            return True
         return False
 
     def simulate(self, source, pp):
