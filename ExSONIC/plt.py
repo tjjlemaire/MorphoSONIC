@@ -3,14 +3,14 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-15 10:35:44
+# @Last Modified time: 2020-06-17 16:23:27
 
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import signal
 
 from PySONIC.plt import GroupedTimeSeries, CompTimeSeries
-from PySONIC.utils import logger, si_format, getPow10
+from PySONIC.utils import logger, si_format, getPow10, rsquared
 
 from .core import *
 from .utils import loadData, chronaxie
@@ -389,4 +389,25 @@ def plotFiberDiameterDistributions(n=50, fs=12):
     ax.legend(fontsize=fs, frameon=False, bbox_to_anchor=(.9, 1), loc='upper left')
     fig.tight_layout()
 
+    return fig
+
+
+def plotCVvsDiameter(diams, cv_dict, fs=14):
+    ''' Plot conduction velocity of various fiber models as a function of fiber diameter
+        along with linear fits.
+    '''
+    fig, ax = plt.subplots()
+    ax.set_xlabel('diameter (um)', fontsize=fs)
+    ax.set_ylabel('conduction velocity (m/s)', fontsize=fs)
+    for item in ax.get_xticklabels() + ax.get_yticklabels():
+        item.set_fontsize(fs)
+    for icolor, (k, cv) in enumerate(cv_dict.items()):
+        color = f'C{icolor}'
+        ax.plot(diams * 1e6, cv, 'o-', c=color, label=f'{k} - data')
+        a, b = np.polyfit(diams, cv, 1)
+        cv_fit = np.poly1d((a, b))(diams)
+        r2 = rsquared(cv, cv_fit)
+        ax.plot(diams * 1e6, cv_fit, '--', c=color,
+                label=f'{k} - linear fit: CV = {b:.1f} + {a * 1e-6:.1f}*D (R2 = {r2:.3f})')
+    ax.legend(frameon=False)
     return fig
