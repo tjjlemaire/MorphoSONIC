@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-17 12:19:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-18 10:45:43
+# @Last Modified time: 2020-06-18 15:32:15
 
 import numpy as np
 
@@ -143,7 +143,7 @@ class StrengthDistanceBatch(LogBatch):
     def sourcecode(self):
         codes = self.source.filecodes
         codes['x'] = f'{self.source.x[0] * M_TO_MM:.1f}mm'
-        return f'{source.key}{"_".join(codes.values())}'
+        return f'{self.source.key}{"_".join(codes.values())}'
 
     def corecode(self):
         return f'{self.fiber.modelcode}_{self.sourcecode()}'
@@ -377,6 +377,8 @@ class ConductionVelocityBatch(LogBatch):
         else:
             # Otherwise, assign NaN value
             cv = np.nan
+
+        fiber.clear()
 
         return cv
 
