@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-16 17:05:05
+# @Last Modified time: 2020-06-18 10:59:42
 
 import abc
 from neuron import h
@@ -250,13 +250,45 @@ class NeuronModel(metaclass=abc.ABCMeta):
         else:
             return f'{method_type_str} (fixed dt = {h.dt} ms)'
 
+    def fi3(self):
+        logger.debug('finitialize: initialization started')
+
+    def fi0(self):
+        logger.debug('finitialize: internal structures checked')
+        logger.debug('finitialize: t set to 0')
+        logger.debug('finitialize: event queue cleared')
+        logger.debug('finitialize: play values assigned to variables')
+        logger.debug('finitialize: initial v set in all sections')
+
+    def fi1(self):
+        logger.debug('finitialize: mechanisms BEFORE INITIAL blocks called')
+        logger.debug('finitialize: mechanisms INITIAL blocks called')
+        logger.debug('finitialize: LinearMechanism states initialized')
+        logger.debug('finitialize: INITIAL blocks inside NETRECEIVE blocks called')
+        logger.debug('finitialize: mechanisms AFTER INITIAL blocks are called.')
+
+    def fi2(self):
+        logger.debug('finitialize: net_send events delivered')
+        logger.debug('finitialize: integrator initialized')
+        logger.debug('finitialize: record functions called at t = 0')
+        logger.debug('finitialize: initialization completed')
+
     def initToSteadyState(self):
         ''' Initialize model variables to pre-stimulus resting state values. '''
         self.setStimValue(0)
         if self.refvar == 'Qm':
             x0 = self.pneuron.Qm0 * C_M2_TO_NC_CM2  # nC/cm2
+            unit = 'nC/cm2'
         else:
             x0 = self.pneuron.Vm0  # mV
+            unit = 'mV'
+        logger.debug(f'initializing system at {x0} {unit}')
+        self.fih = [
+            h.FInitializeHandler(3, self.fi3),
+            h.FInitializeHandler(0, self.fi0),
+            h.FInitializeHandler(1, self.fi1),
+            h.FInitializeHandler(2, self.fi2)
+        ]
         h.finitialize(x0)
 
     def fadvanceLogger(self):
@@ -617,6 +649,9 @@ class SpatiallyExtendedNeuronModel(NeuronModel):
                 logger.debug(f'{k}: Iinj = {Iinj} nA')
         iclamps = []
         for k, Iinj in Iinj_dict.items():
+            # for sec, I in zip(self.sections[k].values(), Iinj):
+            #     if I != 0.:
+            #         iclamps.append(IClamp(sec, I))
             iclamps += [IClamp(sec, I) for sec, I in zip(self.sections[k].values(), Iinj)]
         return iclamps
 

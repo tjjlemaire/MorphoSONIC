@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-16 11:59:15
+# @Last Modified time: 2020-06-17 19:15:16
 
 ''' Utilities to manipulate HOC objects. '''
 
