@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-16 15:41:41
+# @Last Modified time: 2020-06-19 15:33:26
 
 import numpy as np
 
@@ -66,8 +66,8 @@ class TestFiberAstim(TestFiber):
 
     def gaussian(self, fiber, pp):
         ''' Run myelinated fiber ASTIM simulation with gaussian distribution source. '''
-        # US source
-        source = GaussianAcousticSource(0., fiber.length / 4., self.Fdrive)
+        # US source (gaussian distribution with 10 mm width)
+        source = GaussianAcousticSource(0., 10e-3, self.Fdrive)
 
         # Titrate for a specific duration and simulate fiber at threshold US amplitude
         logger.info(f'Running titration for {si_format(pp.tstim)}s pulse')
@@ -82,7 +82,7 @@ class TestFiberAstim(TestFiber):
         }
 
         # Plot membrane potential and membrane charge density traces
-        varkeys = ['Vm']  #, 'Vext']
+        varkeys = ['Vm'] if not fiber.has_ext_mech else ['Vm', 'Vext', 'Vin']
         for stype, sdict in fiber.sections.items():
             for k in varkeys:
                 fig = SectionCompTimeSeries([(data, meta)], k, sdict.keys()).render()
@@ -105,19 +105,19 @@ class TestFiberAstim(TestFiber):
     def test_gaussian1(self, is_profiled=False):
         logger.info('Test: gaussian distribution source on myelinated fiber')
         fiber = SennFiber(20e-6, 21, a=self.a, fs=self.fs)
-        pp = PulsedProtocol(3e-3, 3e-3)
+        pp = PulsedProtocol(3e-3, 3e-3, tstart=0.1e-3)
         return self.gaussian(fiber, pp)
 
     def test_gaussian2(self, is_profiled=False):
         logger.info('Test: gaussian distribution source on unmyelinated fiber')
         fiber = UnmyelinatedFiber(0.8e-6, a=self.a, fs=self.fs)
-        pp = PulsedProtocol(10e-3, 3e-3)
+        pp = PulsedProtocol(10e-3, 3e-3, tstart=0.1e-3)
         return self.gaussian(fiber, pp)
 
     def test_gaussian3(self, is_profiled=False):
         logger.info('Test: gaussian distribution source on myelinated MRG fiber')
         fiber = MRGFiber(20e-6, 21, a=self.a, fs=self.fs)
-        pp = PulsedProtocol(3e-3, 3e-3)
+        pp = PulsedProtocol(3e-3, 3e-3, tstart=0.1e-3)
         return self.gaussian(fiber, pp)
 
     def transducer(self, fiber, pp):

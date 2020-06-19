@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-18 10:59:42
+# @Last Modified time: 2020-06-19 14:21:26
 
 import abc
 from neuron import h
@@ -460,6 +460,8 @@ class NeuronModel(metaclass=abc.ABCMeta):
     def outputDataFrame(t, stim, probes):
         ''' Return output in dataframe with prepended initial conditions (prior to stimulation). '''
         sol = TimeSeries(t, stim, {k: v.to_array() for k, v in probes.items()})
+        if 'Vext' in sol:  # add "Vin" field if solution has both "Vm" and "Vext" fields
+            sol['Vin'] = sol['Vm'] + sol['Vext']
         sol.prepend(t0=0)
         return sol
 
@@ -503,6 +505,11 @@ class NeuronModel(metaclass=abc.ABCMeta):
                 'label': 'V_{ext}',
                 'unit': 'mV',
                 # 'strictbounds': (-0.2, 0.2)
+            },
+            'Vin': {
+                'desc': 'intracellular potential',
+                'label': 'V_{in}',
+                'unit': 'mV'
             }
         }
 
