@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-07 16:04:45
+# @Last Modified time: 2020-06-19 15:40:37
 
 import numpy as np
 
@@ -21,7 +21,6 @@ class RadialModel(SpatiallyExtendedNeuronModel):
     ''' Radially-symmetric model with a center and a periphery. '''
 
     simkey = 'radial_model'
-    rmin = 1e2  # lower bound for axial resistance * membrane area (Ohm/cm2)
 
     def __init__(self, pneuron, innerR, outerR, rs, depth=100e-9, **kwargs):
         self.pneuron = pneuron

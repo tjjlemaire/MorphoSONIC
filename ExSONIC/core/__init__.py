@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-07 14:42:35
+# @Last Modified time: 2020-06-19 15:41:23
 
 import sys
 import inspect
@@ -14,7 +14,6 @@ from .node import *
 from .radial_model import *
 from .senn import *
 from .mrg import *
-from .connectors import *
 from .pyhoc import *
 from .pymodl import *
 from .grids import *

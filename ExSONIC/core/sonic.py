@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-30 21:40:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-19 15:32:39
+# @Last Modified time: 2020-06-19 15:53:42
 
 import numpy as np
 
@@ -13,7 +13,6 @@ from PySONIC.utils import logger, isWithin
 from ..constants import *
 from ..utils import array_print_options
 from .sources import AcousticSource
-from .connectors import SerialConnectionScheme
 from .pyhoc import *
 from .cgi_network import HybridNetwork
 
@@ -221,13 +220,12 @@ def addSonicFeatures(Base):
     class SonicMorpho(SonicBase):
 
         def __init__(self, *args, **kwargs):
-            self.connection_scheme = SerialConnectionScheme(vref=f'Vm', rmin=self.rmin)
             self.network = None
             super().__init__(*args, **kwargs)
 
         def copy(self):
             other = super().copy()
-            other.connection_scheme = self.connection_scheme
+            other.network = self.network
             return other
 
         @property
@@ -249,24 +247,11 @@ def addSonicFeatures(Base):
         def has_network(self):
             return self._network is not None
 
-        @property
-        def connection_scheme(self):
-            return self._connection_scheme
-
-        @connection_scheme.setter
-        def connection_scheme(self, value):
-            if value is not None and not isinstance(value, SerialConnectionScheme):
-                raise ValueError(f'{value} is not a SerialConnectionScheme object')
-            self.set('connection_scheme', value)
-
         def getSectionClass(self, *args, **kwargs):
-            sec_class = super().getSectionClass(*args, **kwargs)
-            if self.connection_scheme is None:
-                return sec_class
-            return getCustomConnectSection(sec_class)
+            return getCustomConnectSection(super().getSectionClass(*args, **kwargs))
 
         def createSection(self, *args, **kwargs):
-            return super().createSection(args[0], self.connection_scheme, *args[1:], **kwargs)
+            return super().createSection(args[0], *args[1:], **kwargs)
 
         @staticmethod
         def getMetaArgs(meta):

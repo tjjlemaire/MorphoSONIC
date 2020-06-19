@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-17 19:15:16
+# @Last Modified time: 2020-06-19 15:41:54
 
 ''' Utilities to manipulate HOC objects. '''
 
@@ -488,27 +488,20 @@ def getCustomConnectSection(section_class):
 
     class CustomConnectSection(section_class):
 
-        def __init__(self, cs, *args, **kwargs):
-            ''' Initialization.
-
-                :param cs: connector scheme object
-            '''
+        def __init__(self, *args, **kwargs):
+            ''' Initialization. '''
             super().__init__(*args, **kwargs)
-            if cs.vref == 'v':
-                self.vref = cs.vref
-            else:
-                try:
-                    key = self.mechname
-                except AttributeError:
-                    key = self.passive_mechname
-                self.vref = f'{cs.vref}_{key}'
+            try:
+                key = self.mechname
+            except AttributeError:
+                key = self.passive_mechname
+            self.vref = f'Vm_{key}'
             self.ex = 0.       # mV
             self.ex_last = 0.  # mV
 
         @property
         def cfac(self):
-            ''' Coupling-variable depdendent multiplying factor. '''
-            return self.Cm0 if self.vref == 'v' else 1.
+            return 1.
 
         def getVm(self, **kwargs):
             ''' Get the value of the section's reference voltage variable used to compute
