@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 11:34:09
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-18 13:27:41
+# @Last Modified time: 2020-06-19 16:45:58
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -220,7 +220,7 @@ class TestCompExtended(TestComp):
             ax.set_ylim(-150, 70)
             ax.set_ylabel('$V_m^*$ (mV)', fontsize=10)
             ax.set_title(key, fontsize=12)
-            for k in df:
+            for k in df.keys():
                 tplt = np.insert(df[k]['t'].values, 0, -tonset) * S_TO_MS
                 ax.plot(tplt, np.insert(df[k]['Vm'].values, 0, df[k]['Vm'].values[0]), label=k)
 
@@ -263,14 +263,7 @@ class TestConnectClassicVsCustom(TestCompExtended):
     def runSims(cls, fiber, Istim, pp):
 
         # Create fiber objects with both classic and custom connection schemes
-        fibers = {
-            'classic': fiber.copy(),
-            'custom': fiber.copy()
-        }
-        fibers['classic'].connection_scheme = None
-
-        # for k, f in fibers.items():
-        #     print(k, f.connection_scheme, type(f.refsection), f.refsection.Ra)
+        fibers = fiber.compdict(original_key='classic', sonic_key='custom')
 
         # Create extracellular current source
         source = IntracellularCurrent('node0', mode='anode')

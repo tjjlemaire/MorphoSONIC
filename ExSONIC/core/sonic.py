@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-30 21:40:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-19 15:53:42
+# @Last Modified time: 2020-06-19 16:45:17
 
 import numpy as np
 
@@ -48,7 +48,25 @@ def addSonicFeatures(Base):
             self.a = a
             self.fref = None
             self.pylkp = None
+            self.initargs = (args, kwargs)
             super().__init__(*args, **kwargs)
+
+        def original(self):
+            ''' Return an equivalent instance from the original model (not SONIC-adpated). '''
+            # Initialize original instance
+            org = self.__original__(*self.initargs[0], **self.initargs[1])
+            # Modify properties of the original object if changed in the current instance
+            for k, v in self.__dict__.items():
+                if k.startswith('_') and hasattr(org, k) and hasattr(org, k[1:]):
+                    if v != getattr(org, k):
+                        print(f'setting {org}.{k} to {v}')
+                        org.set(k[1:], v)
+            # Return equivalent original instance
+            return org
+
+        def compdict(self, original_key='original', sonic_key='sonic'):
+            ''' Return dictionary with the model instance and its "original" equivalent. '''
+            return {original_key: self.original(), sonic_key: self}
 
         @property
         def nbls(self):

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 14:38:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-04 22:02:18
+# @Last Modified time: 2020-06-19 16:17:21
 
 import os
 import pickle
@@ -157,6 +157,9 @@ class SpatiallyExtendedTimeSeries:
 
     def __init__(self, data):
         self.data = data
+
+    def __iter__(self):
+        raise ValueError(f'{self.__class__.__name__}  is not iterable')
 
     def keys(self):
         return self.data.keys()
