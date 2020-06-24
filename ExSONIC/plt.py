@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-17 16:23:27
+# @Last Modified time: 2020-06-24 11:04:13
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -410,4 +410,68 @@ def plotCVvsDiameter(diams, cv_dict, fs=14):
         ax.plot(diams * 1e6, cv_fit, '--', c=color,
                 label=f'{k} - linear fit: CV = {b:.1f} + {a * 1e-6:.1f}*D (R2 = {r2:.3f})')
     ax.legend(frameon=False)
+    return fig
+
+
+def plotTimeseries0Dvs1D(pneuron, a, cov, rs, deff, drive, pp, figsize=(8, 6), fs=12):
+
+    # Simulate punctual SONIC model with specific membrane coverage
+    punctual_model = Node(pneuron, a=a, fs=cov)
+    punctual_data, _ = punctual_model.simulate(drive, pp)
+
+    # Simulate extended SONIC model with specific membrane coverage
+    ext_model = surroundedSonophore(pneuron, a, cov, rs, depth=deff)
+    ext_data, _ = ext_model.simulate(SectionAcousticSource('center', drive.f, drive.A), pp)
+
+    # Add onset to solutions
+    tonset = -5e-3
+    punctual_data = prependDataFrame(punctual_data, tonset=tonset)
+    for k, df in ext_data.items():
+        ext_data[k] = prependDataFrame(df, tonset=tonset)
+
+    # Get stimulus patches
+    t = punctual_data['t'].values  # s
+    stimon = punctual_data['stimstate'].values
+    pulse = CompTimeSeries.getStimPulses(t, stimon)[0]
+
+    # Create figure
+    fig, axes = plt.subplots(2, 1, figsize=figsize)
+    for ax in axes:
+        for key in ['right', 'top']:
+            ax.spines[key].set_visible(False)
+        ax.set_xlim(tonset * 1e3, (pp.tstop) * 1e3)
+        # ax.set_ylim(-100, 50)
+        # ax.set_yticks(ax.get_ylim())
+        ax.axvspan(pulse[0] * 1e3, pulse[1] * 1e3, edgecolor='none', facecolor='#8A8A8A', alpha=0.2)
+    ax = axes[0]
+    ax.set_ylabel('$\\rm V_m^*\ (mV)$', fontsize=fs)
+    ax.set_xticks([])
+    ax.spines['bottom'].set_visible(False)
+    ax = axes[1]
+    ax.set_xlabel('time (ms)', fontsize=fs)
+    ax.set_ylabel('$\\rm Q_m\ (nC/cm^2)$', fontsize=fs)
+    ax.set_xticks([0, (pp.tstop) * 1e3])
+    ax.set_xticklabels(['{:.0f}'.format(x) for x in ax.get_xticks()])
+
+    # Plot membrane potential and charge density profiles
+    colors = plt.get_cmap('Paired').colors[:2]
+    linestyles = ['-', '--']
+    for i, (key, df) in enumerate(ext_data.items()):
+        axes[0].plot(
+            df['t'] * 1e3, df['Vm'], linestyles[i], c=colors[i], label=f'ext. model: {key}')
+        axes[1].plot(df['t'] * 1e3, df['Qm'] * 1e5, linestyles[i], c=colors[i])
+    axes[0].plot(t * 1e3, punctual_data['Vm'], c='dimgrey', label='punctual model')
+    axes[1].plot(t * 1e3, punctual_data['Qm'] * 1e5, c='dimgrey')
+
+    # Add legend
+    axes[0].legend(
+        frameon=False, fontsize=fs, bbox_to_anchor=(0., 1.02, 1., .102), loc=3,
+        ncol=3, mode='expand', borderaxespad=0.)
+
+    # Post-process figure
+    for ax in axes:
+        for item in ax.get_xticklabels() + ax.get_yticklabels():
+            item.set_fontsize(fs)
+    GroupedTimeSeries.shareX(axes)
+
     return fig

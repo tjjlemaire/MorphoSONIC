@@ -3,16 +3,19 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-19 15:41:54
+# @Last Modified time: 2020-06-24 11:29:26
 
 ''' Utilities to manipulate HOC objects. '''
 
 import numpy as np
 from neuron import h, hclass
 
-from PySONIC.utils import isWithin
+from PySONIC.utils import isWithin, logger
 from ..constants import *
-from ..utils import seriesGeq
+# from ..utils import seriesGeq
+from ..utils import load_mechanisms, getNmodlDir, seriesGeq
+
+load_mechanisms(getNmodlDir())
 
 
 class Probe(hclass(h.Vector)):
@@ -51,15 +54,73 @@ class Matrix(hclass(h.Matrix)):
             m.setrow(i, h.Vector(row))
         return m
 
+    @property
+    def nRow(self):
+        ''' Number of rows in matrix with integer casting. '''
+        return int(self.nrow())
+
+    @property
+    def nCol(self):
+        ''' Number of columns in matrix with integer casting. '''
+        return int(self.ncol())
+
     def setVal(self, *args, **kwargs):
+        ''' Set value to an element. '''
         self.setval(*args, **kwargs)
 
     def getVal(self, *args, **kwargs):
+        ''' Get value of an element. '''
         return self.getval(*args, **kwargs)
 
     def addVal(self, irow, jcol, val):
         ''' Add value to an element. '''
         self.setVal(irow, jcol, self.getVal(irow, jcol) + val)
+
+    def setRow(self, *args, **kwargs):
+        ''' Set values to a row. '''
+        self.setrow(*args, **kwargs)
+
+    def getRow(self, *args, **kwargs):
+        ''' Get values of a row. '''
+        return self.getrow(*args, **kwargs)
+
+    def setCol(self, *args, **kwargs):
+        ''' Set values to a column. '''
+        self.setcol(*args, **kwargs)
+
+    def getCol(self, *args, **kwargs):
+        ''' Get values of a column. '''
+        return self.getcol(*args, **kwargs)
+
+    def mulRow(self, i, x):
+        ''' Multiply a row by a scalar. '''
+        self.setRow(i, self.getRow(i).mul(x))
+
+    def mulCol(self, j, x):
+        ''' Multiply a column by a scalar. '''
+        self.setCol(j, self.getCol(j).mul(x))
+
+    def mulRows(self, v):
+        ''' Multiply rows by independent scalar values from a vector. '''
+        assert v.size == self.nRow, f'Input vector must be of size {self.nRow}'
+        for i, x in enumerate(v):
+            self.mulRow(i, x)
+
+    def mulCols(self, v):
+        ''' Multiply columns by independent scalar values from a vector. '''
+        assert v.size == self.nCol, f'Input vector must be of size {self.nCol}'
+        for j, x in enumerate(v):
+            self.mulCol(j, x)
+
+    def addRowSlice(self, i, v, col_offset=0):
+        ''' Add a vector to a given column with optional row offset. '''
+        for j, x in enumerate(v):
+            self.addVal(i, j + col_offset, x)
+
+    def addColSlice(self, j, v, row_offset=0):
+        ''' Add a vector to a given column with optional row offset. '''
+        for i, x in enumerate(v):
+            self.addVal(i + row_offset, j, x)
 
 
 class IClamp(hclass(h.IClamp)):
@@ -167,8 +228,24 @@ class Section(hclass(h.Section)):
 
     @property
     def Ga(self):
-        ''' axial conductance (S). '''
-        return self.Ax / (self.Ra * self.L / CM_TO_UM)
+        ''' axial conductance (S) with optional bounding to ensure (conductance / membrane area)
+            stays below a specific threshold and limit the magnitude of axial currents.
+
+            :return: axial conductance value (S)
+        '''
+        Ga = self.Ax / (self.Ra * self.L / CM_TO_UM)
+        if hasattr(self, 'gmax'):
+            Am = self.Am      # cm2
+            Gmax = self.gmax * Am  # S
+            s = f'{self}: Ga / Am = {Ga / Am:.1e} S/cm2'
+            if Ga > Gmax:
+                s = f'{s} -> bounded to {self.gmax:.1e} S/cm2'
+                Ga = Gmax
+                logger.warning(s)
+            else:
+                s = f'{s} -> not bounded'
+                logger.debug(s)
+        return Ga
 
     def target(self, x):
         ''' Return x-dependent resolved object (section's self of section's only segment).
@@ -524,6 +601,20 @@ def getCustomConnectSection(section_class):
 
         def connect(self, parent):
             self.cell().registerConnection(parent, self)
+            # self.connectIax(parent)
+
+        def connectIax(self, parent):
+            ''' Connect the intracellular layers of a section and its parent. '''
+            # Define axial current point-process to both sections, if not already done.
+            for sec in [parent, self]:
+                if not hasattr(sec, 'iax'):
+                    sec.iax = Iax(sec)
+            # Add half axial conductances to appropriate indexes of Gax vectors
+            parent.iax.updateGa(1, self.iax.Ghalf)  # S
+            self.iax.updateGa(0, parent.iax.Ghalf)  # S
+            # Set bi-directional pointers to sections about each other's membrane potential
+            parent.iax.set_Vother(1, self.getVmRef(x=0.5))  # mV
+            self.iax.set_Vother(0, parent.getVmRef(x=0.5))  # mV
 
         def getVextRef(self):
             ''' Get reference to section's extracellular voltage. '''
@@ -580,3 +671,37 @@ def getCustomConnectSection(section_class):
     CustomConnectSection.__name__ = f'CustomConnect{section_class.__name__}'
 
     return CustomConnectSection
+
+
+class Iax(hclass(h.Iax)):
+    ''' Axial current point process object that allows setting parameters on creation. '''
+
+    MAX_CON = 2  # max number of axial connections
+
+    def __new__(cls, sec):
+        ''' Instanciation. '''
+        return super(Iax, cls).__new__(cls, sec(0.5))
+
+    def __init__(self, sec):
+        ''' Initialization.
+
+            :param sec: section object
+        '''
+        super().__init__(sec)
+
+        # Initialize axial conductance vector with section's half conductance
+        self.Ghalf = 2 * sec.Ga / OHM_TO_MOHM  # uS
+        for i in range(self.MAX_CON):
+            self.Gax[i] = self.Ghalf  # uS
+
+        # Set Vm pointer to section's membrane potential
+        h.setpointer(sec.getVmRef(x=0.5), 'V', self)
+
+        # Declare Vother pointer array, and set it to local membrane potential
+        self.declare_Vother()
+        for i in range(self.MAX_CON):
+            self.set_Vother(i, sec.getVmRef(x=0.5))
+
+    def updateGa(self, i, G):
+        ''' Add a conductance in series to the ith element of the axial conductance vector. '''
+        self.Gax[i] = seriesGeq(self.Gax[i], G)

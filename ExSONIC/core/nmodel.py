@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-19 14:21:26
+# @Last Modified time: 2020-06-24 12:06:27
 
 import abc
 from neuron import h
@@ -333,7 +333,8 @@ class NeuronModel(metaclass=abc.ABCMeta):
     #     self.xmod.play(h._ref_stimflag, self.tmod, True)
 
     def setTransitionEvent(self, t, value, new_dt):
-        self.cvode.event((t - TRANSITION_DT) * S_TO_MS, self.fadvanceLogger)
+        # self.cvode.event((t - TRANSITION_DT) * S_TO_MS, self.fadvanceLogger)
+        self.cvode.event((t - TRANSITION_DT) * S_TO_MS)
         self.cvode.event(t * S_TO_MS, self.createStimSetter(value, new_dt))
 
     def setTransitionEvents(self, events, tstop, dt):
@@ -346,10 +347,9 @@ class NeuronModel(metaclass=abc.ABCMeta):
         else:
             dts = [None] * len(times)
         for t, value, new_dt in zip(times, values, dts):
-            if t == 0:
-                self.update(value, new_dt)
-            else:
-                self.setTransitionEvent(t, value, new_dt)
+            if t == 0:  # add infinitesimal offset in case of event at time zero
+                t = 2 * TRANSITION_DT
+            self.setTransitionEvent(t, value, new_dt)
 
     def integrateUntil(self, tstop):
         logger.debug(f'integrating system using {self.getIntegrationMethod()}')
@@ -1104,8 +1104,8 @@ class FiberNeuronModel(SpatiallyExtendedNeuronModel):
         if isinstance(source, (ExtracellularCurrent, GaussianVoltageSource)):
             if not self.use_equivalent_currents:
                 return True
-        if self.has_ext_mech:
-            return True
+        # if self.has_ext_mech:
+        #     return True
         return False
 
     def simulate(self, source, pp):

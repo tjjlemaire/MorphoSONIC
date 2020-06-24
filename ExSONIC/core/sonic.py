@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-30 21:40:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-19 16:45:17
+# @Last Modified time: 2020-06-24 12:04:28
 
 import numpy as np
 
@@ -239,6 +239,10 @@ def addSonicFeatures(Base):
 
         def __init__(self, *args, **kwargs):
             self.network = None
+            if not hasattr(self, 'use_explicit_iax'):
+                self.use_explicit_iax = False
+            if not hasattr(self, 'gmax'):
+                self.gmax = None
             super().__init__(*args, **kwargs)
 
         def copy(self):
@@ -269,7 +273,10 @@ def addSonicFeatures(Base):
             return getCustomConnectSection(super().getSectionClass(*args, **kwargs))
 
         def createSection(self, *args, **kwargs):
-            return super().createSection(args[0], *args[1:], **kwargs)
+            sec = super().createSection(args[0], *args[1:], **kwargs)
+            if self.use_explicit_iax and self.gmax is not None:
+                sec.gmax = self.gmax
+            return sec
 
         @staticmethod
         def getMetaArgs(meta):
@@ -347,7 +354,8 @@ def addSonicFeatures(Base):
                 self.seclist,
                 self.connections,
                 self.has_ext_mech,
-                is_dynamic_cm=is_dynamic_cm)
+                is_dynamic_cm=is_dynamic_cm,
+                use_explicit_iax=self.use_explicit_iax)
             super().setDrives(source)
 
         def needsFixedTimeStep(self, source):

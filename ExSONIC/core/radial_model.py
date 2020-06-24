@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-19 15:40:37
+# @Last Modified time: 2020-06-24 11:29:54
 
 import numpy as np
 
@@ -21,6 +21,8 @@ class RadialModel(SpatiallyExtendedNeuronModel):
     ''' Radially-symmetric model with a center and a periphery. '''
 
     simkey = 'radial_model'
+    # gmax = 1e-2  # S/cm2
+    # use_explicit_iax = True
 
     def __init__(self, pneuron, innerR, outerR, rs, depth=100e-9, **kwargs):
         self.pneuron = pneuron

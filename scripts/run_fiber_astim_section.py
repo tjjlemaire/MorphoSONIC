@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-09-27 14:28:52
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-09 19:54:55
+# @Last Modified time: 2020-06-24 12:00:13
 
 ''' Run simulations of an SENN SONIC fiber model with a specific point-neuron mechanism
     upon ultrasound stimulation at one onde. '''
@@ -25,7 +25,7 @@ def main():
         logger.warning('NEURON multiprocessing disabled')
 
     # Run batch
-    logger.info('Starting fiber Iext-STIM simulation batch')
+    logger.info('Starting fiber A-STIM simulation batch')
     queue = [item[:2] for item in NeuronalBilayerSonophore.simQueue(
         *AStimParser.parseSimInputs(args), outputdir=args['outputdir'])]
     if args['save']:

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-19 16:02:52
+# @Last Modified time: 2020-06-19 16:53:09
 
 import logging
 import matplotlib.pyplot as plt
@@ -21,14 +21,11 @@ logger.setLevel(logging.INFO)
 # Fiber models
 fiberD = 10e-6  # m
 nnodes = 21
-
-fibers = MRGFiber(fiberD, nnodes).compdict()
-
-# fiber_classes = {
-#     'original': MRGFiber.__originalVbased__,
-#     # 'normal': MRGFiber.__original__,
-#     'sonic': MRGFiber}
-# fibers = {k: v(fiberD, nnodes) for k, v in fiber_classes.items()}
+fiber_classes = {
+    'original': MRGFiber.__originalVbased__,
+    # 'normal': MRGFiber.__original__,
+    'sonic': MRGFiber}
+fibers = {k: v(fiberD, nnodes) for k, v in fiber_classes.items()}
 
 # Stimulation parameters
 source = IntracellularCurrent(fibers['sonic'].central_ID, I=1.1e-9)

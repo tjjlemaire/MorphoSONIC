@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-19 15:33:26
+# @Last Modified time: 2020-06-23 11:50:02
 
 import numpy as np
 
@@ -50,16 +50,16 @@ class TestFiberAstim(TestFiber):
         SectionCompTimeSeries([(data, meta)], 'Qm', fiber.nodeIDs).render()
         SectionCompTimeSeries([(data, meta)], 'Vm', fiber.nodeIDs).render()
 
-        # Comparative SD curve
-        durations = np.logspace(-5, -3, 20)  # s
-        toffset = 10e-3                     # s
-        pps = [PulsedProtocol(t, toffset) for t in durations]
-        Athrs = np.array([fiber.titrate(psource, pp) for pp in pps])
+        # # Comparative SD curve
+        # durations = np.logspace(-5, -3, 20)  # s
+        # toffset = 10e-3                     # s
+        # pps = [PulsedProtocol(t, toffset) for t in durations]
+        # Athrs = np.array([fiber.titrate(psource, pp) for pp in pps])
 
-        # Plot strength-duration curve
-        strengthDurationCurve(
-            fiber, durations, {'myelinated': Athrs}, scale='log',
-            yname='amplitude', yfactor=PA_TO_KPA, yunit='Pa', plot_chr=False)
+        # # Plot strength-duration curve
+        # strengthDurationCurve(
+        #     fiber, durations, {'myelinated': Athrs}, scale='log',
+        #     yname='amplitude', yfactor=PA_TO_KPA, yunit='Pa', plot_chr=False)
 
         # Log output metrics
         self.logOutputMetrics(sim_metrics)
@@ -82,7 +82,7 @@ class TestFiberAstim(TestFiber):
         }
 
         # Plot membrane potential and membrane charge density traces
-        varkeys = ['Vm'] if not fiber.has_ext_mech else ['Vm', 'Vext', 'Vin']
+        varkeys = ['Vm', 'Qm'] if not fiber.has_ext_mech else ['Vm', 'Vext', 'Vin']
         for stype, sdict in fiber.sections.items():
             for k in varkeys:
                 fig = SectionCompTimeSeries([(data, meta)], k, sdict.keys()).render()
