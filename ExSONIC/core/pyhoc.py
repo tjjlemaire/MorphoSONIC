@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-24 11:29:26
+# @Last Modified time: 2020-06-24 12:28:23
 
 ''' Utilities to manipulate HOC objects. '''
 
@@ -12,10 +12,7 @@ from neuron import h, hclass
 
 from PySONIC.utils import isWithin, logger
 from ..constants import *
-# from ..utils import seriesGeq
-from ..utils import load_mechanisms, getNmodlDir, seriesGeq
-
-load_mechanisms(getNmodlDir())
+from ..utils import seriesGeq
 
 
 class Probe(hclass(h.Vector)):
@@ -601,20 +598,6 @@ def getCustomConnectSection(section_class):
 
         def connect(self, parent):
             self.cell().registerConnection(parent, self)
-            # self.connectIax(parent)
-
-        def connectIax(self, parent):
-            ''' Connect the intracellular layers of a section and its parent. '''
-            # Define axial current point-process to both sections, if not already done.
-            for sec in [parent, self]:
-                if not hasattr(sec, 'iax'):
-                    sec.iax = Iax(sec)
-            # Add half axial conductances to appropriate indexes of Gax vectors
-            parent.iax.updateGa(1, self.iax.Ghalf)  # S
-            self.iax.updateGa(0, parent.iax.Ghalf)  # S
-            # Set bi-directional pointers to sections about each other's membrane potential
-            parent.iax.set_Vother(1, self.getVmRef(x=0.5))  # mV
-            self.iax.set_Vother(0, parent.getVmRef(x=0.5))  # mV
 
         def getVextRef(self):
             ''' Get reference to section's extracellular voltage. '''
@@ -671,37 +654,3 @@ def getCustomConnectSection(section_class):
     CustomConnectSection.__name__ = f'CustomConnect{section_class.__name__}'
 
     return CustomConnectSection
-
-
-class Iax(hclass(h.Iax)):
-    ''' Axial current point process object that allows setting parameters on creation. '''
-
-    MAX_CON = 2  # max number of axial connections
-
-    def __new__(cls, sec):
-        ''' Instanciation. '''
-        return super(Iax, cls).__new__(cls, sec(0.5))
-
-    def __init__(self, sec):
-        ''' Initialization.
-
-            :param sec: section object
-        '''
-        super().__init__(sec)
-
-        # Initialize axial conductance vector with section's half conductance
-        self.Ghalf = 2 * sec.Ga / OHM_TO_MOHM  # uS
-        for i in range(self.MAX_CON):
-            self.Gax[i] = self.Ghalf  # uS
-
-        # Set Vm pointer to section's membrane potential
-        h.setpointer(sec.getVmRef(x=0.5), 'V', self)
-
-        # Declare Vother pointer array, and set it to local membrane potential
-        self.declare_Vother()
-        for i in range(self.MAX_CON):
-            self.set_Vother(i, sec.getVmRef(x=0.5))
-
-    def updateGa(self, i, G):
-        ''' Add a conductance in series to the ith element of the axial conductance vector. '''
-        self.Gax[i] = seriesGeq(self.Gax[i], G)
