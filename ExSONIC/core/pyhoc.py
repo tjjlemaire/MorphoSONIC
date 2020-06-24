@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-24 12:28:23
+# @Last Modified time: 2020-06-24 17:58:32
 
 ''' Utilities to manipulate HOC objects. '''
 
@@ -118,6 +118,29 @@ class Matrix(hclass(h.Matrix)):
         ''' Add a vector to a given column with optional row offset. '''
         for i, x in enumerate(v):
             self.addVal(i + row_offset, j, x)
+
+    def emptyClone(self):
+        ''' Return empty matrix of identical shape. '''
+        return Matrix(self.nRow, self.nCol)
+
+    def fullClone(self):
+        ''' Return full matrix clone. '''
+        mout = self.emptyClone()
+        for i in range(self.nRow):
+            mout.setRow(i, self.getRow(i))
+        return mout
+
+    def copyTo(self, mout, i, j):
+        ''' Copy matrix to appropriate location in another matrix. '''
+        self.bcopy(0, 0, self.nRow, self.nCol, i, j, mout)
+
+    def sub(self, m):
+        ''' Subtract another matrix to the current matrix. '''
+        self.add(m.c().muls(-1))
+
+    def onFullUpdate(self):
+        ''' Method called manually to execute operations after a full matrix update. '''
+        pass
 
 
 class IClamp(hclass(h.IClamp)):

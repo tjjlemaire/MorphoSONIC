@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-06-07 14:42:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-24 12:08:51
+# @Last Modified time: 2020-06-24 17:59:21
 
 import numpy as np
 from neuron import h, hclass
@@ -25,13 +25,6 @@ class SquareMatrix(Matrix):
     def emptyClone(self):
         ''' Return empty matrix of identical shape. '''
         return SquareMatrix(self.nRow)
-
-    def fullClone(self):
-        ''' Return full matrix clone. '''
-        mout = self.emptyClone()
-        for i in range(self.nRow):
-            mout.setRow(i, self.getRow(i))
-        return mout
 
     # def __new__(cls, n, mtype=MFULL):
     #     ''' Instanciation. '''
@@ -90,6 +83,10 @@ class ConductanceMatrix(SquareMatrix):
         self.Gvec = Gvec
         if links is not None:
             self.setLinks(links)
+
+    def emptyClone(self):
+        ''' Return empty matrix of identical shape. '''
+        return ConductanceMatrix(self.Gvec)
 
     # def __new__(cls, Gvec, links=None):
     #     ''' Instanciation. '''
@@ -180,6 +177,10 @@ class NormalizedConductanceMatrix(ConductanceMatrix):
         self.cnorm = np.ones(Gvec.size) if cnorm is None else cnorm
         super().__init__(Gvec, **kwargs)
 
+    def emptyClone(self):
+        ''' Return empty matrix of identical shape. '''
+        return NormalizedConductanceMatrix(self.Gvec, rnorm=self.rnorm, cnorm=self.cnorm)
+
     @property
     def rnorm(self):
         return self._rnorm
@@ -208,26 +209,17 @@ class NormalizedConductanceMatrix(ConductanceMatrix):
         ''' Get matrix element multiplied by the corresponding normalizing factor. '''
         return super().getVal(i, j) * self.xnorm(i, j)
 
-    # def setRow(self, i, v):
-    #     ''' Set matrix row divided by the corresponding row normalizer. '''
-    #     v.div(h.Vector(self.rnorm))
-    #     super().setRow(i, v)
-
-    # def getRow(self, i):
-    #     ''' Get matrix row multiplied by the corresponding row normalizer. '''
-    #     v = super().getRow(i)
-    #     v.mul(h.Vector(self.rnorm))
-    #     return v
-
     def setRNorm(self, value):
         ''' Set a new row-normalization vector. '''
         self.mulRows(self.rnorm / value)
         self.rnorm = value
+        self.onFullUpdate()
 
     def setCNorm(self, value):
         ''' Set a new column-normalization vector. '''
         self.mulCols(self.cnorm / value)
         self.cnorm = value
+        self.onFullUpdate()
 
     def scaled(self, rnorm=None, cnorm=None):
         ''' Return a "scaled" version of the matrix where each element is multiplied
@@ -294,47 +286,37 @@ def pointerMatrix(MatrixBase):
             self.refs = []
             super().__init__(*args, **kwargs)
 
-        def addTo(self, mout, i, j, fac=1):
-            ''' Add the current matrix to a destination matrix, starting at a specific
-                row and column index.
-            '''
-            for k in range(self.nRow):
-                for l in range(self.nCol):
-                    mout.addVal(k + i, l + j, self.getval(k, l) * fac)
+        @property
+        def nrefs(self):
+            return len(self.refs)
 
-        def addRef(self, m, row_offset, col_offset):
+        def addRef(self, mref, row_offset, col_offset):
             ''' Add a reference matrix to "point" towards. '''
-            assert self.nRow + row_offset <= int(m.nrow()), 'exceeds reference dimensions'
-            assert self.nCol + col_offset <= int(m.ncol()), 'exceeds reference dimensions'
-            self.addTo(m, row_offset, col_offset)
-            self.refs.append((m, row_offset, col_offset))
+            assert self.nRow + row_offset <= mref.nRow, 'exceeds reference dimensions'
+            assert self.nCol + col_offset <= mref.nCol, 'exceeds reference dimensions'
+            self.refs.append((mref, mref.emptyClone(), row_offset, col_offset))
+            self.updateRef(self.nrefs - 1)
 
         def removeRef(self, iref):
-            self.addTo(*self.refs[iref], fac=-1)
+            ''' Remove a reference matrix. '''
+            mref, mholder, *_ = self.refs[iref]
+            mref.sub(mholder)  # remove old values from ref matrix
             del self.refs[iref]
 
-        def setVal(self, i, j, x):
-            xold = self.getval(i, j)                     # get old value
-            super().setVal(i, j, x)                      # set new value
-            xdiff = self.getval(i, j) - xold             # compute difference value
-            for m, row_offset, col_offset in self.refs:  # add difference to all refs with offsets
-                m.addVal(i + row_offset, j + col_offset, xdiff)
+        def updateRef(self, iref):
+            ''' Update a reference matrix. '''
+            mref, mholder, row_offset, col_offset = self.refs[iref]
+            mref.sub(mholder)                             # remove old values from ref matrix
+            self.copyTo(mholder, row_offset, col_offset)  # update holder matrix
+            mref.add(mholder)                             # add new values to ref matrix
 
-        def setRow(self, i, v):
-            vold = self.getrow(i)  # get old row
-            super().setRow(i, v)   # set new row
-            v.sub(vold)            # compute difference vector
-            for m, row_offset, col_offset in self.refs:  # for each ref
-                # add difference vector to appropriate row slice
-                m.addRowSlice(i + row_offset, v, col_offset=col_offset)
+        def updateRefs(self):
+            ''' Update all reference matrices. '''
+            for i in range(self.nrefs):
+                self.updateRef(i)
 
-        def setCol(self, j, v):
-            vold = self.getcol(j)  # get old column
-            super().setCol(j, v)   # set new column
-            v.sub(vold)            # compute difference vector
-            for m, row_offset, col_offset in self.refs:  # for each ref
-                # add difference vector to appropriate column slice
-                m.addColSlice(j + col_offset, v, row_offset=row_offset)
+        def onFullUpdate(self):
+            self.updateRefs()
 
     PointerMatrix.__name__ = f'Pointer{MatrixBase.__name__}'
 
