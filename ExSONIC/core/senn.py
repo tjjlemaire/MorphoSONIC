@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-24 11:56:05
+# @Last Modified time: 2020-07-02 16:31:36
 
 import numpy as np
 
@@ -69,6 +69,11 @@ class SingleCableFiber(FiberNeuronModel):
     def R_inter(self):
         ''' Internodal intracellular axial resistance (Ohm). '''
         return self.axialResistance(self.rs, self.interL, self.interD)
+
+    @property
+    def R_node_to_node(self):
+        ''' Nonde-to-node intracellular axial resistance (Ohm). '''
+        return self.R_node + self.R_inter
 
     def clear(self):
         ''' delete all model sections. '''
