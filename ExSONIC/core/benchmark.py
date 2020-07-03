@@ -3,23 +3,23 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-06-29 18:11:24
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-07-02 22:59:11
+# @Last Modified time: 2020-07-03 12:22:36
 
-import logging
 import numpy as np
 from scipy.integrate import odeint
 import matplotlib.pyplot as plt
 
 from PySONIC.core import EffectiveVariablesLookup
-from PySONIC.utils import logger
-from ExSONIC.core import SennFiber, UnmyelinatedFiber
+from PySONIC.threshold import threshold
+from PySONIC.utils import logger, timer, isWithin
 
-logger.setLevel(logging.DEBUG)
+from ..constants import THR_QM_DIV
 
 
 class SonicBenchmark:
     ''' Interface allowing to run benchmark simulations of the SONIC paradigm
-        for various multi-compartmental models.
+        for various multi-compartmental models, with a simplified sinusoidal
+        capacitive drive.
     '''
 
     npc = 40  # number of samples per cycle
@@ -30,8 +30,9 @@ class SonicBenchmark:
         'Qm': 'nC/cm2'
     }
     nodelabels = ['node 1', 'node 2']
+    ga_bounds = [1e-5, 1e5]  # mS/cm2
 
-    def __init__(self, pneuron, ga, f, rel_amps, passive=True):
+    def __init__(self, pneuron, ga, f, rel_amps, passive=False):
         ''' Initialization.
 
             :param pneuron: point-neuron object
@@ -62,7 +63,18 @@ class SonicBenchmark:
             f'f = {self.f:.0f} kHz',
             f'relative amps = {self.rel_amps}'
         ]
-        return f'{self.__class__.__name__}({self.pneuron.name}, {", ".join(params)})'
+        dynamics = 'passive' if self.passive else 'full'
+        mech = f'{dynamics} {self.pneuron.name} dynamics'
+        return f'{self.__class__.__name__}({mech}, {", ".join(params)})'
+
+    @property
+    def ga(self):
+        return self._ga
+
+    @ga.setter
+    def ga(self, value):
+        assert isWithin('ga', value, self.ga_bounds)
+        self._ga = value
 
     @property
     def Cm0(self):
@@ -204,31 +216,38 @@ class SonicBenchmark:
                 sol[k] = y[i + 1::self.npernode]
         return sol
 
+    @timer
     def simFull(self, tstop):
         ''' Simulate the full system until a specific stop time (us). '''
-        logger.debug('running full simulation')
         t = np.arange(0, tstop, self.dt_full)
         sol = self.integrate(self.dfull, t)
         sol['Cm'] = self.vCapct(t)
         sol['Vm'] = sol['Qm'] / sol['Cm']
         return t, sol
 
+    @timer
     def simEff(self, tstop):
-        logger.debug('running effective simulation')
         t = np.arange(0, tstop, self.dt_sparse)
         sol = self.integrate(self.deff, t)
         sol['Cm'] = np.array([np.ones(t.size) * Cmeff for Cmeff in self.Cmeff])
         sol['Vm'] = sol['Qm'] / sol['Cm']
         return t, sol
 
-    def simulate(self, method, tstop):
+    @property
+    def methods(self):
+        return {'full': self.simFull, 'effective': self.simEff}
+
+    def simulate(self, mtype, tstop):
         # Cast tstop as a multiple of acoustic period
         tstop = int(np.ceil(tstop * self.f)) / self.f
-        if method == 'full':
-            return self.simFull(tstop)
-        elif method == 'effective':
-            return self.simEff(tstop)
-        raise ValueError(f'"{method}" is not a valid method type')
+        try:
+            method = self.methods[mtype]
+        except KeyError:
+            raise ValueError(f'"{mtype}" is not a valid method type')
+        logger.debug(f'running {mtype} {tstop:.2f} ms simulation')
+        output, tcomp = method(tstop)
+        logger.debug(f'completed in {tcomp:.2f} s')
+        return output
 
     def cycleAvg(self, t, sol):
         ''' Cycle-average a time vector and a solution dictionary. '''
@@ -242,20 +261,13 @@ class SonicBenchmark:
         tavg = t[::self.npc]  # + 0.5 / self.f
         return tavg, solavg
 
-    @property
-    def default_tstop(self):
-        ''' Default simulation time (ms). '''
-        if self.passive:
-            return 5 * self.tau
-        else:
-            return 10.
-
-    def benchmarkSim(self):
+    def benchmarkSim(self, tstop):
         ''' Run benchmark simulations of the model. '''
+        logger.info(self)
         # Simulate with full and effective systems
         t, sol = {}, {}
         for method in ['full', 'effective']:
-            t[method], sol[method] = self.simulate(method, self.default_tstop)
+            t[method], sol[method] = self.simulate(method, tstop)
         # Cycle average full solution
         t['cycle-avg'], sol['cycle-avg'] = self.cycleAvg(t['full'], sol['full'])
         return t, sol
@@ -283,29 +295,35 @@ class SonicBenchmark:
             ncol=3, mode="expand", borderaxespad=0.)
         return fig
 
+    def benchmark(self, *args, **kwargs):
+        ''' Rune benchmark simulation and plot results. '''
+        return self.benchmarkPlot(*self.benchmarkSim(*args, **kwargs))
 
-if __name__ == '__main__':
+    def divergence(self, t, sol, tobs=None):
+        ''' Evaluate the divergence between the effective and full, cycle-averaged solutions
+            at a specific point in time, computing per-node differences in charge density values.
+        '''
+        Qmobs = np.empty((2, 2))
+        for i, k in enumerate(['effective', 'cycle-avg']):  # for both solution variants
+            for j, Qm in enumerate(sol[k]['Qm']):  # for each node
+                if tobs is not None:  # interpolate observed Qm at given time
+                    Qmobs[i, j] = np.interp(tobs, t[k], Qm)
+                else:  # or take last observed Qm value
+                    Qmobs[i, j] = Qm[-1]
+        # Compute dictionary of per-node diffeerences
+        Qdiff = dict(zip(self.nodelabels, np.squeeze(np.diff(Qmobs, axis=0))))
+        logger.debug(f'Qm differences per node: {Qdiff}')
+        return Qdiff
 
-    # Fiber models
-    fibers = [
-        SennFiber(10e-6, 11),                   # 10 um diameter SENN fiber
-        UnmyelinatedFiber(0.8e-6, fiberL=5e-3)  # 0.8 um diameter unmylinated fiber
-    ]
+    def isDivergent(self, ga, tstop, *args, **kwargs):
+        ''' Function evaluating whether max abs charge divergence is above a given threshold. '''
+        self.ga = ga
+        t, sol = self.benchmarkSim(tstop)
+        Qdiff = self.divergence(t, sol, *args, **kwargs)
+        Qdiff_absmax = max(np.abs(list(Qdiff.values())))
+        return Qdiff_absmax >= THR_QM_DIV
 
-    # Stimulation parameters
-    f = 500.             # US frequency (kHz)
-    rel_amps = (0.8, 0)  # relative capacitance oscillation amplitudes
-
-    for fiber in fibers:
-        Ga = 1 / fiber.R_node_to_node    # S
-        Anode = fiber.nodes['node0'].Am  # cm2
-        ga = Ga / Anode * 1e3            # mS/cm2
-        logger.info(f'Node-to-node coupling in {fiber}: ga = {ga:.2f} mS/cm2')
-        for passive in [True, False]:
-            # Create SONIC benchmarker
-            sb = SonicBenchmark(fiber.pneuron, ga, f, rel_amps, passive=passive)
-            logger.info(f'{sb} -> tau = {sb.tau:.2f} ms')
-            # Run benchmark simulations and plot results
-            fig = sb.benchmarkPlot(*sb.benchmarkSim())
-
-    plt.show()
+    def findThresholdAxialCoupling(self, tstop):
+        ''' Find threshold ga creating a significant charge divergence. '''
+        assert self.passive, 'Procedure optimized only for passive benchmark'
+        return threshold(lambda ga: self.isDivergent(ga, tstop), self.ga_bounds)
