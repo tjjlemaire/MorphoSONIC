@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-24 12:06:27
+# @Last Modified time: 2020-07-15 16:36:52
 
 import abc
 from neuron import h
@@ -945,6 +945,17 @@ class FiberNeuronModel(SpatiallyExtendedNeuronModel):
     def R_node(self):
         ''' Node intracellular axial resistance (Ohm). '''
         return self.axialResistance(self.rhoa, self.nodeL, self.nodeD)
+
+    @property
+    def R_node_to_node(self):
+        raise NotImplementedError
+
+    @property
+    def ga_node_to_node(self):
+        ''' Node-to-node axial conductance per node unit area (S/cm2). '''
+        Ga_node_to_node = 1 / self.R_node_to_node  # S
+        Anode = self.nodes[self.central_ID].Am     # cm2
+        return Ga_node_to_node / Anode             # S/cm2
 
     @property
     def nodeIDs(self):

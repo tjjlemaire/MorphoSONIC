@@ -3,17 +3,17 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-06-29 18:11:24
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-07-03 12:22:36
+# @Last Modified time: 2020-07-16 08:57:23
 
 import numpy as np
 from scipy.integrate import odeint
+from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 
 from PySONIC.core import EffectiveVariablesLookup
-from PySONIC.threshold import threshold
-from PySONIC.utils import logger, timer, isWithin
-
-from ..constants import THR_QM_DIV
+from PySONIC.utils import logger, timer, isWithin, bounds
+from PySONIC.plt import XYMap, setNormalizer
+from PySONIC.neurons import passiveNeuron
 
 
 class SonicBenchmark:
@@ -30,7 +30,7 @@ class SonicBenchmark:
         'Qm': 'nC/cm2'
     }
     nodelabels = ['node 1', 'node 2']
-    ga_bounds = [1e-5, 1e5]  # mS/cm2
+    ga_bounds = [1e-10, 1e10]  # mS/cm2
 
     def __init__(self, pneuron, ga, f, rel_amps, passive=False):
         ''' Initialization.
@@ -41,31 +41,74 @@ class SonicBenchmark:
             :param rel_amps: pair of relative capacitance oscillation amplitudes
         '''
         self.pneuron = pneuron
-        self.states = self.pneuron.statesNames()
         self.ga = ga
         self.f = f
         self.rel_amps = rel_amps
         self.passive = passive
+        self.computeLookups()
 
-        # Compute effective capacitances over 1 cycle
-        Cmeff = []
-        self.lkps = []
-        for A in self.rel_amps:
-            Cm_cycle = self.capct(A, self.tcycle)    # uF/cm2
-            Cmeff.append(1 / np.mean(1 / Cm_cycle))  # uF/cm2
-            if not passive:
-                self.lkps.append(self.getLookup(Cm_cycle))
-        self.Cmeff = np.array(Cmeff)
+    def copy(self):
+        return self.__class__(self.pneuron, self.ga, self.f, self.rel_amps, passive=self.passive)
+
+    @property
+    def strAmps(self):
+        s = ', '.join([f'{x:.2f}' for x in self.rel_amps])
+        return f'({s})'
 
     def __repr__(self):
         params = [
-            f'ga = {self.ga:.2f} mS/cm2',
+            f'ga = {self.ga:.2e} mS/cm2',
             f'f = {self.f:.0f} kHz',
-            f'relative amps = {self.rel_amps}'
+            f'rel A_Cm = {self.strAmps}'
         ]
-        dynamics = 'passive' if self.passive else 'full'
-        mech = f'{dynamics} {self.pneuron.name} dynamics'
+        dynamics = 'passive ' if self.passive else ''
+        mech = f'{dynamics}{self.pneuron.name} dynamics'
         return f'{self.__class__.__name__}({mech}, {", ".join(params)})'
+
+    @property
+    def pneuron(self):
+        return self._pneuron
+
+    @pneuron.setter
+    def pneuron(self, value):
+        self._pneuron = value.copy()
+        self.states = self._pneuron.statesNames()
+        if hasattr(self, 'lkps'):
+            self.computeLookups()
+
+    def isPassive(self):
+        return self.pneuron.name.startswith('pas_')
+
+    @property
+    def f(self):
+        return self._f
+
+    @f.setter
+    def f(self, value):
+        self._f = value
+        if hasattr(self, 'lkps'):
+            self.computeLookups()
+
+    @property
+    def rel_amps(self):
+        return self._rel_amps
+
+    @rel_amps.setter
+    def rel_amps(self, value):
+        self._rel_amps = value
+        if hasattr(self, 'lkps'):
+            self.computeLookups()
+
+    @property
+    def passive(self):
+        return self._passive
+
+    @passive.setter
+    def passive(self, value):
+        assert isinstance(value, bool), 'passive must be boolean typed'
+        self._passive = value
+        if hasattr(self, 'lkps'):
+            self.computeLookups()
 
     @property
     def ga(self):
@@ -73,7 +116,8 @@ class SonicBenchmark:
 
     @ga.setter
     def ga(self, value):
-        assert isWithin('ga', value, self.ga_bounds)
+        if value != 0.:
+            assert isWithin('ga', value, self.ga_bounds)
         self._ga = value
 
     @property
@@ -113,13 +157,16 @@ class SonicBenchmark:
         }
         return EffectiveVariablesLookup({'Q': self.Qref}, tables)
 
-    @property
-    def tau(self):
-        ''' membrane time constant (ms).
-
-            [Cm0/gPas] = uF.cm-2 / mS.cm-2 = uF/mS = 1e-3 F/S = 1e-3 s = 1 ms
-        '''
-        return self.Cm0 / self.gPas
+    def computeLookups(self):
+        # Compute lookups over 1 cycle
+        Cmeff = []
+        self.lkps = []
+        for A in self.rel_amps:
+            Cm_cycle = self.capct(A, self.tcycle)    # uF/cm2
+            Cmeff.append(1 / np.mean(1 / Cm_cycle))  # uF/cm2
+            if not self.passive:
+                self.lkps.append(self.getLookup(Cm_cycle))
+        self.Cmeff = np.array(Cmeff)
 
     @property
     def dt_full(self):
@@ -134,7 +181,7 @@ class SonicBenchmark:
     @property
     def tcycle(self):
         ''' Time vector over 1 acoustic cycle. '''
-        return np.arange(0, 1 / self.f, self.dt_full)
+        return np.linspace(0, 1 / self.f, self.npc)
 
     def getCmeff(self, A):
         ''' Compute effective capacitance over 1 cycle. '''
@@ -216,30 +263,41 @@ class SonicBenchmark:
                 sol[k] = y[i + 1::self.npernode]
         return sol
 
+    def orderedKeys(self, varkeys):
+        mainkeys = ['Qm', 'Vm', 'Cm']
+        otherkeys = list(set(varkeys) - set(mainkeys))
+        return mainkeys + otherkeys
+
+    def orderedSol(self, sol):
+        return {k: sol[k] for k in self.orderedKeys(sol.keys())}
+
     @timer
     def simFull(self, tstop):
         ''' Simulate the full system until a specific stop time (us). '''
-        t = np.arange(0, tstop, self.dt_full)
+        t = np.linspace(0, tstop, self.getNCycles(tstop) * self.npc)
         sol = self.integrate(self.dfull, t)
         sol['Cm'] = self.vCapct(t)
         sol['Vm'] = sol['Qm'] / sol['Cm']
-        return t, sol
+        return t, self.orderedSol(sol)
 
     @timer
     def simEff(self, tstop):
-        t = np.arange(0, tstop, self.dt_sparse)
+        t = np.linspace(0, tstop, self.getNCycles(tstop))
         sol = self.integrate(self.deff, t)
         sol['Cm'] = np.array([np.ones(t.size) * Cmeff for Cmeff in self.Cmeff])
         sol['Vm'] = sol['Qm'] / sol['Cm']
-        return t, sol
+        return t, self.orderedSol(sol)
 
     @property
     def methods(self):
         return {'full': self.simFull, 'effective': self.simEff}
 
+    def getNCycles(self, tstop):
+        return int(np.ceil(tstop * self.f))
+
     def simulate(self, mtype, tstop):
         # Cast tstop as a multiple of acoustic period
-        tstop = int(np.ceil(tstop * self.f)) / self.f
+        tstop = self.getNCycles(tstop) / self.f
         try:
             method = self.methods[mtype]
         except KeyError:
@@ -261,9 +319,60 @@ class SonicBenchmark:
         tavg = t[::self.npc]  # + 0.5 / self.f
         return tavg, solavg
 
-    def benchmarkSim(self, tstop):
+    def g2tau(self, g):
+        ''' Convert conductance per unit membrane area (mS/cm2) to time constant (ms). '''
+        return (self.pneuron.Cm0 * 1e2) / g  # ms
+
+    def tau2g(self, tau):
+        ''' Convert time constant (ms) to conductance per unit membrane area (mS/cm2). '''
+        return (self.pneuron.Cm0 * 1e2) / tau  # ms
+
+    @property
+    def taum(self):
+        ''' Passive membrane time constant (ms). '''
+        return self.pneuron.tau_pas * 1e3
+
+    @taum.setter
+    def taum(self, value):
+        ''' Update point-neuron leakage conductance to match time new membrane time constant. '''
+        if not self.isPassive():
+            raise ValueError('taum can only be set for passive neurons')
+        self.pneuron = passiveNeuron(
+            self.pneuron.Cm0,
+            self.tau2g(value) * 1e1,  # S/m2
+            self.pneuron.ELeak)
+
+    @property
+    def tauax(self):
+        ''' Axial time constant (ms). '''
+        return self.g2tau(self.ga)
+
+    @tauax.setter
+    def tauax(self, value):
+        ''' Update axial conductance per unit area to match time new axial time constant. '''
+        self.ga = self.tau2g(value)  # mS/cm2
+
+    def setTimeConstants(self, taum, tauax):
+        ''' Update benchmark according to pair of time constants. '''
+        self.taum = taum  # ms
+        self.tauax = tauax  # ms
+
+    def setDrive(self, f_US, A_Cm):
+        ''' Update benchmark drive to a new frequency and amplitude. '''
+        self.f = f_US
+        self.rel_amps = (A_Cm, 0.)
+
+    def getPassiveTstop(self, f_US):
+        ''' Compute minimum simulation time for a passive model (ms). '''
+        return 5 * max(self.taum, self.tauax, 1 / f_US)
+
+    @property
+    def passive_tstop(self):
+        return self.getPassiveTstop(self.f)
+
+    def sim(self, tstop):
         ''' Run benchmark simulations of the model. '''
-        logger.info(self)
+        logger.info(f'{self}: {tstop:.2f} ms simulation')
         # Simulate with full and effective systems
         t, sol = {}, {}
         for method in ['full', 'effective']:
@@ -272,7 +381,7 @@ class SonicBenchmark:
         t['cycle-avg'], sol['cycle-avg'] = self.cycleAvg(t['full'], sol['full'])
         return t, sol
 
-    def benchmarkPlot(self, t, sol):
+    def plot(self, t, sol):
         ''' Plot results of benchmark simulations of the model. '''
         colors = ['C0', 'C1']
         markers = ['-', '--', '-.']
@@ -295,35 +404,239 @@ class SonicBenchmark:
             ncol=3, mode="expand", borderaxespad=0.)
         return fig
 
-    def benchmark(self, *args, **kwargs):
-        ''' Rune benchmark simulation and plot results. '''
-        return self.benchmarkPlot(*self.benchmarkSim(*args, **kwargs))
+    def simplot(self, *args, **kwargs):
+        ''' Run benchmark simulation and plot results. '''
+        return self.plot(*self.sim(*args, **kwargs))
 
-    def divergence(self, t, sol, tobs=None):
+    def divergencePerNode(self, t, sol, eval_mode='avg'):
         ''' Evaluate the divergence between the effective and full, cycle-averaged solutions
-            at a specific point in time, computing per-node differences in charge density values.
+            at a specific point in time, computing per-node differences in charge density values
+            divided by resting capacitance.
         '''
-        Qmobs = np.empty((2, 2))
-        for i, k in enumerate(['effective', 'cycle-avg']):  # for both solution variants
-            for j, Qm in enumerate(sol[k]['Qm']):  # for each node
-                if tobs is not None:  # interpolate observed Qm at given time
-                    Qmobs[i, j] = np.interp(tobs, t[k], Qm)
-                else:  # or take last observed Qm value
-                    Qmobs[i, j] = Qm[-1]
-        # Compute dictionary of per-node diffeerences
-        Qdiff = dict(zip(self.nodelabels, np.squeeze(np.diff(Qmobs, axis=0))))
-        logger.debug(f'Qm differences per node: {Qdiff}')
-        return Qdiff
+        # Compute matrix of charge density differences, normalized by resting capacitance
+        dV_mat = (sol['effective']['Qm'] - sol['cycle-avg']['Qm']) / self.Cm0  # mV
 
-    def isDivergent(self, ga, tstop, *args, **kwargs):
-        ''' Function evaluating whether max abs charge divergence is above a given threshold. '''
-        self.ga = ga
-        t, sol = self.benchmarkSim(tstop)
-        Qdiff = self.divergence(t, sol, *args, **kwargs)
-        Qdiff_absmax = max(np.abs(list(Qdiff.values())))
-        return Qdiff_absmax >= THR_QM_DIV
+        # Remove first index and take absolute value
+        dV_mat = np.abs(dV_mat[:, 1:])
 
-    def findThresholdAxialCoupling(self, tstop):
-        ''' Find threshold ga creating a significant charge divergence. '''
-        assert self.passive, 'Procedure optimized only for passive benchmark'
-        return threshold(lambda ga: self.isDivergent(ga, tstop), self.ga_bounds)
+        # Compute summary metrics of difference per node according to evaluation mode
+        if eval_mode == 'end':  # final index
+            dV_vec = dV_mat[:, -1]
+        elif eval_mode == 'avg':  # average
+            dV_vec = np.mean(dV_mat, axis=1)
+        elif eval_mode == 'max':  # max absolute difference
+            dV_vec = np.max(dV_mat, axis=1)
+        else:
+            raise ValueError(f'{eval_mode} evaluation mode is not supported')
+
+        # Cast into dictionary and return
+        dV_dict = dict(zip(self.nodelabels, np.squeeze(dV_vec)))
+        logger.debug(f'Vm differences per node: ', {k: f'{v:.2e}' for k, v in dV_dict.items()})
+        return dV_dict
+
+    def divergence(self, *args, **kwargs):
+        dV_dict = self.divergencePerNode(*args, **kwargs)  # mV
+        return max(list(dV_dict.values()))                 # mV
+
+
+class DivergenceMap(XYMap):
+    ''' Interface to a 2D map showing divergence of the SONIC output from a
+        cycle-averaged NICE output, for various combinations of parameters.
+    '''
+
+    zkey = 'dV'
+    zunit = 'mV'
+    zfactor = 1e0
+    suffix = 'Vdiff'
+
+    def __init__(self, root, sb, eval_mode, *args, tstop=None, **kwargs):
+        self.sb = sb.copy()
+        self.eval_mode = eval_mode
+        self.tstop = tstop
+        super().__init__(root, *args, **kwargs)
+
+    @property
+    def tstop(self):
+        if self._tstop is None:
+            return self.sb.passive_tstop
+        return self._tstop
+
+    @tstop.setter
+    def tstop(self, value):
+        self._tstop = value
+
+    def descPair(self, x1, x2):
+        raise NotImplementedError
+
+    def updateBenchmark(self, x):
+        raise NotImplementedError
+
+    def compute(self, x):
+        self.updateBenchmark(x)
+        t, sol = self.sb.sim(self.tstop)
+        dV = self.sb.divergence(t, sol, eval_mode=self.eval_mode)  # mV
+        logger.info(f'{self.descPair(*x)}, dV = {dV:.2e} mV')
+        return dV
+
+    def onClick(self, event):
+        ''' Execute action when the user clicks on a cell in the 2D map. '''
+        x = self.getOnClickXY(event)
+        self.updateBenchmark(x)
+        ix, iy = [np.where(vec == val)[0][0] for vec, val in zip([self.xvec, self.yvec], x)]
+        dV_log = self.getOutput()[iy, ix]
+        t, sol = self.sb.sim(self.tstop)
+        dV = self.sb.divergence(t, sol, eval_mode=self.eval_mode)  # mV
+        if not np.isclose(dV_log, dV):
+            raise ValueError(
+                f'computed divergence ({dV:.2e} mV) does not match log reference ({dV_log:.2e} mV)')
+        logger.info(f'{self.descPair(*x)}, dV = {dV:.2e} mV')
+        fig = self.sb.plot(t, sol)
+        fig.axes[0].set_title(self.descPair(*x))
+        plt.show()
+
+    def invexp(self, x, x0, a, b):
+        ''' Inverse exponential. '''
+        return np.exp(a * (x - x0)) + b
+
+    def invexpFit(self, x, y, logify=False):
+        ''' Inverse exponential fit. '''
+        if logify:
+            x, y = np.log10(x), np.log10(y)
+        inds = np.where(~np.isnan(y))[0]
+        pguess = (np.nanmin(x) + 1, -1, np.nanmin(y))
+        popt, _ = curve_fit(self.invexp, x[inds], y[inds], pguess)
+        yinterp = self.invexp(x, *popt)
+        if logify:
+            yinterp = np.power(10, yinterp)
+        return yinterp
+
+    def addThresholdCurve(self, fig, dVmax, fs, fit_method=None, logify=False):
+        ax, cbar_ax = fig.axes
+        ylims = ax.get_ylim()
+        ythrs = np.array([np.interp(-dVmax, -dV_vec, self.yvec, left=np.nan, right=np.nan)
+                          for dV_vec in self.getOutput().T])
+        ax.plot(self.xvec, ythrs * self.yfactor, '-', color='k', linewidth=2)
+        if np.any(np.isnan(ythrs)) and fit_method is not None:
+            ythrs_fit = fit_method(self.xvec, ythrs, logify=logify)
+            isnan = np.isnan(ythrs)
+            isnan[np.where(np.diff(isnan) > 0)[0] + 1] = 1  # nan -> not nan transition indexes
+            isnan[np.where(np.diff(isnan) < 0)[0] - 1] = 1  # not nan -> nan transition indexes
+            inan = np.where(isnan)[0]
+            ax.plot(self.xvec[inan], ythrs_fit[inan] * self.yfactor, '--', color='k', linewidth=2)
+        ax.set_ylim(ylims)
+        cbar_ax.axhline(dVmax, color='k', linewidth=2)
+
+    def render1D(self, xscale='log', yscale='log', zscale='log', cmap='viridis',
+                 figsize=(6, 4), fs=10, dVmax=None):
+        mymap = plt.get_cmap(cmap)
+        norm, sm = setNormalizer(mymap, bounds(self.xvec), zscale)
+        colors = sm.to_rgba(self.xvec)
+        fig, ax = plt.subplots(figsize=figsize)
+        ax.set_title('SONIC divergence 1D plot', fontsize=fs)
+        ax.set_xlabel(f'{self.ykey} ({self.yunit})', fontsize=fs)
+        ax.set_ylabel(f'{self.zkey} ({self.zunit})', fontsize=fs)
+        ax.set_xscale(xscale)
+        ax.set_yscale(yscale)
+        if dVmax is not None:
+            ax.axhline(dVmax, color='k', linestyle='--')
+        for i, dV in enumerate(self.getOutput().T):
+            ax.plot(self.yvec, dV, c=colors[i])
+            if dVmax is not None:
+                if np.all(np.diff(dV) < 0):
+                    dV, dVmax = -dV, -dVmax
+                ax.axvline(np.interp(dVmax, dV, self.yvec), linestyle='--', color=colors[i])
+        for item in ax.get_xticklabels() + ax.get_yticklabels():
+            item.set_fontsize(fs)
+        fig.subplots_adjust(left=0.1, right=0.8, bottom=0.15, top=0.95, hspace=0.5)
+        cbarax = fig.add_axes([0.85, 0.15, 0.03, 0.8])
+        fig.colorbar(sm, cax=cbarax)
+        cbarax.set_xlabel(f'{self.xkey} ({self.xunit})', fontsize=fs, labelpad=20)
+        for item in cbarax.get_yticklabels():
+            item.set_fontsize(fs)
+        return fig
+
+    def render(self, zscale='log', logify=False, dVmax=None, mode='2d', zbounds=(1e-1, 1e1),
+               extend_under=True, extend_over=True, cmap='Spectral_r', figsize=(6, 4), fs=12,
+               **kwargs):
+        if mode == '2d':
+            fig = super().render(
+                zscale=zscale, zbounds=zbounds, extend_under=extend_under, extend_over=extend_over,
+                cmap=cmap, figsize=figsize, fs=fs, **kwargs)
+            if dVmax is not None:
+                self.addThresholdCurve(
+                    fig, dVmax, fs, fit_method=self.fit_method, logify=logify)
+        else:
+            fig = self.render1D(zscale=zscale, dVmax=dVmax, figsize=figsize, fs=fs, **kwargs)
+        return fig
+
+
+class TauDivergenceMap(DivergenceMap):
+    ''' Divergence map of a passive model for various combinations of
+        membrane time constants (taum) and axial time constant (tauax)
+    '''
+
+    xkey = 'tau_m'
+    xfactor = 1e0
+    xunit = 'ms'
+    ykey = 'tau_ax'
+    yfactor = 1e0
+    yunit = 'ms'
+    ga_default = 1e0  # mS/cm2
+
+    def fit_method(self, *args, **kwargs):
+        return self.invexpFit(*args, **kwargs)
+
+    @property
+    def title(self):
+        return f'Tau divergence map (f = {self.sb.f:.0f} kHz, gamma = {self.sb.rel_amps[0]:.2f})'
+
+    def corecode(self):
+        return f'tau_divmap_f{self.sb.f:.0f}kHz_gamma{self.sb.rel_amps[0]:.2f}'
+
+    def descPair(self, taum, tauax):
+        return f'taum = {taum:.2e} ms, tauax = {tauax:.2e} ms'
+
+    def updateBenchmark(self, x):
+        self.sb.setTimeConstants(*x)
+
+    def render(self, xscale='log', yscale='log', logify=True, **kwargs):
+        return super().render(xscale=xscale, yscale=yscale, logify=logify, **kwargs)
+
+
+class DriveDivergenceMap(DivergenceMap):
+    ''' Divergence map of a specific (membrane model, axial coupling) pairfor various
+        combinations of drive frequencies and drive amplitudes.
+    '''
+
+    xkey = 'f_US'
+    xfactor = 1e0
+    xunit = 'kHz'
+    ykey = 'gamma'
+    yfactor = 1e0
+    yunit = '-'
+    fit_method = None
+
+    @property
+    def title(self):
+        return f'Drive divergence map - (taum = {self.sb.taum:.2e} ms, tauax = {self.sb.tauax:.2e} ms)'
+
+    def corecode(self):
+        if self.sb.isPassive():
+            neuron_desc = f'passive_taum_{self.sb.taum:.2e}ms'
+        else:
+            neuron_desc = self.sb.pneuron.name
+            if self.sb.passive:
+                neuron_desc = f'passive_{neuron_desc}'
+        code = f'drive_divmap_{neuron_desc}_tauax_{self.sb.tauax:.2e}ms'
+        if self._tstop is not None:
+            code = f'{code}_tstop{self.tstop:.2f}ms'
+        return code
+
+    def descPair(self, f_US, A_Cm):
+        return f'f = {f_US:.2f} kHz, gamma = {A_Cm:.2f}'
+
+    def updateBenchmark(self, x):
+        self.sb.setDrive(*x)
+
+    def render(self, xscale='log', **kwargs):
+        return super().render(xscale=xscale, **kwargs)

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-07-03 12:11:23
+# @Last Modified time: 2020-07-07 15:01:05
 
 # Conversions
 V_TO_MV = 1e3            # V to  mV
@@ -53,4 +53,4 @@ MFULL = 1
 MSPARSE = 2
 MBAND = 3
 
-THR_QM_DIV = 1.0  # nC/cm2
+THR_VM_DIV = 1.0  # mV

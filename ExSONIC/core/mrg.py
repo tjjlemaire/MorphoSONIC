@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-27 23:08:23
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-07 16:04:29
+# @Last Modified time: 2020-07-13 12:32:17
 
 import numpy as np
 
@@ -166,6 +166,11 @@ class MRGFiber(FiberNeuronModel):
     def R_stin(self):
         ''' STIN intracellular axial resistance (Ohm). '''
         return self.axialResistance(self.rhoa, self.stinL, self.stinD)
+
+    @property
+    def R_node_to_node(self):
+        ''' Node-to-node intracellular axial resistance (Ohm). '''
+        return self.R_node + 2 * (self.R_mysa + self.R_flut) + self._nstin_per_inter * self.R_stin
 
     @property
     def Rp_node(self):
