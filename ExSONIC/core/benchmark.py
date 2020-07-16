@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-06-29 18:11:24
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-07-16 08:57:23
+# @Last Modified time: 2020-07-16 10:39:22
 
 import numpy as np
 from scipy.integrate import odeint
@@ -512,19 +512,11 @@ class DivergenceMap(XYMap):
 
     def addThresholdCurve(self, fig, dVmax, fs, fit_method=None, logify=False):
         ax, cbar_ax = fig.axes
-        ylims = ax.get_ylim()
-        ythrs = np.array([np.interp(-dVmax, -dV_vec, self.yvec, left=np.nan, right=np.nan)
-                          for dV_vec in self.getOutput().T])
-        ax.plot(self.xvec, ythrs * self.yfactor, '-', color='k', linewidth=2)
-        if np.any(np.isnan(ythrs)) and fit_method is not None:
-            ythrs_fit = fit_method(self.xvec, ythrs, logify=logify)
-            isnan = np.isnan(ythrs)
-            isnan[np.where(np.diff(isnan) > 0)[0] + 1] = 1  # nan -> not nan transition indexes
-            isnan[np.where(np.diff(isnan) < 0)[0] - 1] = 1  # not nan -> nan transition indexes
-            inan = np.where(isnan)[0]
-            ax.plot(self.xvec[inan], ythrs_fit[inan] * self.yfactor, '--', color='k', linewidth=2)
-        ax.set_ylim(ylims)
-        cbar_ax.axhline(dVmax, color='k', linewidth=2)
+        levels = [dVmax / 10, dVmax, dVmax * 10]
+        lstyles = ['dashed', 'solid', 'dashdot']
+        CS = ax.contour(
+            self.xvec, self.yvec, self.getOutput(), levels, colors='k', linestyles=lstyles)
+        ax.clabel(CS, fontsize=fs, fmt='%1.1f', inline_spacing=0)
 
     def render1D(self, xscale='log', yscale='log', zscale='log', cmap='viridis',
                  figsize=(6, 4), fs=10, dVmax=None):
