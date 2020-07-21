@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-18 20:36:19
+# @Last Modified time: 2020-07-21 18:47:39
 
 import abc
 import numpy as np
@@ -120,11 +120,14 @@ class UniformSource(XSource):
 
 class GaussianSource(XSource):
 
+    # Ratio between RMS width and full width at half maximum
+    sigma_to_fwhm = 2 * np.sqrt(2 * np.log(2))
+
     def __init__(self, x0, sigma):
         ''' Constructor.
 
             :param x0: gaussian center coordinate (m)
-            :param sigma: gaussian width (m)
+            :param sigma: gaussian RMS width (m)
         '''
         self.x0 = x0
         self.sigma = sigma
@@ -148,6 +151,15 @@ class GaussianSource(XSource):
         self.checkStrictlyPositive('width', value)
         self._sigma = value
 
+    @classmethod
+    def from_FWHM(cls, w):
+        return w / cls.sigma_to_fwhm
+
+    @property
+    def FWHM(self):
+        ''' Full width at half maximum. '''
+        return self.sigma * self.sigma_to_fwhm
+
     @staticmethod
     def inputs():
         return {
@@ -166,6 +178,8 @@ class GaussianSource(XSource):
         }
 
     def computeDistributedAmps(self, fiber):
+        if fiber.length < MIN_FIBERL_FWHM_RATIO * self.FWHM:
+            raise ValueError('fiber is too short w.r.t stimulus FWHM')
         return {k: gaussian(v, mu=self.x0, sigma=self.sigma, A=self.xvar)
                 for k, v in fiber.getXCoords().items()}
 

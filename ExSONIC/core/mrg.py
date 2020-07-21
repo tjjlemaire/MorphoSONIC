@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-27 23:08:23
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-07-13 12:32:17
+# @Last Modified time: 2020-07-21 18:38:41
 
 import numpy as np
 
@@ -454,6 +454,13 @@ class MRGFiber(FiberNeuronModel):
                 -I_stin_stin[-1] + I_flut_stin[1]  # left-side boundary STIN
             )), order='F')
         }
+
+    @property
+    def CV_estimate(self):
+        ''' Estimated diameter-dependent conduction veclocity
+            (from linear fit across 5-20 um range)
+        '''
+        return 6.8 * self.fiberD * M_TO_UM - 18.5  # m/s
 
 
 class MRGFiberVbased(MRGFiber.__original__):

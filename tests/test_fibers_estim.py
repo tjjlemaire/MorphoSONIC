@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-05 17:35:37
+# @Last Modified time: 2020-07-21 20:06:44
 
 import numpy as np
 
@@ -11,11 +11,14 @@ from PySONIC.core import PulsedProtocol
 from PySONIC.utils import logger, si_format
 from ExSONIC.core import *
 from ExSONIC.test import TestFiber
-from ExSONIC.plt import SectionCompTimeSeries, strengthDurationCurve
+from ExSONIC.plt import SectionCompTimeSeries, strengthDurationCurve, plotFieldDistribution
 from ExSONIC.utils import chronaxie
 
 
 class TestFiberEstim(TestFiber):
+
+    w = 1e-3          # Gaussian FWHM (m)
+    thr_factor = 1.2  # threshold factor at which to display results
 
     def test_Reilly1985(self, is_profiled=False):
         ''' Run SENN fiber simulation with identical parameters as in Reilly 1985, Fig2.,
@@ -189,7 +192,7 @@ class TestFiberEstim(TestFiber):
         # Titrate for a specific duration and simulate fiber at threshold current
         logger.info(f'Running titration for {si_format(tstim)}s pulse')
         Ithr = fiber.titrate(psource, pp)  # A
-        data, meta = fiber.simulate(psource.updatedX(1.2 * Ithr), pp)
+        data, meta = fiber.simulate(psource.updatedX(self.thr_factor * Ithr), pp)
 
         # Compare output metrics to reference
         pulse_sim_metrics = {  # Output metrics
@@ -308,13 +311,16 @@ class TestFiberEstim(TestFiber):
 
     def gaussian(self, fiber, pp):
         ''' Run myelinated fiber ESTIM simulation with gaussian distribution source. '''
-        # US source
-        source = GaussianVoltageSource(0., fiber.length / 10., mode='cathode')
+        source = GaussianVoltageSource(
+            0., GaussianAcousticSource.from_FWHM(self.w),
+            mode='cathode')
+        logger.info(f'fiber length = {fiber.length * 1e3:.2f} mm, source FWHM = {self.w * 1e3:.2f} mm')
 
         # Titrate for a specific duration and simulate fiber at threshold US amplitude
         logger.info(f'Running titration for {si_format(pp.tstim)}s pulse')
         Vthr = fiber.titrate(source, pp)  # Pa
-        data, meta = fiber.simulate(source.updatedX(1.2 * Vthr), pp)
+        data, meta = fiber.simulate(source.updatedX(self.thr_factor * Vthr), pp)
+        plotFieldDistribution(fiber, source.updatedX(self.thr_factor * Vthr))
 
         # Compute conduction velocity and spike amplitude from resulting data
         sim_metrics = {
@@ -340,16 +346,25 @@ class TestFiberEstim(TestFiber):
         # Log output metrics
         self.logOutputMetrics(sim_metrics)
 
-    def test_gaussian1(self, is_profiled=False):
-        logger.info('Test: gaussian distribution source on myelinated fiber')
-        fiber = SennFiber(20e-6, 21)
-        pp = PulsedProtocol(10e-3, 3e-3)
+    def test_gaussianSENN(self, is_profiled=False):
+        logger.info('Test: gaussian distribution source on myelinated SENN fiber')
+        fiber = SennFiber(10e-6, 21)
+        toffset = fiber.AP_travel_time_estimate * 3.0
+        pp = PulsedProtocol(100e-6, toffset)
         return self.gaussian(fiber, pp)
 
-    def test_gaussian2(self, is_profiled=False):
+    def test_gaussianMRG(self, is_profiled=False):
+        logger.info('Test: gaussian distribution source on myelinated MRG fiber')
+        fiber = MRGFiber(10e-6, 21)
+        toffset = fiber.AP_travel_time_estimate * 10.0
+        pp = PulsedProtocol(100e-6, toffset)
+        return self.gaussian(fiber, pp)
+
+    def test_gaussianSundt(self, is_profiled=False):
         logger.info('Test: gaussian distribution source on unmyelinated fiber')
-        fiber = UnmyelinatedFiber(0.8e-6)
-        pp = PulsedProtocol(10e-3, 3e-3)
+        fiber = UnmyelinatedFiber(0.8e-6, fiberL=5e-3)
+        toffset = fiber.AP_travel_time_estimate * 1.5
+        pp = PulsedProtocol(10e-3, toffset)
         return self.gaussian(fiber, pp)
 
 

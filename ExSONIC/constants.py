@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-07-07 15:01:05
+# @Last Modified time: 2020-07-21 18:57:15
 
 # Conversions
 V_TO_MV = 1e3            # V to  mV
@@ -35,6 +35,7 @@ IINJ_RANGE = (1e-12, 1e-7)  # intracellular current range allowed at the fiber l
 VEXT_RANGE = (1e0, 1e5)     # extracellular potential range allowed at the fiber level (mV)
 REL_EPS_THR = 1e-2          # relative convergence threshold
 REL_START_POINT = 0.2       # relative position of starting point within search range
+REL_AP_TRAVEL_FACTOR = 1.5  # relative minimal duration of stimulus offset compared to estimated AP travel time
 
 # Passive mechanism
 CLASSIC_PASSIVE_MECHNAME = 'pas'
@@ -54,3 +55,6 @@ MSPARSE = 2
 MBAND = 3
 
 THR_VM_DIV = 1.0  # mV
+
+# Model geometry
+MIN_FIBERL_FWHM_RATIO = 2.0  # minimal fiber length compared to gaussian full-width at half-maximum

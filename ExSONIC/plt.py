@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-24 11:04:13
+# @Last Modified time: 2020-07-21 18:39:05
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -279,12 +279,18 @@ def plotFieldDistribution(fiber, source, fs=12):
     fig, ax = plt.subplots(figsize=(12, 3))
     ax.set_title(f'{fiber} - field distribution from {source}', fontsize=fs)
     ax.set_xlabel('section mid-point x-coordinate (mm)', fontsize=fs)
-    ax.set_ylabel('Extracellular voltage (mV)', fontsize=fs)
+    if isinstance(source, (AcousticSource)):
+        ylbl = 'Acoustic amplitude (kPa)'
+        yfactor = PA_TO_KPA
+    else:
+        ylbl = 'Extracellular voltage (mV)'
+        yfactor = 1e0
+    ax.set_ylabel(ylbl, fontsize=fs)
     field_dict = source.computeDistributedAmps(fiber)
     for k, xcoords in fiber.getXCoords().items():
-        ax.plot(xcoords * M_TO_MM, field_dict[k], '.', label=k)
+        ax.plot(xcoords * M_TO_MM, field_dict[k] * yfactor, '.', label=k)
     ylims = ax.get_ylim()
-    if source.I < 0.:
+    if source.xvar < 0.:
         ax.set_ylim(ylims[0], -0.05 * ylims[0])
     else:
         ax.set_ylim(-0.05 * ylims[1], ylims[1])

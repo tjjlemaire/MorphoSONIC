@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-07-15 16:36:52
+# @Last Modified time: 2020-07-21 19:10:50
 
 import abc
 from neuron import h
@@ -712,7 +712,9 @@ class SpatiallyExtendedNeuronModel(NeuronModel):
     def Aranges(self):
         return {
             IntracellularCurrent: IINJ_RANGE,
-            ExtracellularCurrent: VEXT_RANGE
+            ExtracellularCurrent: VEXT_RANGE,
+            GaussianVoltageSource: VEXT_RANGE,
+            UniformVoltageSource: VEXT_RANGE
         }
 
     def getArange(self, source):
@@ -1033,6 +1035,15 @@ class FiberNeuronModel(SpatiallyExtendedNeuronModel):
     def isInternodalDistance(self, d):
         raise NotImplementedError
 
+    @property
+    def CV_estimate(self):
+        raise NotImplementedError
+
+    @property
+    def AP_travel_time_estimate(self):
+        ''' Estimated AP travel time (assuming excitation at central node). '''
+        return (self.length / 2.) / self.CV_estimate  # s
+
     def getConductionVelocity(self, data, ids=None, out='median'):
         ''' Compute average conduction speed from simulation results.
 
@@ -1086,9 +1097,22 @@ class FiberNeuronModel(SpatiallyExtendedNeuronModel):
             :param data: dataframe containing output time series
             :return: boolean stating whether neuron is excited or not
         '''
-        nspikes_start = detectSpikes(data[self.nodeIDs[0]])[0].size
-        nspikes_end = detectSpikes(data[self.nodeIDs[-1]])[0].size
-        return nspikes_start > 0 and nspikes_end > 0
+        ids = {
+            'proximal': self.nodeIDs[0],
+            'distal': self.nodeIDs[-1],
+            'central': self.central_ID}
+        nspikes = {k: detectSpikes(data[v])[0].size for k, v in ids.items()}
+        has_spiked = {k: v > 0 for k, v in nspikes.items()}
+        has_spiked['ends'] = has_spiked['proximal'] and has_spiked['distal']
+        if not has_spiked['ends'] and has_spiked['central']:
+            logger.warning('AP did not reach end nodes')
+        return has_spiked['ends']
+
+    def checkForConduction(self, pp):
+        ''' Check that a protocol should allow for full AP conduction if excitation is reached. '''
+        if pp.toffset < REL_AP_TRAVEL_FACTOR * self.AP_travel_time_estimate:
+            AP_travel_str = f'estimated AP travel time: {self.AP_travel_time_estimate * 1e3:.1f} ms'
+            raise ValueError(f'offset duration too short for full AP conduction ({AP_travel_str})')
 
     def titrate(self, source, pp):
         ''' Use a binary search to determine the threshold amplitude needed to obtain
@@ -1098,6 +1122,10 @@ class FiberNeuronModel(SpatiallyExtendedNeuronModel):
             :param pp: pulsed protocol object
             :return: determined threshold amplitude
         '''
+        # Check that protocol should allow for full AP conduction, if any
+        self.checkForConduction(pp)
+
+        # Run titration procedure
         Arange = self.getArange(source)
         xthr = threshold(
             lambda x: self.titrationFunc(

@@ -3,17 +3,19 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-06-29 18:11:24
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-07-16 10:39:22
+# @Last Modified time: 2020-07-20 18:29:24
 
+import os
 import numpy as np
 from scipy.integrate import odeint
-from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 
-from PySONIC.core import EffectiveVariablesLookup
+from PySONIC.core import EffectiveVariablesLookup, AcousticDrive
 from PySONIC.utils import logger, timer, isWithin, bounds
-from PySONIC.plt import XYMap, setNormalizer
+from PySONIC.plt import XYMap
 from PySONIC.neurons import passiveNeuron
+from PySONIC.plt import GroupedTimeSeries
+from PySONIC.threshold import threshold
 
 
 class SonicBenchmark:
@@ -381,19 +383,42 @@ class SonicBenchmark:
         t['cycle-avg'], sol['cycle-avg'] = self.cycleAvg(t['full'], sol['full'])
         return t, sol
 
-    def plot(self, t, sol):
+    def isExcited(self, gamma, tstop, method):
+        ''' Simulate with SONIC paradigm for a given gamma-tstop combination, and check
+            excitation of the passive node.
+        '''
+        self.rel_amps = (gamma, 0.)
+        t, sol = self.simulate(method, tstop)
+        if method == 'full':
+            t, sol = self.cycleAvg(t, sol)
+        Qm_passive = sol['Qm'][1]
+        return Qm_passive.max() > 0.
+
+    def titrate(self, tstop, method='effective'):
+        logger.info(f'running {method} titration for f = {self.f:.0f} kHz')
+        return threshold(lambda x: self.isExcited(x, tstop, method), (0., 1.))
+
+    def plot(self, t, sol, Qonly=False):
         ''' Plot results of benchmark simulations of the model. '''
         colors = ['C0', 'C1']
         markers = ['-', '--', '-.']
         alphas = [0.5, 1., 1.]
-        naxes = 3
-        if not self.passive:
-            naxes += len(self.states)
+        if Qonly:
+            sol = {key: {'Qm': value['Qm']} for key, value in sol.items()}
+        varkeys = list(sol[list(sol.keys())[0]].keys())
+        naxes = len(varkeys)
+        # if not self.passive:
+        #     naxes += len(self.states)
         fig, axes = plt.subplots(naxes, 1, sharex=True, figsize=(10, min(3 * naxes, 10)))
+        if naxes == 1:
+            axes = [axes]
         axes[0].set_title(f'{self} - {t[list(t.keys())[0]][-1]:.2f} ms simulation')
         axes[-1].set_xlabel(f'time ({self.varunits["t"]})')
         for ax, k in zip(axes, sol[list(sol.keys())[0]].keys()):
             ax.set_ylabel(f'{k} ({self.varunits.get(k, "-")})')
+            if k == 'Qm':
+                ax.set_ylim(-250.0, 50.)
+
         for m, alpha, (key, varsdict) in zip(markers, alphas, sol.items()):
             for ax, (k, v) in zip(axes, varsdict.items()):
                 for y, c, lbl in zip(v, colors, self.nodelabels):
@@ -402,6 +427,25 @@ class SonicBenchmark:
         axes[-1].legend(
             bbox_to_anchor=(0., -0.7, 1., .1), loc='upper center',
             ncol=3, mode="expand", borderaxespad=0.)
+        return fig
+
+    def plotV(self, t, sol):
+        ''' Plot results of benchmark simulations of the model. '''
+        colors = ['C0', 'C1']
+        markers = ['-', '--', '-.']
+        alphas = [0.5, 1., 1.]
+        V = {key: value['Qm'] / self.Cm0 for key, value in sol.items()}
+        fig, ax = plt.subplots(figsize=(10, 3))
+        ax.set_title(f'{self} - {t[list(t.keys())[0]][-1]:.2f} ms simulation')
+        ax.set_xlabel(f'time ({self.varunits["t"]})')
+        ax.set_ylabel(f'Qm / Cm0 (mV)')
+        ax.set_ylim(-100.0, 50.)
+        for m, alpha, (key, varsdict) in zip(markers, alphas, sol.items()):
+            for y, c, lbl in zip(V[key], colors, self.nodelabels):
+                ax.plot(t[key], y, m, alpha=alpha, c=c, label=f'{lbl} - {key}')
+        fig.subplots_adjust(bottom=0.2)
+        ax.legend(bbox_to_anchor=(0., -0.7, 1., .1), loc='upper center', ncol=3,
+                  mode="expand", borderaxespad=0.)
         return fig
 
     def simplot(self, *args, **kwargs):
@@ -494,71 +538,23 @@ class DivergenceMap(XYMap):
         fig.axes[0].set_title(self.descPair(*x))
         plt.show()
 
-    def invexp(self, x, x0, a, b):
-        ''' Inverse exponential. '''
-        return np.exp(a * (x - x0)) + b
-
-    def invexpFit(self, x, y, logify=False):
-        ''' Inverse exponential fit. '''
-        if logify:
-            x, y = np.log10(x), np.log10(y)
-        inds = np.where(~np.isnan(y))[0]
-        pguess = (np.nanmin(x) + 1, -1, np.nanmin(y))
-        popt, _ = curve_fit(self.invexp, x[inds], y[inds], pguess)
-        yinterp = self.invexp(x, *popt)
-        if logify:
-            yinterp = np.power(10, yinterp)
-        return yinterp
-
-    def addThresholdCurve(self, fig, dVmax, fs, fit_method=None, logify=False):
-        ax, cbar_ax = fig.axes
-        levels = [dVmax / 10, dVmax, dVmax * 10]
-        lstyles = ['dashed', 'solid', 'dashdot']
-        CS = ax.contour(
-            self.xvec, self.yvec, self.getOutput(), levels, colors='k', linestyles=lstyles)
-        ax.clabel(CS, fontsize=fs, fmt='%1.1f', inline_spacing=0)
-
-    def render1D(self, xscale='log', yscale='log', zscale='log', cmap='viridis',
-                 figsize=(6, 4), fs=10, dVmax=None):
-        mymap = plt.get_cmap(cmap)
-        norm, sm = setNormalizer(mymap, bounds(self.xvec), zscale)
-        colors = sm.to_rgba(self.xvec)
-        fig, ax = plt.subplots(figsize=figsize)
-        ax.set_title('SONIC divergence 1D plot', fontsize=fs)
-        ax.set_xlabel(f'{self.ykey} ({self.yunit})', fontsize=fs)
-        ax.set_ylabel(f'{self.zkey} ({self.zunit})', fontsize=fs)
-        ax.set_xscale(xscale)
-        ax.set_yscale(yscale)
-        if dVmax is not None:
-            ax.axhline(dVmax, color='k', linestyle='--')
-        for i, dV in enumerate(self.getOutput().T):
-            ax.plot(self.yvec, dV, c=colors[i])
-            if dVmax is not None:
-                if np.all(np.diff(dV) < 0):
-                    dV, dVmax = -dV, -dVmax
-                ax.axvline(np.interp(dVmax, dV, self.yvec), linestyle='--', color=colors[i])
-        for item in ax.get_xticklabels() + ax.get_yticklabels():
-            item.set_fontsize(fs)
-        fig.subplots_adjust(left=0.1, right=0.8, bottom=0.15, top=0.95, hspace=0.5)
-        cbarax = fig.add_axes([0.85, 0.15, 0.03, 0.8])
-        fig.colorbar(sm, cax=cbarax)
-        cbarax.set_xlabel(f'{self.xkey} ({self.xunit})', fontsize=fs, labelpad=20)
-        for item in cbarax.get_yticklabels():
-            item.set_fontsize(fs)
-        return fig
-
-    def render(self, zscale='log', logify=False, dVmax=None, mode='2d', zbounds=(1e-1, 1e1),
+    def render(self, zscale='log', dVmax=None, zbounds=(1e-1, 1e1),
                extend_under=True, extend_over=True, cmap='Spectral_r', figsize=(6, 4), fs=12,
                **kwargs):
-        if mode == '2d':
-            fig = super().render(
-                zscale=zscale, zbounds=zbounds, extend_under=extend_under, extend_over=extend_over,
-                cmap=cmap, figsize=figsize, fs=fs, **kwargs)
-            if dVmax is not None:
-                self.addThresholdCurve(
-                    fig, dVmax, fs, fit_method=self.fit_method, logify=logify)
-        else:
-            fig = self.render1D(zscale=zscale, dVmax=dVmax, figsize=figsize, fs=fs, **kwargs)
+        fig = super().render(
+            zscale=zscale, zbounds=zbounds, extend_under=extend_under, extend_over=extend_over,
+            cmap=cmap, figsize=figsize, fs=fs, **kwargs)
+        if dVmax is not None:
+            ax = fig.axes[0]
+            if zscale == 'log':
+                levels = [dVmax / 10, dVmax, dVmax * 10]
+            else:
+                levels = [dVmax / 2, dVmax, dVmax * 2]
+            #lstyles = ['dashed', 'solid', 'dashdot']
+            fmt = lambda x: f'{x:g}'  # ' mV'
+            CS = ax.contour(
+                self.xvec, self.yvec, self.getOutput(), levels, colors='k')
+            ax.clabel(CS, fontsize=fs, fmt=fmt, inline_spacing=2)
         return fig
 
 
@@ -575,9 +571,6 @@ class TauDivergenceMap(DivergenceMap):
     yunit = 'ms'
     ga_default = 1e0  # mS/cm2
 
-    def fit_method(self, *args, **kwargs):
-        return self.invexpFit(*args, **kwargs)
-
     @property
     def title(self):
         return f'Tau divergence map (f = {self.sb.f:.0f} kHz, gamma = {self.sb.rel_amps[0]:.2f})'
@@ -591,8 +584,8 @@ class TauDivergenceMap(DivergenceMap):
     def updateBenchmark(self, x):
         self.sb.setTimeConstants(*x)
 
-    def render(self, xscale='log', yscale='log', logify=True, **kwargs):
-        return super().render(xscale=xscale, yscale=yscale, logify=logify, **kwargs)
+    def render(self, xscale='log', yscale='log', **kwargs):
+        return super().render(xscale=xscale, yscale=yscale, **kwargs)
 
 
 class DriveDivergenceMap(DivergenceMap):
@@ -606,11 +599,10 @@ class DriveDivergenceMap(DivergenceMap):
     ykey = 'gamma'
     yfactor = 1e0
     yunit = '-'
-    fit_method = None
 
     @property
     def title(self):
-        return f'Drive divergence map - (taum = {self.sb.taum:.2e} ms, tauax = {self.sb.tauax:.2e} ms)'
+        return f'Drive divergence map - {self.sb.pneuron.name}, tauax = {self.sb.tauax:.2e} ms)'
 
     def corecode(self):
         if self.sb.isPassive():
@@ -630,5 +622,84 @@ class DriveDivergenceMap(DivergenceMap):
     def updateBenchmark(self, x):
         self.sb.setDrive(*x)
 
-    def render(self, xscale='log', **kwargs):
-        return super().render(xscale=xscale, **kwargs)
+    def threshold_filename(self, method):
+        fmin, fmax = bounds(self.xvec)
+        return f'{self.corecode()}_f{fmin:.0f}kHz_{fmax:.0f}kHz_{self.xvec.size}_gammathrs_{method}.txt'
+
+    def threshold_filepath(self, *args, **kwargs):
+        return os.path.join(self.root, self.threshold_filename(*args, **kwargs))
+
+    def addThresholdCurves(self, ax):
+        ls = ['--', '-.']
+        for j, method in enumerate(['effective', 'full']):
+            fpath = self.threshold_filepath(method)
+            if os.path.isfile(fpath):
+                gamma_thrs = np.loadtxt(fpath)
+            else:
+                gamma_thrs = np.empty(self.xvec.size)
+                for i, f in enumerate(self.xvec):
+                    self.sb.f = f
+                    gamma_thrs[i] = self.sb.titrate(self.tstop, method=method)
+                np.savetxt(fpath, gamma_thrs)
+            ylims = ax.get_ylim()
+            ax.plot(self.xvec * self.xfactor, gamma_thrs * self.yfactor, ls[j], color='k')
+            ax.set_ylim(ylims)
+
+    def render(self, xscale='log', thresholds=False, **kwargs):
+        fig = super().render(xscale=xscale, **kwargs)
+        if thresholds:
+            self.addThresholdCurves(fig.axes[0])
+        return fig
+
+
+class GammaMap(XYMap):
+    ''' Interface to a 2D map showing relative capacitance oscillation amplitude
+        resulting from BLS simulations at various frequencies and amplitude.
+    '''
+    xkey = 'f_US'
+    xfactor = 1e0
+    xunit = 'kHz'
+    ykey = 'A'
+    yfactor = 1e0
+    yunit = 'kPa'
+    zkey = 'gamma'
+    zfactor = 1e0
+    zunit = '-'
+    suffix = 'gamma'
+
+    def __init__(self, root, bls, freqs, amps):
+        self.bls = bls.copy()
+        super().__init__(root, freqs, amps)
+
+    @property
+    def title(self):
+        return f'Gamma map - {self.bls}'
+
+    def corecode(self):
+        return f'gamma_map_bls{self.bls.a * 1e9:.0f}nm'
+
+    def compute(self, x):
+        f, A = x
+        data, meta = self.bls.simulate(AcousticDrive(f * 1e3, A * 1e3), 0.)
+        Cm = self.bls.v_capacitance(data['Z'])
+        gamma = np.ptp(Cm) / (2 * self.bls.Cm0)
+        logger.info(f'f = {f:.2f} kHz, A = {A:.2f} kPa, gamma = {gamma:.2f}')
+        return gamma
+
+    def onClick(self, event):
+        ''' Execute action when the user clicks on a cell in the 2D map. '''
+        x = self.getOnClickXY(event)
+        f, A = x
+        out = self.bls.simulate(AcousticDrive(f * 1e3, A * 1e3), 0.)
+        GroupedTimeSeries([out]).render()
+        plt.show()
+
+    def render(self, xscale='log', yscale='log', figsize=(6, 4), fs=12, **kwargs):
+        fig = super().render(xscale=xscale, yscale=yscale, figsize=figsize, fs=fs, **kwargs)
+        levels = [0.1, 0.3, 0.5, 0.7]
+        colors = ['w', 'k', 'k', 'k']
+        ax = fig.axes[0]
+        CS = ax.contour(
+            self.xvec, self.yvec, self.getOutput(), levels, colors=colors)
+        ax.clabel(CS, fontsize=fs, fmt=lambda x: f'{x:g}', inline_spacing=2)
+        return fig
