@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-07-21 22:03:54
+# @Last Modified time: 2020-07-21 22:23:36
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -287,8 +287,11 @@ def plotFieldDistribution(fiber, source, fs=12):
         yfactor = 1e0
     ax.set_ylabel(ylbl, fontsize=fs)
     field_dict = source.computeDistributedAmps(fiber)
-    for k, xcoords in fiber.getXCoords().items():
-        ax.plot(xcoords * M_TO_MM, field_dict[k] * yfactor, '.', label=k)
+    xcoords = fiber.getXCoords()
+    ndists = len(list(xcoords.keys()))
+    colors = plt.get_cmap('tab10').colors[:ndists] if ndists > 1 else ['k']
+    for c, (k, xcoords) in zip(colors, xcoords.items()):
+        ax.plot(xcoords * M_TO_MM, field_dict[k] * yfactor, '.', label=k, c=c)
     ylims = ax.get_ylim()
     if source.xvar < 0.:
         ax.set_ylim(ylims[0], -0.05 * ylims[0])
@@ -296,7 +299,8 @@ def plotFieldDistribution(fiber, source, fs=12):
         ax.set_ylim(-0.05 * ylims[1], ylims[1])
     for item in ax.get_xticklabels() + ax.get_yticklabels():
         item.set_fontsize(fs)
-    ax.legend(fontsize=fs, frameon=False)
+    if ndists > 1:
+        ax.legend(fontsize=fs, frameon=False)
     fig.tight_layout()
     return fig
 
