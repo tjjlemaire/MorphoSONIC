@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-07-21 18:39:05
+# @Last Modified time: 2020-07-21 22:03:54
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -90,8 +90,8 @@ class SectionCompTimeSeries(CompTimeSeries):
             data = data.loc[(data['t'] >= tmin) & (data['t'] <= tmax)]
         return data, meta
 
-    def render(self, *args, cmap='plasma', **kwargs):
-        return super().render(*args, cmap='plasma', **kwargs)
+    def render(self, *args, cmap='sym_viridis_r', **kwargs):
+        return super().render(*args, cmap=cmap, **kwargs)
 
 
 def thresholdCurve(fiber, x, thrs, thrs2=None,
