@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-06-07 14:42:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-24 17:59:21
+# @Last Modified time: 2020-07-22 19:32:59
 
 import numpy as np
 from neuron import h, hclass
@@ -622,6 +622,7 @@ class HybridNetwork:
         ''' Feed network into a LinearMechanism object. '''
         # Set initial conditions vector
         self.y0 = h.Vector(self.size)
+        self.cm_over_time = np.zeros(self.nsec)
         # Define linear mechanism arguments
         lm_args = [self.C, self.G, self.y, self.y0, self.I, self.sl, self.relx]
         # Add update callback for dynamic cm
@@ -640,13 +641,23 @@ class HybridNetwork:
     def updateCmTerms(self):
         ''' Update capacitance-dependent network components. '''
         # Update membrane capacitance vector
-        for i, sec in enumerate(self.seclist):
-            self.cm[i] = sec.getCm(x=0.5)
+        self.cm = np.array([sec.getCm(x=0.5) for sec in self.seclist])
+        self.cm_over_time = np.vstack([self.cm_over_time, self.cm])
+
         # Modify Gacm matrix accordingly
         self.Gacm.setCNorm(self.cm)
         # Update iax vector if needed
         if self.use_explicit_iax:
             self.updateIax()
+
+    def computeIax(self, Vi):
+        ''' Compute axial current density vector from a internal potential vector.
+
+            :param Vi: internal potential vector (mV)
+            :return: axial current density vector (mA/cm2)
+        '''
+        Ga = self.Gacm.scaled(rnorm=np.ones(self.nsec))  # S/cm2
+        return -np.array(Ga.mulv(h.Vector(Vi)).to_python())
 
     def updateIax(self):
         ''' Update axial currents as an explicit current vector contribution. '''

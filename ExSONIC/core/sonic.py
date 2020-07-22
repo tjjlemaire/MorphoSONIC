@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-30 21:40:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-24 18:04:34
+# @Last Modified time: 2020-07-22 19:34:58
 
 import numpy as np
 
@@ -369,6 +369,30 @@ def addSonicFeatures(Base):
             if self.nbls is not None:
                 d.update({AcousticSource: self.nbls.getArange(None)})
             return d
+
+        def computeIax(self, Vi_dict):
+            ''' Compute axial currents based on dictionary of intracellular potential vectors. '''
+            Vi_array = np.array([v for v in Vi_dict.values()])
+            iax_array = np.array([self.network.computeIax(Vi_vec) * 1e4 for Vi_vec in Vi_array.T]).T
+            return dict(zip(Vi_dict.keys(), iax_array))
+
+        def addIaxToSolution(self, sp_ext_sol):
+            ''' Add axial currents to solution. '''
+            Vi_dict = {k: sol['Vin' if 'Vin' in sol else 'Vm'] for k, sol in sp_ext_sol.items()}
+            for k, v in self.computeIax(Vi_dict).items():
+                sp_ext_sol[k]['iax'] = v
+
+        def addCmToSolution(self, sp_ext_sol):
+            ''' Add capacitance to solution. '''
+            for k, v in zip(sp_ext_sol.keys(), self.network.cm_over_time[1:-1].T):
+                sp_ext_sol[k]['Cm'] = v / F_M2_TO_UF_CM2
+
+        def simulate(self, *args, **kwargs):
+            ''' Add axial currents to solution. '''
+            sp_ext_sol, meta = super().simulate(*args, **kwargs)
+            self.addIaxToSolution(sp_ext_sol)
+            self.addCmToSolution(sp_ext_sol)
+            return sp_ext_sol, meta
 
     # Choose subclass depending on input class
     if issubclass(Base, SpatiallyExtendedNeuronModel):

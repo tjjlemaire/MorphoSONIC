@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-07-21 19:10:50
+# @Last Modified time: 2020-07-22 19:37:39
 
 import abc
 from neuron import h
@@ -12,7 +12,7 @@ import pandas as pd
 from scipy import stats
 from boltons.strutils import cardinalize
 
-from PySONIC.core import Model, PointNeuron
+from PySONIC.core import Model, PointNeuron, BilayerSonophore
 from PySONIC.postpro import detectSpikes
 from PySONIC.utils import logger, si_format, filecode, simAndSave, isIterable, TimeSeries
 from PySONIC.constants import *
@@ -498,8 +498,12 @@ class NeuronModel(metaclass=abc.ABCMeta):
         return titrate(self, *args, **kwargs)
 
     def getPltVars(self, *args, **kwargs):
+        Cm_pltvar = BilayerSonophore.getPltVars()['Cm']
+        del Cm_pltvar['func']
+        Cm_pltvar['bounds'] = (0.0, 1.5 * self.pneuron.Cm0 * F_M2_TO_UF_CM2)
         return {
             **self.pneuron.getPltVars(*args, **kwargs),
+            'Cm': Cm_pltvar,
             'Vext': {
                 'desc': 'extracellular potential',
                 'label': 'V_{ext}',

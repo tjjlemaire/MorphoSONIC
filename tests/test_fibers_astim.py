@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-07-21 20:08:03
+# @Last Modified time: 2020-07-22 19:34:29
 
 import numpy as np
 
@@ -89,7 +89,7 @@ class TestFiberAstim(TestFiber):
         }
 
         # Plot membrane potential and membrane charge density traces
-        varkeys = ['Vm', 'Qm']
+        varkeys = ['Cm', 'Vm', 'Qm', 'iax', 'iLeak']
         for k in varkeys:
             SectionCompTimeSeries([(data, meta)], k, fiber.nodeIDs).render()
 
@@ -110,7 +110,7 @@ class TestFiberAstim(TestFiber):
     def test_gaussianSENN(self, is_profiled=False):
         logger.info('Test: gaussian distribution source on myelinated SENN fiber')
         fiber = SennFiber(10e-6, 21, a=self.a, fs=self.fs)
-        toffset = fiber.AP_travel_time_estimate * 3.0
+        toffset = fiber.AP_travel_time_estimate * 5.0
         pp = PulsedProtocol(1e-3, toffset)
         return self.gaussian(fiber, pp)
 

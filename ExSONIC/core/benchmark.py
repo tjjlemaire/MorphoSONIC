@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-06-29 18:11:24
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-07-20 18:29:24
+# @Last Modified time: 2020-07-22 15:20:50
 
 import os
 import numpy as np
@@ -34,27 +34,27 @@ class SonicBenchmark:
     nodelabels = ['node 1', 'node 2']
     ga_bounds = [1e-10, 1e10]  # mS/cm2
 
-    def __init__(self, pneuron, ga, f, rel_amps, passive=False):
+    def __init__(self, pneuron, ga, f, gamma_pair, passive=False):
         ''' Initialization.
 
             :param pneuron: point-neuron object
             :param ga: axial conductance (mS/cm2)
             :param f: US frequency (kHz)
-            :param rel_amps: pair of relative capacitance oscillation amplitudes
+            :param gamma_pair: pair of relative capacitance oscillation amplitudes
         '''
         self.pneuron = pneuron
         self.ga = ga
         self.f = f
-        self.rel_amps = rel_amps
+        self.gamma_pair = gamma_pair
         self.passive = passive
         self.computeLookups()
 
     def copy(self):
-        return self.__class__(self.pneuron, self.ga, self.f, self.rel_amps, passive=self.passive)
+        return self.__class__(self.pneuron, self.ga, self.f, self.gamma_pair, passive=self.passive)
 
     @property
     def strAmps(self):
-        s = ', '.join([f'{x:.2f}' for x in self.rel_amps])
+        s = ', '.join([f'{x:.2f}' for x in self.gamma_pair])
         return f'({s})'
 
     def __repr__(self):
@@ -92,14 +92,18 @@ class SonicBenchmark:
             self.computeLookups()
 
     @property
-    def rel_amps(self):
-        return self._rel_amps
+    def gamma_pair(self):
+        return self._gamma_pair
 
-    @rel_amps.setter
-    def rel_amps(self, value):
-        self._rel_amps = value
+    @gamma_pair.setter
+    def gamma_pair(self, value):
+        self._gamma_pair = value
         if hasattr(self, 'lkps'):
             self.computeLookups()
+
+    @property
+    def gamma_str(self):
+        return [f'{x:.2f}' for x in self.gamma_pair]
 
     @property
     def passive(self):
@@ -142,13 +146,13 @@ class SonicBenchmark:
         ''' Resting membrane potential (mV). '''
         return self.pneuron.Vm0
 
-    def capct(self, A, t):
+    def capct(self, gamma, t):
         ''' Time-varying capacitance (in uF/cm2) '''
-        return self.Cm0 * (1 + A * np.sin(2 * np.pi * self.f * t))
+        return self.Cm0 * (1 + gamma * np.sin(2 * np.pi * self.f * t))
 
     def vCapct(self, t):
         ''' Vector of time-varying capacitance (in uF/cm2) '''
-        return np.array([self.capct(A, t) for A in self.rel_amps])
+        return np.array([self.capct(gamma, t) for gamma in self.gamma_pair])
 
     def getLookup(self, Cm):
         ''' Get a lookup object of effective variables for a given capacitance cycle vector. '''
@@ -163,8 +167,8 @@ class SonicBenchmark:
         # Compute lookups over 1 cycle
         Cmeff = []
         self.lkps = []
-        for A in self.rel_amps:
-            Cm_cycle = self.capct(A, self.tcycle)    # uF/cm2
+        for gamma in self.gamma_pair:
+            Cm_cycle = self.capct(gamma, self.tcycle)    # uF/cm2
             Cmeff.append(1 / np.mean(1 / Cm_cycle))  # uF/cm2
             if not self.passive:
                 self.lkps.append(self.getLookup(Cm_cycle))
@@ -359,10 +363,10 @@ class SonicBenchmark:
         self.taum = taum  # ms
         self.tauax = tauax  # ms
 
-    def setDrive(self, f_US, A_Cm):
+    def setDrive(self, f, gamma_pair):
         ''' Update benchmark drive to a new frequency and amplitude. '''
-        self.f = f_US
-        self.rel_amps = (A_Cm, 0.)
+        self.f = f
+        self.gamma_pair = gamma_pair
 
     def getPassiveTstop(self, f_US):
         ''' Compute minimum simulation time for a passive model (ms). '''
@@ -387,7 +391,7 @@ class SonicBenchmark:
         ''' Simulate with SONIC paradigm for a given gamma-tstop combination, and check
             excitation of the passive node.
         '''
-        self.rel_amps = (gamma, 0.)
+        self.gamma_pair = (gamma, 0.)
         t, sol = self.simulate(method, tstop)
         if method == 'full':
             t, sol = self.cycleAvg(t, sol)
@@ -573,10 +577,10 @@ class TauDivergenceMap(DivergenceMap):
 
     @property
     def title(self):
-        return f'Tau divergence map (f = {self.sb.f:.0f} kHz, gamma = {self.sb.rel_amps[0]:.2f})'
+        return f'Tau div map (f = {self.sb.f:.0f} kHz, gamma = ({", ".join(self.sb.gamma_str)})'
 
     def corecode(self):
-        return f'tau_divmap_f{self.sb.f:.0f}kHz_gamma{self.sb.rel_amps[0]:.2f}'
+        return f'tau_divmap_f{self.sb.f:.0f}kHz_gamma{"_".join(self.sb.gamma_str)}'
 
     def descPair(self, taum, tauax):
         return f'taum = {taum:.2e} ms, tauax = {tauax:.2e} ms'
@@ -585,7 +589,9 @@ class TauDivergenceMap(DivergenceMap):
         self.sb.setTimeConstants(*x)
 
     def render(self, xscale='log', yscale='log', **kwargs):
-        return super().render(xscale=xscale, yscale=yscale, **kwargs)
+        fig = super().render(xscale=xscale, yscale=yscale, **kwargs)
+        fig.canvas.set_window_title(self.corecode())
+        return fig
 
 
 class DriveDivergenceMap(DivergenceMap):
@@ -620,7 +626,8 @@ class DriveDivergenceMap(DivergenceMap):
         return f'f = {f_US:.2f} kHz, gamma = {A_Cm:.2f}'
 
     def updateBenchmark(self, x):
-        self.sb.setDrive(*x)
+        f, gamma = x
+        self.sb.setDrive(f, (gamma, 0.))
 
     def threshold_filename(self, method):
         fmin, fmax = bounds(self.xvec)
