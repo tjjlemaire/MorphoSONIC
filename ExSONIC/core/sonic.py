@@ -3,11 +3,11 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-30 21:40:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-07-22 19:34:58
+# @Last Modified time: 2020-08-07 20:11:45
 
 import numpy as np
 
-from PySONIC.core import PointNeuron, NeuronalBilayerSonophore, AcousticDrive, ElectricDrive
+from PySONIC.core import PointNeuron, NeuronalBilayerSonophore, AcousticDrive, ElectricDrive, EffectiveVariablesLookup
 from PySONIC.utils import logger, isWithin
 
 from ..constants import *
@@ -27,7 +27,7 @@ def addSonicFeatures(Base):
     class SonicBase(Base):
         ''' Generic class inheriting from a NeuronModel class and adding gneric SONIC features. '''
 
-        use_custom_passive = True
+        passive_mechname = CUSTOM_PASSIVE_MECHNAME
 
         def __init__(self, *args, a=None, fs=1., d=0., **kwargs):
             ''' Initialization.
@@ -48,25 +48,19 @@ def addSonicFeatures(Base):
             self.a = a
             self.fref = None
             self.pylkp = None
-            self.initargs = (args, kwargs)
+            self.initargs = (args, {**kwargs, 'a': a, 'fs': fs, 'd': d})
             super().__init__(*args, **kwargs)
 
         def original(self):
             ''' Return an equivalent instance from the original model (not SONIC-adpated). '''
-            # Initialize original instance
-            org = self.__original__(*self.initargs[0], **self.initargs[1])
-            # Modify properties of the original object if changed in the current instance
-            for k, v in self.__dict__.items():
-                if k.startswith('_') and hasattr(org, k) and hasattr(org, k[1:]):
-                    if v != getattr(org, k):
-                        print(f'setting {org}.{k} to {v}')
-                        org.set(k[1:], v)
-            # Return equivalent original instance
-            return org
+            return self.mirrored(self.__original__)
 
         def compdict(self, original_key='original', sonic_key='sonic'):
             ''' Return dictionary with the model instance and its "original" equivalent. '''
             return {original_key: self.original(), sonic_key: self}
+
+        def benchmark(self, detailed=False):
+            return self.mirrored(self.__benchmark__, detailed=detailed)
 
         @property
         def nbls(self):
@@ -237,13 +231,86 @@ def addSonicFeatures(Base):
 
     class SonicMorpho(SonicBase):
 
-        def __init__(self, *args, **kwargs):
+        def __init__(self, *args, inter_fs=1., **kwargs):
             self.network = None
             if not hasattr(self, 'use_explicit_iax'):
                 self.use_explicit_iax = False
             if not hasattr(self, 'gmax'):
                 self.gmax = None
+            self.inter_fs = inter_fs
+            self.inter_pylkp = None
             super().__init__(*args, **kwargs)
+            self.initargs = (self.initargs[0], {**self.initargs[1], 'inter_fs': inter_fs})
+
+        @property
+        def inter_fs(self):
+            if self.nbls is not None:
+                return self._inter_fs
+            else:
+                return None
+
+        @inter_fs.setter
+        def inter_fs(self, value):
+            if value is None:
+                value = 1.
+            value = isWithin('inter_fs', value, (0., 1.))
+            self.set('inter_fs', value)
+
+        @property
+        def inter_fs_str(self):
+            return f'{self.inter_fs * 1e2:.0f}%'
+
+        @property
+        def coverages(self):
+            ''' Sonophore coverage factor per section type. '''
+            return {k: self.fs if k == 'node' else self.inter_fs for k in self.sectypes}
+
+        def __repr__(self):
+            s = super().__repr__()
+            if self.has_passive_sections and self.nbls is not None:
+                s = f'{s[:-1]}, inter_fs={self.inter_fs_str})'
+            return s
+
+        @property
+        def meta(self):
+            d = super().meta
+            if self.has_passive_sections:
+                d.update({'inter_fs': self.inter_fs})
+            return d
+
+        @property
+        def modelcodes(self):
+            d = super().modelcodes
+            if self.nbls is not None and self.has_passive_sections:
+                d.update({
+                    'inter_fs': f'interfs{self.inter_fs_str}' if self.inter_fs <= 1 else None
+                })
+            return d
+
+        def setPyLookup(self, f=None):
+            ''' Add inter_pylkp if needed. '''
+            fref = self.fref  # store fref value before call to parent setPyLookup
+            super().setPyLookup(f=f)
+            if self.has_passive_sections:
+                if f is not None:  # acoustic case: load separate lookup with inter fs
+                    if self.inter_pylkp is None or f != fref:
+                        self.inter_pylkp = self.nbls.getLookup2D(f, self.inter_fs)
+                elif self.inter_pylkp is None:  # Electrical case: copy nodal lookup
+                    self.inter_pylkp = self.pylkp.copy()
+
+        def setModLookup(self, *args, **kwargs):
+            ''' Add inter lookup for passive sections, if any. '''
+            super().setModLookup(*args, **kwargs)
+            if self.has_passive_sections:
+                _, _, self.inter_lkp = self.Py2ModLookup(self.inter_pylkp)
+
+        def setFuncTables(self, *args, **kwargs):
+            ''' Add V func table to passive sections, if any. '''
+            super().setFuncTables(*args, **kwargs)
+            if self.has_passive_sections:
+                logger.debug(f'setting {CUSTOM_PASSIVE_MECHNAME} function tables')
+                self.setFuncTable(
+                    CUSTOM_PASSIVE_MECHNAME, 'V', self.inter_lkp['V'], self.Aref, self.Qref)
 
         def copy(self):
             other = super().copy()
@@ -278,10 +345,13 @@ def addSonicFeatures(Base):
                 sec.gmax = self.gmax
             return sec
 
-        @staticmethod
-        def getMetaArgs(meta):
+        @classmethod
+        def getMetaArgs(cls, meta):
             args, kwargs = Base.getMetaArgs(meta)
-            kwargs.update({k: meta[k] for k in ['a', 'fs']})
+            additional_kwargs = ['a', 'fs']
+            if cls.has_passive_sections:
+                additional_kwargs.append('inter_fs')
+            kwargs.update({k: meta[k] for k in additional_kwargs})
             return args, kwargs
 
         def setTopology(self):
@@ -401,13 +471,145 @@ def addSonicFeatures(Base):
         SonicClass = SonicNode
 
     # Correct class name for consistency with input class
-    SonicClass.__name__ = f'{Base.__name__}'
+    SonicClass.__name__ = Base.__name__
 
     # Add original class as an attribute of the new decorated class (with modified simkey)
     class Original(Base):
         simkey = f'original_{Base.simkey}'
     Original.__name__ = f'Original{Base.__name__}'
     SonicClass.__original__ = Original
+
+    class BenchmarkSonicClass(SonicClass):
+        ''' Benchmark SONIC variant. '''
+
+        NPC = 25  # number of samples per cycle
+        simkey = f'benchmark_{SonicClass.simkey}'
+
+        def __init__(self, *args, detailed=False, **kwargs):
+            self.detailed = detailed
+            super().__init__(*args, **kwargs)
+
+        def __repr__(self):
+            s = super().__repr__()
+            if self.detailed:
+                s = f'{s[:-1]}, detailed)'
+            return s
+
+        def sinCapct(self, gamma, t):
+            ''' Time-varying capacitance (in F/m2) '''
+            return self.pneuron.Cm0 * (1 + gamma * np.sin(2 * np.pi * t))
+
+        @property
+        def pyQref(self):
+            return np.arange(*self.pneuron.Qbounds, 1e-5)  # C/cm2
+
+        def reltvec(self, n):
+            return np.linspace(0., 1., n)  # (-)
+
+        def setSinusCmLookup(self):
+            ''' Set generic, sinusoidal Cm lookup. '''
+            self.pyAref = np.hstack([[0.], np.logspace(3, 6, 20)])  # Pa
+            gammas = np.linspace(0.0, 0.9, 21)  # (-)
+            self.pytref = self.reltvec(self.NPC)  # (-)
+            self.pyCmref = np.array([self.sinCapct(g, self.pytref) for g in gammas])  # F/m2
+
+        def setDetailedCmLookup(self, f):
+            ''' Set detailed Cm lookup for a specific frequency. '''
+            Cm_lkp = self.nbls.Cm_lkp.project('f', f)
+            self.pyAref = Cm_lkp.refs['A']  # Pa
+            Cm_dense = Cm_lkp['Cm_rel'] * self.pneuron.Cm0  # F/m2
+            t_dense = self.reltvec(Cm_dense.shape[1])  # (-)
+            self.pytref = self.reltvec(self.NPC)  # (-)
+            self.pyCmref = np.array([np.interp(self.pytref, t_dense, y) for y in Cm_dense])  # F/m2
+
+        def getPyLookup(self, Cmcycles):
+            ''' On-the-fly (A, Q)-dependent lookup generation. '''
+            Vm_3d = np.array([[Q / Cm * V_TO_MV for Q in self.pyQref] for Cm in Cmcycles])  # mV
+            tables = {
+                'V': np.mean(Vm_3d, axis=-1),  # mV
+                **{
+                    k: np.mean(np.vectorize(v)(Vm_3d), axis=-1)  # s-1
+                    for k, v in self.pneuron.effRates().items()}
+            }
+            return EffectiveVariablesLookup({'A': self.pyAref, 'Q': self.pyQref}, tables)
+
+        def weightedCmref(self, fs):
+            return self.nbls.spatialAverage(fs, self.pyCmref, self.pneuron.Cm0)
+
+        def setPyLookup(self, f=None):
+            ''' Set lookup depending on simulation level. '''
+            # Set Cm lookups
+            if f is not None:
+                self.setSinusCmLookup()
+                for sec in self.seclist:
+                    sec.setMechValue('Fdrive', f * HZ_TO_KHZ)  # kHz
+                self.fref = f
+            else:
+                self.setSinusCmLookup()
+
+            # Set python lookups
+            if self.detailed:  # if detailed -> use neuron's original lookup at A = 0
+                self.pylkp = self.getBaselineLookup()
+                self.pylkp.refs['Q'] /= (self.pneuron.Cm0 * F_M2_TO_UF_CM2)  # 1e-2 V
+                if self.has_passive_sections:
+                    self.inter_pylkp = self.pylkp.copy()
+            else:  # otherwise, generate lookups from Cm cycles with section-specific normalization
+                # pylkp: normalize by nodal fs
+                self.pylkp = self.getPyLookup(self.weightedCmref(self.fs))
+                if self.has_passive_sections:
+                    # interpylkp: normalize by internodal fs
+                    self.inter_pylkp = self.getPyLookup(self.weightedCmref(self.inter_fs))
+
+        def setUSDrives(self, gamma_dict):
+            logger.debug(f'Gammas:')
+            with np.printoptions(**array_print_options):
+                for k, gammas in gamma_dict.items():
+                    logger.debug(f'{k}: gamma = {gammas}')
+
+            if self.detailed:
+                self.Aref2 = h.Vector(self.pyAref * PA_TO_KPA)  # kPa
+                self.tref = h.Vector(self.pytref / self.fref * S_TO_MS)  # ms
+                self.Cmref = Matrix.from_array(
+                    self.weightedCmref(self.fs) * F_M2_TO_UF_CM2)
+                self.setFuncTable(
+                    self.mechname, 'Cm_table', self.Cmref, self.Aref2, self.tref)
+                if self.has_passive_sections:
+                    self.interCmref = Matrix.from_array(
+                        self.weightedCmref(self.inter_fs) * F_M2_TO_UF_CM2)
+                    self.setFuncTable(
+                        CUSTOM_PASSIVE_MECHNAME, 'Cm_table', self.interCmref, self.Aref2, self.tref)
+            return []
+
+            gamma_lkp = self.nbls.gamma_lkp.project('f', self.fref * HZ_TO_KHZ)
+            gamma_dict = {k: gamma_lkp.interpVar1D(v * self.coverages[k] * PA_TO_KPA, 'gamma')
+                          for k, v in A_dict.items()}
+
+            for k, gammas in gamma_dict.items():
+                for gamma, sec in zip(gammas, self.sections[k].values()):
+                    sec.setMechValue('Adrive', gamma * PA_TO_KPA)
+            if self.detailed:
+                self.gammaref = h.Vector(self.gammas * PA_TO_KPA)
+                self.tref = h.Vector(self.tcycle / self.fref * S_TO_MS)  # ms
+                self.Cmref = Matrix.from_array(self.Cm_2d * F_M2_TO_UF_CM2)
+                self.setFuncTable(self.mechname, 'Cm_table', self.Cmref, self.gammaref, self.tref)
+                if self.has_passive_sections:
+                    self.setFuncTable(
+                        CUSTOM_PASSIVE_MECHNAME, 'Cm_table', self.Cmref, self.gammaref, self.tref)
+
+        def simulate(self, source, pp):
+            ''' adapt time step to simulation level. '''
+            for sec in self.seclist:
+                sec.setMechValue('detailed', self.detailed)
+            self.fixed_dt = 1 / (source.f * self.NPC)  # s
+            return super().simulate(source, pp)
+
+        def needsFixedTimeStep(self, source):
+            ''' Force fixed time step integration. '''
+            return True
+
+    # Add benchmark class as an attribute of the new decorated class
+    BenchmarkSonicClass.__name__ = f'Benchmark{SonicClass.__name__}'
+    SonicClass.__benchmark__ = BenchmarkSonicClass
 
     # Return SONIC-enabled class
     return SonicClass

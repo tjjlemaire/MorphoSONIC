@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-18 21:14:43
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-05 17:14:09
+# @Last Modified time: 2020-08-03 17:09:48
 
 import matplotlib.pyplot as plt
 from PySONIC.parsers import *
@@ -55,6 +55,8 @@ class SpatiallyExtendedParser(Parser):
                 render_args[key] = args[key]
             for pltvar in args['plot']:
                 comp_plot = SectionCompTimeSeries(output, pltvar, args['section'])
+                if render_args['cmap'] is None:
+                    del render_args['cmap']
                 comp_plot.render(**render_args)
         else:
             for key in args['section']:

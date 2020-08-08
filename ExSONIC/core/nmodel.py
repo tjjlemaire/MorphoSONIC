@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-07-22 19:37:39
+# @Last Modified time: 2020-08-07 16:34:35
 
 import abc
 from neuron import h
@@ -31,7 +31,7 @@ class NeuronModel(metaclass=abc.ABCMeta):
     refvar = 'Qm'  # default reference variable
     is_constructed = False
     fixed_dt = FIXED_DT
-    use_custom_passive = False
+    passive_mechname = CLASSIC_PASSIVE_MECHNAME
 
     # integration methods
     int_methods = {
@@ -57,6 +57,25 @@ class NeuronModel(metaclass=abc.ABCMeta):
             if self.is_constructed:
                 logger.debug(f'resetting model with {attrkey} = {value}')
                 self.reset()
+
+    def isEditableProperty(self, k):
+        ''' Check if a key corresponds to an editable property of the model. '''
+        return k.startswith('_') and hasattr(self, k) and hasattr(self, k[1:])
+
+    def mirror(self, other):
+        ''' Modify self properties to match those of another model instance. '''
+        logger.debug(f'mirroring {self} to {other}')
+        for k, v in other.__dict__.items():  # loop through model properties
+            if self.isEditableProperty(k):  # if editable property in self
+                if v != getattr(self, k):  # if value differ -> modify in self
+                    logger.debug(f'setting {self}.{k} to {v}')
+                    self.set(k[1:], v)
+
+    def mirrored(self, other_cls, **kwargs):
+        ''' Return an instance from another model class modified to mirror self. '''
+        other = other_cls(*self.initargs[0], **self.initargs[1], **kwargs)
+        other.mirror(self)
+        return other
 
     @property
     @abc.abstractmethod
@@ -97,13 +116,6 @@ class NeuronModel(metaclass=abc.ABCMeta):
     @property
     def mechname(self):
         return f'{self.pneuron.name}auto'
-
-    @property
-    def passive_mechname(self):
-        return {
-            False: CLASSIC_PASSIVE_MECHNAME,
-            True: CUSTOM_PASSIVE_MECHNAME
-        }[self.use_custom_passive]
 
     @staticmethod
     def axialSectionArea(d_out, d_in=0.):
@@ -283,12 +295,13 @@ class NeuronModel(metaclass=abc.ABCMeta):
             x0 = self.pneuron.Vm0  # mV
             unit = 'mV'
         logger.debug(f'initializing system at {x0} {unit}')
-        self.fih = [
-            h.FInitializeHandler(3, self.fi3),
-            h.FInitializeHandler(0, self.fi0),
-            h.FInitializeHandler(1, self.fi1),
-            h.FInitializeHandler(2, self.fi2)
-        ]
+        if PRINT_FINITIALIZE_STEPS:
+            self.fih = [
+                h.FInitializeHandler(3, self.fi3),
+                h.FInitializeHandler(0, self.fi0),
+                h.FInitializeHandler(1, self.fi1),
+                h.FInitializeHandler(2, self.fi2)
+            ]
         h.finitialize(x0)
 
     def fadvanceLogger(self):
@@ -379,33 +392,46 @@ class NeuronModel(metaclass=abc.ABCMeta):
         self.integrateUntil(pp.tstop * S_TO_MS)
         return 0
 
+    def Py2ModLookup(self, pylkp):
+        ''' Convert a 2D python lookup into amplitude (kPa) and charge (nC/cm2) reference vectors
+            and a dictionary of 2D hoc matrices for potential (mV) and rate constants (ms-1).
+        '''
+        assert pylkp.ndims == 2, 'can only convert 2D lookups'
+
+        # Convert lookups independent variables to hoc vectors
+        Aref = h.Vector(pylkp.refs['A'] * PA_TO_KPA)
+        Qref = h.Vector(pylkp.refs['Q'] * C_M2_TO_NC_CM2)
+
+        # Convert lookup tables to hoc matrices
+        matrix_dict = {'V': Matrix.from_array(pylkp['V'])}  # mV
+        for ratex in self.pneuron.alphax_list.union(self.pneuron.betax_list):
+            matrix_dict[ratex] = Matrix.from_array(pylkp[ratex] / S_TO_MS)
+        for taux in self.pneuron.taux_list:
+            matrix_dict[taux] = Matrix.from_array(pylkp[taux] * S_TO_MS)
+        for xinf in self.pneuron.xinf_list:
+            matrix_dict[xinf] = Matrix.from_array(pylkp[xinf])
+
+        return Aref, Qref, matrix_dict
+
+    def getBaselineLookup(self):
+        ''' Get zero amplitude lookup . '''
+        pylkp = self.pneuron.getLookup()  # get 1D charge-dependent lookup
+        pylkp.refs = {'A': np.array([0.]), **pylkp.refs}  # add amp as first dimension
+        pylkp.tables = {k: np.array([v]) for k, v in pylkp.items()}  # add amp dimension to tables
+        return pylkp
+
     def setPyLookup(self):
         ''' Set the appropriate model 2D lookup. '''
         if not hasattr(self, 'pylkp') or self.pylkp is None:
-            self.pylkp = self.pneuron.getLookup()
-            self.pylkp.refs['A'] = np.array([0.])
-            for k, v in self.pylkp.items():
-                self.pylkp[k] = np.array([v])
+            self.pylkp = self.getBaselineLookup()
 
     def setModLookup(self, *args, **kwargs):
         ''' Get the appropriate model 2D lookup and translate it to Hoc. '''
         # Set Lookup
         self.setPyLookup(*args, **kwargs)
 
-        # Convert lookups independent variables to hoc vectors
-        self.Aref = h.Vector(self.pylkp.refs['A'] * PA_TO_KPA)
-        self.Qref = h.Vector(self.pylkp.refs['Q'] * C_M2_TO_NC_CM2)
-
-        # Convert lookup tables to hoc matrices
-        # !!! hoc lookup dictionary must be a member of the class,
-        # otherwise the assignment below does not work properly !!!
-        self.lkp = {'V': Matrix.from_array(self.pylkp['V'])}  # mV
-        for ratex in self.pneuron.alphax_list.union(self.pneuron.betax_list):
-            self.lkp[ratex] = Matrix.from_array(self.pylkp[ratex] / S_TO_MS)
-        for taux in self.pneuron.taux_list:
-            self.lkp[taux] = Matrix.from_array(self.pylkp[taux] * S_TO_MS)
-        for xinf in self.pneuron.xinf_list:
-            self.lkp[xinf] = Matrix.from_array(self.pylkp[xinf])
+        # Convert to HOC equivalents and store them as class attributes
+        self.Aref, self.Qref, self.lkp = self.Py2ModLookup(self.pylkp)
 
     @staticmethod
     def setFuncTable(mechname, fname, matrix, xref, yref):
@@ -435,18 +461,10 @@ class NeuronModel(metaclass=abc.ABCMeta):
             and link them to FUNCTION_TABLEs in the MOD file of the corresponding
             membrane mechanism.
         '''
-        logger.debug(f'loading {self.mechname} membrane dynamics lookup tables')
-
-        # Set Lookup
         self.setModLookup(*args, **kwargs)
-
-        # Assign hoc matrices to 2D interpolation tables in membrane mechanism
+        logger.debug(f'setting {self.mechname} function tables')
         for k, v in self.lkp.items():
             self.setFuncTable(self.mechname, k, v, self.Aref, self.Qref)
-
-        # Add V func table to passive sections if custom passive mechanism is used
-        if self.use_custom_passive:
-            self.setFuncTable(CUSTOM_PASSIVE_MECHNAME, 'V', self.lkp['V'], self.Aref, self.Qref)
 
     @staticmethod
     def fixStimVec(stim, dt):
@@ -542,6 +560,7 @@ class SpatiallyExtendedNeuronModel(NeuronModel):
 
     # Boolean stating whether to use equivalent currents for imposed extracellular voltage fields
     use_equivalent_currents = False
+    has_passive_sections = False
 
     @abc.abstractstaticmethod
     def getMetaArgs(meta):
@@ -890,7 +909,7 @@ class FiberNeuronModel(SpatiallyExtendedNeuronModel):
     @nnodes.setter
     def nnodes(self, value):
         if value % 2 == 0:
-            raise ValueError('number of nodes must be odd')
+            logger.warning(f'even number of nodes ({value})')
         self.set('nnodes', value)
 
     @property

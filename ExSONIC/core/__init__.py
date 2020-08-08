@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-07-03 10:23:49
+# @Last Modified time: 2020-08-07 19:43:50
 
 import sys
 import inspect
@@ -30,11 +30,12 @@ def getModelsDict():
     current_module = sys.modules[__name__]
     models_dict = {}
     for _, obj in inspect.getmembers(current_module):
-        # checkCandidateObject(obj, models_dict)
         if inspect.isclass(obj) and hasattr(obj, 'simkey') and isinstance(obj.simkey, str):
             models_dict[obj.simkey] = obj
-            if hasattr(obj, '__original__'):
-                models_dict[obj.__original__.simkey] = obj.__original__
+            for k in ['original', 'benchmark']:
+                full_k = f'__{k}__'
+                if hasattr(obj, full_k):
+                    models_dict[getattr(obj, full_k).simkey] = getattr(obj, full_k)
     return models_dict
 
 

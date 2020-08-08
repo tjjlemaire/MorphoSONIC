@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-07-21 19:11:25
+# @Last Modified time: 2020-08-07 14:30:07
 
 import numpy as np
 
@@ -195,9 +195,14 @@ class UnmyelinatedFiber(SingleCableFiber):
     _pneuron = getPointNeuron('SUseg')   # membrane equations
 
     # Critical values established from convergence study (m)
-    abs_NodeL_thr = 22e-6                              # absolute max. node length
-    lindep_NodeL_thr = lambda _, x: 16.3 * x + 9.1e-6  # fiber diameter dependent max. node length
-    fiberL_thr = 3e-3                                  # minimal fiber length
+    abs_NodeL_thr = 22e-6                                          # nodeL: absolute threshold
+    lin_NodeL_thr = lambda x: 16.3 * x + 9.1e-6                 # nodeL: fiberD-dep threshold
+    fiberL_thr = 3e-3                                              # fiberL: absolute threshold
+
+    @classmethod
+    def NodeL_thr(cls, fiberD):
+        ''' nodeL: general threshold '''
+        return min(cls.lin_NodeL_thr(fiberD), cls.abs_NodeL_thr)
 
     def __init__(self, fiberD, nnodes=None, fiberL=5e-3, maxNodeL=None, **kwargs):
         ''' Initialization.
@@ -206,20 +211,29 @@ class UnmyelinatedFiber(SingleCableFiber):
             :param fiberL: fiber length (m)
             :param maxNodeL: maximal node length (m)
         '''
+        # Check that at least one of fiberL or nnodes is provided
         if nnodes is None and fiberL is None:
-            raise ValueError('at least one of "fiberL" or "nnodes" parameters must be provided')
+            raise ValueError('at least  one of "fiberL" or "nnodes" parameters must be provided')
+        # Compute maxNodeL if not provided
         if maxNodeL is None:
-            maxNodeL = min(self.lindep_NodeL_thr(fiberD), self.abs_NodeL_thr)
-        if fiberL is None:
+            maxNodeL = self.NodeL_thr(fiberD)
+        # Compute fiberL from nnodes if nnodes is provided
+        if nnodes is not None:
             fiberL = nnodes * maxNodeL
+        # Print warning if fiberL smaller than convergence threshold
         if fiberL <= self.fiberL_thr:
-            logger.warning(f'fiber length must be at least {self.fiberL_thr * M_TO_MM:.1f} mm')
+            logger.warning(
+                f'convergence not guaranteed for fiberL < {self.fiberL_thr * M_TO_MM:.1f} mm')
+        # Check that maxNodeL is smaller than fiberL
         maxNodeL = isWithin('maximum node length', maxNodeL, (0., fiberL))
 
-        # Compute number of nodes (ensuring odd number) and node length from fiber length
-        nnodes = int(np.ceil(fiberL / maxNodeL))
-        if nnodes % 2 == 0:
-            nnodes += 1
+        # Compute number of nodes if not explicited (ensuring odd number)
+        if nnodes is None:
+            nnodes = int(np.ceil(fiberL / maxNodeL))
+            if nnodes % 2 == 0:
+                nnodes += 1
+
+        # Compute precise nodeL as fiberL / nnodes ratio
         self.nodeL = fiberL / nnodes
 
         # Initialize with correct number of nodes

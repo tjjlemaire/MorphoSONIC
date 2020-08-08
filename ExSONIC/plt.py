@@ -3,13 +3,13 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-07-21 22:23:36
+# @Last Modified time: 2020-08-06 18:21:45
 
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import signal
 
-from PySONIC.plt import GroupedTimeSeries, CompTimeSeries
+from PySONIC.plt import GroupedTimeSeries, CompTimeSeries, mirrorAxis
 from PySONIC.utils import logger, si_format, getPow10, rsquared
 
 from .core import *
@@ -485,3 +485,31 @@ def plotTimeseries0Dvs1D(pneuron, a, cov, rs, deff, drive, pp, figsize=(8, 6), f
     GroupedTimeSeries.shareX(axes)
 
     return fig
+
+
+def mergeFigs(detailed_fig, coarse_fig, alpha=0.2, inplace=False):
+    ''' Merge the content of two figures in a single figure. '''
+    new_fig, new_ax = plt.subplots(figsize=detailed_fig.get_size_inches())
+    mirrorAxis(detailed_fig.axes[0], new_ax)
+    for l in detailed_fig.axes[0].get_lines():
+        new_ax.plot(l.get_data()[0], l.get_data()[1], c=l.get_color(), alpha=alpha)
+    for l in coarse_fig.axes[0].get_lines():
+        new_ax.plot(l.get_data()[0], l.get_data()[1], '--', c=l.get_color())
+    if hasattr(detailed_fig, 'sm'):
+        cbarax = new_fig.add_axes([0.85, 0.15, 0.03, 0.8])
+        mirrorAxis(detailed_fig.axes[1], cbarax)
+        nvalues = len(coarse_fig.axes[0].get_lines())
+        comp_values = list(range(nvalues))
+        cbar_kwargs = {}
+        bounds = np.arange(nvalues + 1) + min(comp_values) - 0.5
+        ticks = bounds[:-1] + 0.5
+        if nvalues > 10:
+            ticks = [ticks[0], ticks[-1]]
+        cbar_kwargs.update({'ticks': ticks, 'boundaries': bounds, 'format': '%1i'})
+        cbarax.tick_params(axis='both', which='both', length=0)
+        new_fig.colorbar(detailed_fig.sm, cax=cbarax, **cbar_kwargs)
+        cbarax.set_ylabel('node index')
+    if inplace:
+        plt.close(detailed_fig)
+        plt.close(coarse_fig)
+    return new_fig

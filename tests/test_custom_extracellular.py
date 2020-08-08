@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-19 16:53:09
+# @Last Modified time: 2020-08-03 23:00:50
 
 import logging
 import matplotlib.pyplot as plt
@@ -29,7 +29,7 @@ fibers = {k: v(fiberD, nnodes) for k, v in fiber_classes.items()}
 
 # Stimulation parameters
 source = IntracellularCurrent(fibers['sonic'].central_ID, I=1.1e-9)
-pp = PulsedProtocol(100e-6, 3e-3, tstart=0.1e-3)
+pp = PulsedProtocol(100e-6, 3e-3)
 
 # For each fiber model
 for lbl, fiber in fibers.items():

@@ -38,7 +38,6 @@ UNITS {
 PARAMETER {
 	stimon       : Stimulation state
 	celsius			(degC)
-	v				(mV)
 	q10_mp
 	q10_h
 	q10_s

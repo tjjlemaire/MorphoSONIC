@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 14:38:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-19 16:17:21
+# @Last Modified time: 2020-08-06 15:53:59
 
 import os
 import pickle
@@ -205,3 +205,10 @@ class SpatiallyExtendedTimeSeries:
     def __truediv__(self, other):
         ''' Division operator. '''
         return self.operate(other, '__truediv__')
+
+    def cycleAveraged(self, *args, **kwargs):
+        return self.__class__({k: v.cycleAveraged(*args, **kwargs) for k, v in self.items()})
+
+    def prepend(self, *args, **kwargs):
+        for k in self.keys():
+            self.data[k].prepend(*args, **kwargs)

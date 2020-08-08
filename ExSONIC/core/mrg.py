@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-27 23:08:23
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-07-21 18:38:41
+# @Last Modified time: 2020-08-05 11:44:18
 
 import numpy as np
 
@@ -40,6 +40,7 @@ class MRGFiber(FiberNeuronModel):
     '''
     simkey = 'mrg'
     is_myelinated = True
+    has_passive_sections = True
     _pneuron = getPointNeuron('MRGnode')
     _rs = 70.0                      # axoplasm resistivity (Ohm.cm)
     _nodeL = 1e-6                   # node length (m)

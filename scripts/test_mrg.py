@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-03 18:02:39
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-27 16:26:48
+# @Last Modified time: 2020-08-03 23:00:57
 
 import logging
 import matplotlib.pyplot as plt
@@ -28,7 +28,7 @@ fiber_variants = {
 source_funcs = [
     lambda fiber: ExtracellularCurrent((0., 100e-6), rho=(300., 1200.)),
     lambda fiber: IntracellularCurrent(fiber.central_ID)]
-pp = PulsedProtocol(100e-6, 3e-3, tstart=0.1e-3)  # s
+pp = PulsedProtocol(100e-6, 3e-3)  # s
 
 # Simulations
 for source_func in source_funcs:

@@ -3,13 +3,13 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-07-21 18:47:39
+# @Last Modified time: 2020-08-04 19:06:34
 
 import abc
 import numpy as np
 from scipy.optimize import brentq
 
-from PySONIC.utils import rotAroundPoint2D, gaussian, isIterable
+from PySONIC.utils import logger, rotAroundPoint2D, gaussian, isIterable
 from PySONIC.core.stimobj import StimObject
 from PySONIC.core.drives import *
 
@@ -179,7 +179,7 @@ class GaussianSource(XSource):
 
     def computeDistributedAmps(self, fiber):
         if fiber.length < MIN_FIBERL_FWHM_RATIO * self.FWHM:
-            raise ValueError('fiber is too short w.r.t stimulus FWHM')
+            logger.warning('fiber is too short w.r.t stimulus FWHM')
         return {k: gaussian(v, mu=self.x0, sigma=self.sigma, A=self.xvar)
                 for k, v in fiber.getXCoords().items()}
 

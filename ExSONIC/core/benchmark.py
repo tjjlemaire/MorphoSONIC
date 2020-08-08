@@ -3,18 +3,17 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-06-29 18:11:24
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-07-22 15:20:50
+# @Last Modified time: 2020-08-04 17:53:30
 
 import os
 import numpy as np
 from scipy.integrate import odeint
 import matplotlib.pyplot as plt
 
-from PySONIC.core import EffectiveVariablesLookup, AcousticDrive
+from PySONIC.core import EffectiveVariablesLookup
 from PySONIC.utils import logger, timer, isWithin, bounds
 from PySONIC.plt import XYMap
 from PySONIC.neurons import passiveNeuron
-from PySONIC.plt import GroupedTimeSeries
 from PySONIC.threshold import threshold
 
 
@@ -24,7 +23,7 @@ class SonicBenchmark:
         capacitive drive.
     '''
 
-    npc = 40  # number of samples per cycle
+    npc = 1000  # number of samples per cycle
     varunits = {
         't': 'ms',
         'Cm': 'uF/cm2',
@@ -142,6 +141,16 @@ class SonicBenchmark:
         return self.pneuron.gLeak * 1e-1
 
     @property
+    def Cmeff(self):
+        ''' Analytical solution for effective membrane capacitance (uF/cm2). '''
+        return np.sqrt(1 - np.array(self.gamma_pair)**2)
+
+    @property
+    def Qminf_SONIC(self):
+        ''' Analytical solution for steady-state charge density (nC/cm2). '''
+        return self.pneuron.ELeak * self.Cmeff
+
+    @property
     def Vm0(self):
         ''' Resting membrane potential (mV). '''
         return self.pneuron.Vm0
@@ -164,15 +173,10 @@ class SonicBenchmark:
         return EffectiveVariablesLookup({'Q': self.Qref}, tables)
 
     def computeLookups(self):
-        # Compute lookups over 1 cycle
-        Cmeff = []
+        ''' Compute benchmark lookups. '''
         self.lkps = []
-        for gamma in self.gamma_pair:
-            Cm_cycle = self.capct(gamma, self.tcycle)    # uF/cm2
-            Cmeff.append(1 / np.mean(1 / Cm_cycle))  # uF/cm2
-            if not self.passive:
-                self.lkps.append(self.getLookup(Cm_cycle))
-        self.Cmeff = np.array(Cmeff)
+        if not self.passive:
+            self.lkps = [self.getLookup(Cm_cycle) for Cm_cycle in self.vCapct(self.tcycle)]
 
     @property
     def dt_full(self):
@@ -325,6 +329,10 @@ class SonicBenchmark:
         tavg = t[::self.npc]  # + 0.5 / self.f
         return tavg, solavg
 
+    def computeGradient(self, sol):
+        ''' compute the gradient of a solution array. '''
+        return {k: np.vstack((y, np.diff(y, axis=0))) for k, y in sol.items()}
+
     def g2tau(self, g):
         ''' Convert conductance per unit membrane area (mS/cm2) to time constant (ms). '''
         return (self.pneuron.Cm0 * 1e2) / g  # ms
@@ -370,7 +378,7 @@ class SonicBenchmark:
 
     def getPassiveTstop(self, f_US):
         ''' Compute minimum simulation time for a passive model (ms). '''
-        return 5 * max(self.taum, self.tauax, 1 / f_US)
+        return 5 * max(self.taum, self.tauax, 2 / f_US)
 
     @property
     def passive_tstop(self):
@@ -385,7 +393,15 @@ class SonicBenchmark:
             t[method], sol[method] = self.simulate(method, tstop)
         # Cycle average full solution
         t['cycle-avg'], sol['cycle-avg'] = self.cycleAvg(t['full'], sol['full'])
-        return t, sol
+
+        # Compute gradients
+        new_sol = {}
+        for key in ['full', 'cycle-avg', 'effective']:
+            new_sol[key] = self.computeGradient(sol[key])
+            # for ykey, yarray in sol[key].items():
+            # new_sol[key] = sol[key]
+        # sol = {k: sol[k] for k in ['full', 'cycle-avg', 'effective']}
+        return t, new_sol
 
     def isExcited(self, gamma, tstop, method):
         ''' Simulate with SONIC paradigm for a given gamma-tstop combination, and check
@@ -402,10 +418,10 @@ class SonicBenchmark:
         logger.info(f'running {method} titration for f = {self.f:.0f} kHz')
         return threshold(lambda x: self.isExcited(x, tstop, method), (0., 1.))
 
-    def plot(self, t, sol, Qonly=False):
+    def plot(self, t, sol, Qonly=False, gradient=False):
         ''' Plot results of benchmark simulations of the model. '''
-        colors = ['C0', 'C1']
-        markers = ['-', '--', '-.']
+        colors = ['C0', 'C1', 'darkgrey']
+        markers = ['-', '--', '-']
         alphas = [0.5, 1., 1.]
         if Qonly:
             sol = {key: {'Qm': value['Qm']} for key, value in sol.items()}
@@ -421,11 +437,19 @@ class SonicBenchmark:
         for ax, k in zip(axes, sol[list(sol.keys())[0]].keys()):
             ax.set_ylabel(f'{k} ({self.varunits.get(k, "-")})')
             if k == 'Qm':
-                ax.set_ylim(-250.0, 50.)
+                for Qm, c in zip(self.Qminf_SONIC, colors):
+                    ax.axhline(Qm, c=c, linestyle=':')
+                if gradient:
+                    ax.axhline(np.diff(self.Qminf_SONIC), c=colors[-1], linestyle=':')
+            # if k == 'Qm':
+            #     ax.set_ylim(-250.0, 50.)
 
+        lbls = self.nodelabels
+        if gradient:
+            lbls.append('gradient')
         for m, alpha, (key, varsdict) in zip(markers, alphas, sol.items()):
             for ax, (k, v) in zip(axes, varsdict.items()):
-                for y, c, lbl in zip(v, colors, self.nodelabels):
+                for y, c, lbl in zip(v, colors, lbls):
                     ax.plot(t[key], y, m, alpha=alpha, c=c, label=f'{lbl} - {key}')
         fig.subplots_adjust(bottom=0.2)
         axes[-1].legend(
@@ -436,7 +460,7 @@ class SonicBenchmark:
     def plotV(self, t, sol):
         ''' Plot results of benchmark simulations of the model. '''
         colors = ['C0', 'C1']
-        markers = ['-', '--', '-.']
+        markers = ['-', '--', '-']
         alphas = [0.5, 1., 1.]
         V = {key: value['Qm'] / self.Cm0 for key, value in sol.items()}
         fig, ax = plt.subplots(figsize=(10, 3))
@@ -463,6 +487,9 @@ class SonicBenchmark:
         '''
         # Compute matrix of charge density differences, normalized by resting capacitance
         dV_mat = (sol['effective']['Qm'] - sol['cycle-avg']['Qm']) / self.Cm0  # mV
+
+        # Keep only the first two rows (3rd one, if any, is a gradient)
+        dV_mat = dV_mat[:2, :]
 
         # Remove first index and take absolute value
         dV_mat = np.abs(dV_mat[:, 1:])
@@ -594,7 +621,7 @@ class TauDivergenceMap(DivergenceMap):
         return fig
 
 
-class DriveDivergenceMap(DivergenceMap):
+class OldDriveDivergenceMap(DivergenceMap):
     ''' Divergence map of a specific (membrane model, axial coupling) pairfor various
         combinations of drive frequencies and drive amplitudes.
     '''
@@ -656,57 +683,4 @@ class DriveDivergenceMap(DivergenceMap):
         fig = super().render(xscale=xscale, **kwargs)
         if thresholds:
             self.addThresholdCurves(fig.axes[0])
-        return fig
-
-
-class GammaMap(XYMap):
-    ''' Interface to a 2D map showing relative capacitance oscillation amplitude
-        resulting from BLS simulations at various frequencies and amplitude.
-    '''
-    xkey = 'f_US'
-    xfactor = 1e0
-    xunit = 'kHz'
-    ykey = 'A'
-    yfactor = 1e0
-    yunit = 'kPa'
-    zkey = 'gamma'
-    zfactor = 1e0
-    zunit = '-'
-    suffix = 'gamma'
-
-    def __init__(self, root, bls, freqs, amps):
-        self.bls = bls.copy()
-        super().__init__(root, freqs, amps)
-
-    @property
-    def title(self):
-        return f'Gamma map - {self.bls}'
-
-    def corecode(self):
-        return f'gamma_map_bls{self.bls.a * 1e9:.0f}nm'
-
-    def compute(self, x):
-        f, A = x
-        data, meta = self.bls.simulate(AcousticDrive(f * 1e3, A * 1e3), 0.)
-        Cm = self.bls.v_capacitance(data['Z'])
-        gamma = np.ptp(Cm) / (2 * self.bls.Cm0)
-        logger.info(f'f = {f:.2f} kHz, A = {A:.2f} kPa, gamma = {gamma:.2f}')
-        return gamma
-
-    def onClick(self, event):
-        ''' Execute action when the user clicks on a cell in the 2D map. '''
-        x = self.getOnClickXY(event)
-        f, A = x
-        out = self.bls.simulate(AcousticDrive(f * 1e3, A * 1e3), 0.)
-        GroupedTimeSeries([out]).render()
-        plt.show()
-
-    def render(self, xscale='log', yscale='log', figsize=(6, 4), fs=12, **kwargs):
-        fig = super().render(xscale=xscale, yscale=yscale, figsize=figsize, fs=fs, **kwargs)
-        levels = [0.1, 0.3, 0.5, 0.7]
-        colors = ['w', 'k', 'k', 'k']
-        ax = fig.axes[0]
-        CS = ax.contour(
-            self.xvec, self.yvec, self.getOutput(), levels, colors=colors)
-        ax.clabel(CS, fontsize=fs, fmt=lambda x: f'{x:g}', inline_spacing=2)
         return fig
