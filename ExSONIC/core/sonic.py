@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-30 21:40:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-08-07 20:11:45
+# @Last Modified time: 2020-08-18 15:54:15
 
 import numpy as np
 
@@ -12,7 +12,7 @@ from PySONIC.utils import logger, isWithin
 
 from ..constants import *
 from ..utils import array_print_options
-from .sources import AcousticSource
+from .sources import AcousticSource, GammaSource
 from .pyhoc import *
 from .cgi_network import HybridNetwork
 
@@ -414,9 +414,12 @@ def addSonicFeatures(Base):
             self.network.startLM()
             super().initToSteadyState()
 
+        def isDynamicCmSource(self, source):
+            return isinstance(source, AcousticSource)
+
         def setDrives(self, source):
             is_dynamic_cm = False
-            if isinstance(source, AcousticSource):
+            if self.isDynamicCmSource(source):
                 self.checkForSonophoreRadius()
                 self.setFuncTables(source.f)
                 is_dynamic_cm = True
@@ -487,6 +490,7 @@ def addSonicFeatures(Base):
 
         def __init__(self, *args, detailed=False, **kwargs):
             self.detailed = detailed
+            self.setSinusCmLookup()
             super().__init__(*args, **kwargs)
 
         def __repr__(self):
@@ -503,98 +507,99 @@ def addSonicFeatures(Base):
         def pyQref(self):
             return np.arange(*self.pneuron.Qbounds, 1e-5)  # C/cm2
 
+        @property
+        def pygammaref(self):
+            return np.linspace(0.0, 0.9, 21)  # (-)
+
         def reltvec(self, n):
             return np.linspace(0., 1., n)  # (-)
 
+        @property
+        def pytref(self):
+            return self.reltvec(self.NPC)  # (-)
+
         def setSinusCmLookup(self):
             ''' Set generic, sinusoidal Cm lookup. '''
-            self.pyAref = np.hstack([[0.], np.logspace(3, 6, 20)])  # Pa
-            gammas = np.linspace(0.0, 0.9, 21)  # (-)
-            self.pytref = self.reltvec(self.NPC)  # (-)
-            self.pyCmref = np.array([self.sinCapct(g, self.pytref) for g in gammas])  # F/m2
+            self.pyCmref = np.array([
+                self.sinCapct(g, self.pytref) for g in self.pygammaref])  # F/m2
 
-        def setDetailedCmLookup(self, f):
-            ''' Set detailed Cm lookup for a specific frequency. '''
-            Cm_lkp = self.nbls.Cm_lkp.project('f', f)
-            self.pyAref = Cm_lkp.refs['A']  # Pa
-            Cm_dense = Cm_lkp['Cm_rel'] * self.pneuron.Cm0  # F/m2
-            t_dense = self.reltvec(Cm_dense.shape[1])  # (-)
-            self.pytref = self.reltvec(self.NPC)  # (-)
-            self.pyCmref = np.array([np.interp(self.pytref, t_dense, y) for y in Cm_dense])  # F/m2
+        # def setDetailedCmLookup(self, f):
+        #     ''' Set detailed Cm lookup for a specific frequency. '''
+        #     Cm_lkp = self.nbls.Cm_lkp.project('f', f)
+        #     self.pyAref = Cm_lkp.refs['A']  # Pa
+        #     Cm_dense = Cm_lkp['Cm_rel'] * self.pneuron.Cm0  # F/m2
+        #     t_dense = self.reltvec(Cm_dense.shape[1])  # (-)
+        #     self.pytref = self.reltvec(self.NPC)  # (-)
+        #     self.pyCmref = np.array([np.interp(self.pytref, t_dense, y) for y in Cm_dense])  # F/m2
 
         def getPyLookup(self, Cmcycles):
             ''' On-the-fly (A, Q)-dependent lookup generation. '''
+            # Get reference tables, inverse-scaling gamma-ref to cancel out
+            # downstream scaling in Py2ModLookup
+            refs = {'A': self.pygammaref / PA_TO_KPA, 'Q': self.pyQref}
+            # Compute 3D (A, Q, t) voltage matrix
             Vm_3d = np.array([[Q / Cm * V_TO_MV for Q in self.pyQref] for Cm in Cmcycles])  # mV
+            # Compute effective variables as average across t-dimension
             tables = {
                 'V': np.mean(Vm_3d, axis=-1),  # mV
                 **{
                     k: np.mean(np.vectorize(v)(Vm_3d), axis=-1)  # s-1
                     for k, v in self.pneuron.effRates().items()}
             }
-            return EffectiveVariablesLookup({'A': self.pyAref, 'Q': self.pyQref}, tables)
+            # Build and return lookup object
+            return EffectiveVariablesLookup(refs, tables)
 
         def weightedCmref(self, fs):
             return self.nbls.spatialAverage(fs, self.pyCmref, self.pneuron.Cm0)
 
         def setPyLookup(self, f=None):
             ''' Set lookup depending on simulation level. '''
-            # Set Cm lookups
+            # If f is given, assign it to all section mechanisms and store reference
             if f is not None:
-                self.setSinusCmLookup()
                 for sec in self.seclist:
                     sec.setMechValue('Fdrive', f * HZ_TO_KHZ)  # kHz
                 self.fref = f
-            else:
-                self.setSinusCmLookup()
-
             # Set python lookups
-            if self.detailed:  # if detailed -> use neuron's original lookup at A = 0
+            if self.detailed:  # If detailed simulation
+                # Use neuron's original lookup at A = 0 for all sections
                 self.pylkp = self.getBaselineLookup()
+                # Divide lookup Q-ref by resting capacitance to obtain voltage-based lookup
                 self.pylkp.refs['Q'] /= (self.pneuron.Cm0 * F_M2_TO_UF_CM2)  # 1e-2 V
                 if self.has_passive_sections:
                     self.inter_pylkp = self.pylkp.copy()
-            else:  # otherwise, generate lookups from Cm cycles with section-specific normalization
-                # pylkp: normalize by nodal fs
+            else:  # If coarse-grained simulation
+                # Generate lookups from Cm cycles with section-specific normalization
                 self.pylkp = self.getPyLookup(self.weightedCmref(self.fs))
                 if self.has_passive_sections:
-                    # interpylkp: normalize by internodal fs
                     self.inter_pylkp = self.getPyLookup(self.weightedCmref(self.inter_fs))
 
-        def setUSDrives(self, gamma_dict):
+        @property
+        def drive_funcs(self):
+            return {**super().drive_funcs, GammaSource: self.setGammaDrives}
+
+        def isDynamicCmSource(self, source):
+            return isinstance(source, (GammaSource, AcousticSource))
+
+        def setGammaDrives(self, gamma_dict):
+            ''' Set gamma drives depending on simulation level. '''
             logger.debug(f'Gammas:')
             with np.printoptions(**array_print_options):
                 for k, gammas in gamma_dict.items():
                     logger.debug(f'{k}: gamma = {gammas}')
-
+            for k, gammas in gamma_dict.items():
+                for gamma, sec in zip(gammas, self.sections[k].values()):
+                    sec.setMechValue('Adrive', gamma)
             if self.detailed:
-                self.Aref2 = h.Vector(self.pyAref * PA_TO_KPA)  # kPa
+                self.gammaref = h.Vector(self.pygammaref)  # (-)
                 self.tref = h.Vector(self.pytref / self.fref * S_TO_MS)  # ms
-                self.Cmref = Matrix.from_array(
-                    self.weightedCmref(self.fs) * F_M2_TO_UF_CM2)
-                self.setFuncTable(
-                    self.mechname, 'Cm_table', self.Cmref, self.Aref2, self.tref)
+                self.Cmref = Matrix.from_array(self.weightedCmref(self.fs) * F_M2_TO_UF_CM2)
+                self.setFuncTable(self.mechname, 'Cm_table', self.Cmref, self.gammaref, self.tref)
                 if self.has_passive_sections:
                     self.interCmref = Matrix.from_array(
                         self.weightedCmref(self.inter_fs) * F_M2_TO_UF_CM2)
-                    self.setFuncTable(
-                        CUSTOM_PASSIVE_MECHNAME, 'Cm_table', self.interCmref, self.Aref2, self.tref)
+                    self.setFuncTable(CUSTOM_PASSIVE_MECHNAME, 'Cm_table', self.interCmref,
+                                      self.gammaref, self.tref)
             return []
-
-            gamma_lkp = self.nbls.gamma_lkp.project('f', self.fref * HZ_TO_KHZ)
-            gamma_dict = {k: gamma_lkp.interpVar1D(v * self.coverages[k] * PA_TO_KPA, 'gamma')
-                          for k, v in A_dict.items()}
-
-            for k, gammas in gamma_dict.items():
-                for gamma, sec in zip(gammas, self.sections[k].values()):
-                    sec.setMechValue('Adrive', gamma * PA_TO_KPA)
-            if self.detailed:
-                self.gammaref = h.Vector(self.gammas * PA_TO_KPA)
-                self.tref = h.Vector(self.tcycle / self.fref * S_TO_MS)  # ms
-                self.Cmref = Matrix.from_array(self.Cm_2d * F_M2_TO_UF_CM2)
-                self.setFuncTable(self.mechname, 'Cm_table', self.Cmref, self.gammaref, self.tref)
-                if self.has_passive_sections:
-                    self.setFuncTable(
-                        CUSTOM_PASSIVE_MECHNAME, 'Cm_table', self.Cmref, self.gammaref, self.tref)
 
         def simulate(self, source, pp):
             ''' adapt time step to simulation level. '''

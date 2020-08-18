@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-08-07 16:34:35
+# @Last Modified time: 2020-08-18 10:16:47
 
 import abc
 from neuron import h
@@ -1045,6 +1045,12 @@ class FiberNeuronModel(SpatiallyExtendedNeuronModel):
 
     def getXCoords(self):
         return {k: getattr(self, f'get{k.title()}Coords')() for k in self.sections.keys()}
+
+    def getXBounds(self):
+        xcoords = self.getXCoords()
+        xmin = min(v.min() for v in xcoords.values())
+        xmax = max(v.max() for v in xcoords.values())
+        return xmin, xmax
 
     @property
     def z(self):

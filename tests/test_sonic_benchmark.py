@@ -3,14 +3,14 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-08-07 20:09:58
+# @Last Modified time: 2020-08-18 15:52:21
 
 import logging
 import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
 
 from PySONIC.core import PulsedProtocol
 from PySONIC.utils import logger
-
 from ExSONIC.core import SennFiber, UnmyelinatedFiber, MRGFiber
 from ExSONIC.core.sources import *
 from ExSONIC.plt import SectionCompTimeSeries, mergeFigs, plotFieldDistribution
@@ -19,37 +19,58 @@ from ExSONIC.plt import SectionCompTimeSeries, mergeFigs, plotFieldDistribution
 logger.setLevel(logging.DEBUG)
 
 
-def compareResponses(fiber, source, pp, varkeys, **kwargs):
-    # Run simulations and cycle-average solutions
+def getDualCmap(cmap_key):
+    ''' Restrict a qualitative colormap to its first 2 colors. '''
+    return LinearSegmentedColormap.from_list(
+        cmap_key, plt.get_cmap(cmap_key).colors[:2])
+
+
+def getLinearGammaSource(fiber, gamma_bounds, **kwargs):
+    ''' Generate a linear gamma source along a fiber. '''
+    xmin, xmax = fiber.getXBounds()
+    m = np.diff(gamma_bounds) / (xmax - xmin)
+    p = gamma_bounds[0] - m * xmin
+    gamma_dict = {k: m * v + p for k, v in fiber.getXCoords().items()}
+    return GammaSource(gamma_dict, **kwargs)
+
+
+def cycleAverageSolution(data, fiber, source):
+    ''' Cycle-average a simulation output '''
+    cavg_data = data.cycleAveraged(1 / source.f)
+    cavg_data.prepend()
+    for sectionk in cavg_data.keys():
+        cavg_data[sectionk]['Vm'][0] = fiber.pneuron.Vm0
+        cavg_data[sectionk]['Cm'][0] = fiber.pneuron.Cm0
+    return cavg_data
+
+
+def compareSolutions(fiber, source, pp, varkeys, **kwargs):
+    ''' Run SONIC and full simulations and compare outputs. '''
+    # Run simulations
     detailed = {'sonic': False, 'full': True}
     data, meta = {}, {}
     for k, v in detailed.items():
         data[k], meta[k] = fiber.benchmark(detailed=v).simulate(source, pp)
-        cavg_spdf = data[k].cycleAveraged(1 / source.f)
-        cavg_spdf.prepend()
-        for sectionk in cavg_spdf.keys():
-            cavg_spdf[sectionk]['Vm'][0] = fiber.pneuron.Vm0
-            cavg_spdf[sectionk]['Cm'][0] = fiber.pneuron.Cm0
-        data[f'cycle-avg-{k}'] = cavg_spdf
-        meta[f'cycle-avg-{k}'] = meta[k]
+
+    # Cycle-average full solution
+    k = 'full'
+    data[f'cycle-avg-{k}'] = cycleAverageSolution(data[k], fiber, source)
+    meta[f'cycle-avg-{k}'] = meta[k]
 
     # Generate comparison figures
     for i, vk in enumerate(varkeys):
         figs = {}
         for k, d in data.items():
             figs[k] = SectionCompTimeSeries([(d, meta[k])], vk, fiber.nodes.keys()).render(**kwargs)
-        fig = mergeFigs(figs['full'], figs['sonic'], alpha=0.2, inplace=True)
+        fig = mergeFigs(
+            figs['full'], figs['cycle-avg-full'], figs['sonic'],
+            alphas=[0.2, 1.0, 1.0], linestyles=['-', '--', '-'], inplace=True)
         fig.axes[0].set_title(f'{vk} - comparison')
 
-        fig = mergeFigs(figs['cycle-avg-full'], figs['cycle-avg-sonic'], alpha=1.0, inplace=True)
-        fig.axes[0].set_title(f'{vk} - cycle-avg-comparison')
 
-
-# Acoustic source
-Fdrive = 500e3  # Hz
-Adrive = 300e3  # Pa
-sigma = GaussianAcousticSource.from_FWHM(1e-3)  # m
-source = GaussianAcousticSource(0., sigma=sigma, f=Fdrive, A=Adrive)
+# Gamma source
+Fdrive = 500e3             # Hz
+gamma_bounds = (0.8, 0.1)  # (-)
 
 # Pulsing protocol
 pp = PulsedProtocol(1e-3, 0.1e-3)
@@ -60,15 +81,14 @@ varkeys = ['Qm', 'Vm']
 # Fiber models
 a = 32e-9       # m
 fs = 1.
-# fiber = SennFiber(10e-6, 5, a=a, fs=fs)
-fiber = UnmyelinatedFiber(0.8e-6, nnodes=2, a=a, fs=fs)
-# fs_range = [0.1, 0.2, 0.5, 1.0]
-fiber = MRGFiber(10e-6, 2, a=a, fs=fs, inter_fs=0.1)
-# compareResponses(fiber, source, pp, varkeys)
-# inter_fs = 0.5
-# for inter_fs in [0.01, 0.5, 1.0]:
-#     fiber = MRGFiber(10e-6, 2, a=a, fs=fs, inter_fs=inter_fs)
+inter_fs = 0.1
+nnodes = 2
+fiber = SennFiber(10e-6, nnodes, a=a, fs=fs)
+# fiber = UnmyelinatedFiber(0.8e-6, nnodes=nnodes, a=a, fs=fs)
+# fiber = MRGFiber(10e-6, 2, a=a, fs=fs, inter_fs=inter_fs)
+
+source = getLinearGammaSource(fiber, gamma_bounds, f=Fdrive)
 plotFieldDistribution(fiber, source)
-compareResponses(fiber, source, pp, varkeys, cmap='tab10')
+compareSolutions(fiber, source, pp, varkeys, cmap=getDualCmap('tab10'))
 
 plt.show()

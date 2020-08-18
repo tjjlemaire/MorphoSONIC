@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-08-06 18:21:45
+# @Last Modified time: 2020-08-18 15:45:24
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -293,7 +293,8 @@ def plotFieldDistribution(fiber, source, fs=12):
     for c, (k, xcoords) in zip(colors, xcoords.items()):
         ax.plot(xcoords * M_TO_MM, field_dict[k] * yfactor, '.', label=k, c=c)
     ylims = ax.get_ylim()
-    if source.xvar < 0.:
+    xvar = source.xvar
+    if (isinstance(xvar, float) and xvar < 0.) or (isinstance(xvar, np.ndarray) and any(xvar < 0.)):
         ax.set_ylim(ylims[0], -0.05 * ylims[0])
     else:
         ax.set_ylim(-0.05 * ylims[1], ylims[1])
@@ -487,18 +488,21 @@ def plotTimeseries0Dvs1D(pneuron, a, cov, rs, deff, drive, pp, figsize=(8, 6), f
     return fig
 
 
-def mergeFigs(detailed_fig, coarse_fig, alpha=0.2, inplace=False):
-    ''' Merge the content of two figures in a single figure. '''
-    new_fig, new_ax = plt.subplots(figsize=detailed_fig.get_size_inches())
-    mirrorAxis(detailed_fig.axes[0], new_ax)
-    for l in detailed_fig.axes[0].get_lines():
-        new_ax.plot(l.get_data()[0], l.get_data()[1], c=l.get_color(), alpha=alpha)
-    for l in coarse_fig.axes[0].get_lines():
-        new_ax.plot(l.get_data()[0], l.get_data()[1], '--', c=l.get_color())
-    if hasattr(detailed_fig, 'sm'):
+def mergeFigs(*figs, linestyles=None, alphas=None, inplace=False):
+    ''' Merge the content of several figures in a single figure. '''
+    if alphas is None:
+        alphas = [1] * len(figs)
+    if linestyles is None:
+        linestyles = ['-'] * len(figs)
+    new_fig, new_ax = plt.subplots(figsize=figs[0].get_size_inches())
+    mirrorAxis(figs[0].axes[0], new_ax)
+    for fig, ls, alpha in zip(figs, linestyles, alphas):
+        for l in fig.axes[0].get_lines():
+            new_ax.plot(l.get_data()[0], l.get_data()[1], ls, c=l.get_color(), alpha=alpha)
+    if hasattr(figs[0], 'sm'):
         cbarax = new_fig.add_axes([0.85, 0.15, 0.03, 0.8])
-        mirrorAxis(detailed_fig.axes[1], cbarax)
-        nvalues = len(coarse_fig.axes[0].get_lines())
+        mirrorAxis(figs[0].axes[1], cbarax)
+        nvalues = len(figs[0].axes[0].get_lines())
         comp_values = list(range(nvalues))
         cbar_kwargs = {}
         bounds = np.arange(nvalues + 1) + min(comp_values) - 0.5
@@ -507,9 +511,9 @@ def mergeFigs(detailed_fig, coarse_fig, alpha=0.2, inplace=False):
             ticks = [ticks[0], ticks[-1]]
         cbar_kwargs.update({'ticks': ticks, 'boundaries': bounds, 'format': '%1i'})
         cbarax.tick_params(axis='both', which='both', length=0)
-        new_fig.colorbar(detailed_fig.sm, cax=cbarax, **cbar_kwargs)
+        new_fig.colorbar(figs[0].sm, cax=cbarax, **cbar_kwargs)
         cbarax.set_ylabel('node index')
     if inplace:
-        plt.close(detailed_fig)
-        plt.close(coarse_fig)
+        for fig in figs:
+            plt.close(fig)
     return new_fig

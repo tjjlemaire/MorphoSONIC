@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-08-04 19:06:34
+# @Last Modified time: 2020-08-18 14:38:06
 
 import abc
 import numpy as np
@@ -182,6 +182,51 @@ class GaussianSource(XSource):
             logger.warning('fiber is too short w.r.t stimulus FWHM')
         return {k: gaussian(v, mu=self.x0, sigma=self.sigma, A=self.xvar)
                 for k, v in fiber.getXCoords().items()}
+
+    def computeSourceAmp(self, fiber, A):
+        return A
+
+
+class GammaSource(XSource):
+
+    def __init__(self, gamma_dict, f=None):
+        self.gamma_dict = gamma_dict
+        self.f = f
+
+    def copy(self):
+        return self.__class__(self.gamma_dict, f=self.f)
+
+    @property
+    def gamma_dict(self):
+        return self._gamma_dict
+
+    @gamma_dict.setter
+    def gamma_dict(self, value):
+        self._gamma_dict = value
+
+    @property
+    def gamma_range(self):
+        gamma_min = min(v.min() for v in self.gamma_dict.values())
+        gamma_max = max(v.max() for v in self.gamma_dict.values())
+        return gamma_min, gamma_max
+
+    @property
+    def xvar(self):
+        return self.gamma_range[1]
+
+    @staticmethod
+    def inputs():
+        return {
+            'gamma_range': {
+                'desc': 'gamma range',
+                'label': 'gamma',
+                'unit': '',
+                'precision': 2
+            }
+        }
+
+    def computeDistributedAmps(self, fiber):
+        return self.gamma_dict
 
     def computeSourceAmp(self, fiber, A):
         return A
