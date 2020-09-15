@@ -3,8 +3,9 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-08-18 15:52:21
+# @Last Modified time: 2020-08-18 16:24:54
 
+import sys
 import logging
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
@@ -65,30 +66,42 @@ def compareSolutions(fiber, source, pp, varkeys, **kwargs):
         fig = mergeFigs(
             figs['full'], figs['cycle-avg-full'], figs['sonic'],
             alphas=[0.2, 1.0, 1.0], linestyles=['-', '--', '-'], inplace=True)
-        fig.axes[0].set_title(f'{vk} - comparison')
+        fig.axes[0].set_title(f'{fiber.__class__.__name__} - {vk} comparison')
 
 
-# Gamma source
-Fdrive = 500e3             # Hz
-gamma_bounds = (0.8, 0.1)  # (-)
+if __name__ == '__main__':
 
-# Pulsing protocol
-pp = PulsedProtocol(1e-3, 0.1e-3)
+    # Fiber parameters
+    a = 32e-9       # m
+    fs = 1.
+    inter_fs = 0.1
+    nnodes = 2
 
-# Plot params
-varkeys = ['Qm', 'Vm']
+    # US parameters
+    Fdrive = 500e3  # Hz
 
-# Fiber models
-a = 32e-9       # m
-fs = 1.
-inter_fs = 0.1
-nnodes = 2
-fiber = SennFiber(10e-6, nnodes, a=a, fs=fs)
-# fiber = UnmyelinatedFiber(0.8e-6, nnodes=nnodes, a=a, fs=fs)
-# fiber = MRGFiber(10e-6, 2, a=a, fs=fs, inter_fs=inter_fs)
+    # Plot params
+    varkeys = ['Qm', 'Vm']
 
-source = getLinearGammaSource(fiber, gamma_bounds, f=Fdrive)
-plotFieldDistribution(fiber, source)
-compareSolutions(fiber, source, pp, varkeys, cmap=getDualCmap('tab10'))
+    # Fiber model
+    fiber_type = sys.argv[1]
+    if fiber_type == 'senn':
+        fiber = SennFiber(10e-6, nnodes, a=a, fs=fs)
+    elif fiber_type == 'mrg':
+        fiber = MRGFiber(10e-6, nnodes, a=a, fs=fs, inter_fs=inter_fs)
+    elif fiber_type == 'sundt':
+        fiber = UnmyelinatedFiber(0.8e-6, nnodes=nnodes, a=a, fs=fs)
+    else:
+        logger.error(f'Unknown fiber type: {fiber_type}')
+        quit()
 
-plt.show()
+    # Fiber-dependent parameters
+    tstim = 1e-3 if fiber.is_myelinated else 10e-3                     # s
+    gamma_bounds = (0.8, 0.1) if fiber.is_myelinated else (0.8, 0.75)  # (-)
+
+    # Define source, pp and run comparative simulations
+    source = getLinearGammaSource(fiber, gamma_bounds, f=Fdrive)
+    pp = PulsedProtocol(tstim, 0.1e-3)
+    compareSolutions(fiber, source, pp, varkeys, cmap=getDualCmap('tab10'))
+
+    plt.show()

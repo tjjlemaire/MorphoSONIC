@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-08-03 17:04:07
+# @Last Modified time: 2020-08-24 12:12:52
 
 import numpy as np
 
@@ -318,7 +318,8 @@ class TestFiberEstim(TestFiber):
 
         # Titrate for a specific duration and simulate fiber at threshold US amplitude
         logger.info(f'Running titration for {si_format(pp.tstim)}s pulse')
-        Vthr = fiber.titrate(source, pp)  # Pa
+        # Vthr = fiber.titrate(source, pp)  # Pa
+        Vthr = -100.0 / self.thr_factor
         data, meta = fiber.simulate(source.updatedX(self.thr_factor * Vthr), pp)
         plotFieldDistribution(fiber, source.updatedX(self.thr_factor * Vthr))
 

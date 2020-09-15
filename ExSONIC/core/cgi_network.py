@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-06-07 14:42:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-07-22 19:32:59
+# @Last Modified time: 2020-08-28 13:16:56
 
 import numpy as np
 from neuron import h, hclass
@@ -26,19 +26,6 @@ class SquareMatrix(Matrix):
         ''' Return empty matrix of identical shape. '''
         return SquareMatrix(self.nRow)
 
-    # def __new__(cls, n, mtype=MFULL):
-    #     ''' Instanciation. '''
-    #     return super(SquareMatrix, cls).__new__(cls, n, n, mtype)
-
-    # def __init__(self, n, mtype=MFULL):
-    #     ''' Instanciation. '''
-    #     self.mtype = mtype
-    #     super().__init__(n, n, mtype)
-
-    # def emptyClone(self):
-    #     ''' Return empty matrix of identical shape. '''
-    #     return SquareMatrix(self.nRow, self.mtype)
-
 
 class DiagonalMatrix(SquareMatrix):
     ''' Interface to a diagonal matrix. '''
@@ -53,18 +40,6 @@ class DiagonalMatrix(SquareMatrix):
             :param x: vector used to fill the diagonal.
         '''
         self.setdiag(0, h.Vector(x))
-
-    # def __new__(cls, x):
-    #     ''' Instanciation. '''
-    #     return super(DiagonalMatrix, cls).__new__(cls, x.size, mtype=MSPARSE)
-
-    # def __init__(self, x):
-    #     ''' Initialization.
-
-    #         :param x: vector used to fill the diagonal.
-    #     '''
-    #     super().__init__(x.size, mtype=MSPARSE)
-    #     self.setdiag(0, h.Vector(x))
 
 
 class ConductanceMatrix(SquareMatrix):
@@ -87,21 +62,6 @@ class ConductanceMatrix(SquareMatrix):
     def emptyClone(self):
         ''' Return empty matrix of identical shape. '''
         return ConductanceMatrix(self.Gvec)
-
-    # def __new__(cls, Gvec, links=None):
-    #     ''' Instanciation. '''
-    #     return super(ConductanceMatrix, cls).__new__(cls, Gvec.size, mtype=MFULL)
-
-    # def __init__(self, Gvec, links=None):
-    #     ''' Initialization.
-
-    #         :param Gvec: vector of reference conductances for each element (S)
-    #         :param links: list of paired indexes inicating links across nodes.
-    #     '''
-    #     super().__init__(Gvec.size, mtype=MFULL)
-    #     self.Gvec = Gvec
-    #     if links is not None:
-    #         self.setLinks(links)
 
     @property
     def Gvec(self):
@@ -162,10 +122,6 @@ class NormalizedConductanceMatrix(ConductanceMatrix):
     def __new__(cls, Gvec, *args, **kwargs):
         ''' Instanciation. '''
         return super(NormalizedConductanceMatrix, cls).__new__(cls, Gvec)
-
-    # def __new__(cls, Gvec, rnorm=None, **kwargs):
-    #     ''' Instanciation. '''
-    #     return super(NormalizedConductanceMatrix, cls).__new__(cls, Gvec, **kwargs)
 
     def __init__(self, Gvec, rnorm=None, cnorm=None, **kwargs):
         ''' Initialization.
@@ -544,7 +500,6 @@ class HybridNetwork:
     def setGlobalComponents(self):
         ''' Set the network's global components used by NEURON's linear Mechanism. '''
         self.C = SquareMatrix(self.size)  # capacitance matrix (mF/cm2)
-        # self.C = SquareMatrix(self.size, mtype=MSPARSE)  # capacitance matrix (mF/cm2)
         self.G = SquareMatrix(self.size)  # conductance matrix (S/cm2)
         self.y = h.Vector(self.size)      # charge density / extracellular voltage vector (mV)
         self.I = h.Vector(self.size)      # current vector (mA/cm2)
@@ -622,7 +577,7 @@ class HybridNetwork:
         ''' Feed network into a LinearMechanism object. '''
         # Set initial conditions vector
         self.y0 = h.Vector(self.size)
-        self.cm_over_time = np.zeros(self.nsec)
+        # self.cm_over_time = np.zeros(self.nsec)
         # Define linear mechanism arguments
         lm_args = [self.C, self.G, self.y, self.y0, self.I, self.sl, self.relx]
         # Add update callback for dynamic cm
@@ -642,7 +597,7 @@ class HybridNetwork:
         ''' Update capacitance-dependent network components. '''
         # Update membrane capacitance vector
         self.cm = np.array([sec.getCm(x=0.5) for sec in self.seclist])
-        self.cm_over_time = np.vstack([self.cm_over_time, self.cm])
+        # self.cm_over_time = np.vstack([self.cm_over_time, self.cm])
 
         # Modify Gacm matrix accordingly
         self.Gacm.setCNorm(self.cm)
@@ -657,7 +612,7 @@ class HybridNetwork:
             :return: axial current density vector (mA/cm2)
         '''
         Ga = self.Gacm.scaled(rnorm=np.ones(self.nsec))  # S/cm2
-        return -np.array(Ga.mulv(h.Vector(Vi)).to_python())
+        return np.array(Ga.mulv(h.Vector(Vi)).to_python())
 
     def updateIax(self):
         ''' Update axial currents as an explicit current vector contribution. '''

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 14:38:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-08-06 15:53:59
+# @Last Modified time: 2020-09-11 10:39:14
 
 import os
 import pickle
@@ -90,13 +90,19 @@ def getNmodlDir():
     return os.path.join(selfdir, 'nmodl')
 
 
-def chronaxie(durations, Ithrs):
+def chronaxie(durations, thrs):
     ''' Return chronaxie, i.e. stimulus duration for which threshold amplitude
         is twice the rheobase. '''
-    if np.all(Ithrs[np.logical_not(np.isnan(Ithrs))] < 0.):
-        Ithrs = -Ithrs
-    Irh = 2 * np.nanmin(Ithrs)   # rheobase current
-    return np.interp(Irh, Ithrs[::-1], durations[::-1])  # s
+    if np.all(thrs[np.logical_not(np.isnan(thrs))] < 0.):
+        thrs = -thrs
+
+    Ich = 2 * np.nanmin(thrs)   # rheobase current
+    return np.interp(Ich, thrs[::-1], durations[::-1], left=np.nan, right=np.nan)  # s
+
+
+def rheobase(thrs):
+    ''' Return rheobase. '''
+    return np.nanmin(np.abs(thrs))
 
 
 def WeissSD(t, tau_e, I0):

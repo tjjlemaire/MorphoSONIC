@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-30 21:40:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-08-18 15:54:15
+# @Last Modified time: 2020-08-28 17:30:46
 
 import numpy as np
 
@@ -196,6 +196,14 @@ def addSonicFeatures(Base):
                 return []
             else:
                 return [self.drive]
+
+        def setFuncTables(self, *args, **kwargs):
+            ''' Add V func table to passive sections, if any. '''
+            super().setFuncTables(*args, **kwargs)
+            if hasattr(self, 'has_passive_sections') and self.has_passive_sections:
+                logger.debug(f'setting {CUSTOM_PASSIVE_MECHNAME} function tables')
+                self.setFuncTable(
+                    CUSTOM_PASSIVE_MECHNAME, 'V', self.lkp['V'], self.Aref, self.Qref)
 
         def setUSDrive(self, drive):
             ''' Set US drive. '''
@@ -431,10 +439,10 @@ def addSonicFeatures(Base):
                 use_explicit_iax=self.use_explicit_iax)
             super().setDrives(source)
 
-        def needsFixedTimeStep(self, source):
-            if isinstance(source, AcousticSource):
-                return True
-            return super().needsFixedTimeStep(source)
+        # def needsFixedTimeStep(self, source):
+        #     if isinstance(source, AcousticSource):
+        #         return True
+        #     return super().needsFixedTimeStep(source)
 
         @property
         def Aranges(self):
@@ -444,27 +452,26 @@ def addSonicFeatures(Base):
             return d
 
         def computeIax(self, Vi_dict):
-            ''' Compute axial currents based on dictionary of intracellular potential vectors. '''
+            ''' Compute axial currents based on dictionary of intracellular potential vectors.
+
+                :param Vi_dict: dictionary of intracellular potential vectors.
+                :return: dictionary of axial currents (mA/m2)
+            '''
             Vi_array = np.array([v for v in Vi_dict.values()])
-            iax_array = np.array([self.network.computeIax(Vi_vec) * 1e4 for Vi_vec in Vi_array.T]).T
+            iax_array = np.array([
+                self.network.computeIax(Vi_vec) * M_TO_CM**2 for Vi_vec in Vi_array.T]).T  # mA/m2
             return dict(zip(Vi_dict.keys(), iax_array))
 
         def addIaxToSolution(self, sp_ext_sol):
             ''' Add axial currents to solution. '''
             Vi_dict = {k: sol['Vin' if 'Vin' in sol else 'Vm'] for k, sol in sp_ext_sol.items()}
             for k, v in self.computeIax(Vi_dict).items():
-                sp_ext_sol[k]['iax'] = v
-
-        def addCmToSolution(self, sp_ext_sol):
-            ''' Add capacitance to solution. '''
-            for k, v in zip(sp_ext_sol.keys(), self.network.cm_over_time[1:-1].T):
-                sp_ext_sol[k]['Cm'] = v / F_M2_TO_UF_CM2
+                sp_ext_sol[k]['iax'] = v  # mA/m2
 
         def simulate(self, *args, **kwargs):
             ''' Add axial currents to solution. '''
             sp_ext_sol, meta = super().simulate(*args, **kwargs)
             self.addIaxToSolution(sp_ext_sol)
-            self.addCmToSolution(sp_ext_sol)
             return sp_ext_sol, meta
 
     # Choose subclass depending on input class

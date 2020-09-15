@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-07 22:32:09
+# @Last Modified time: 2020-08-20 17:14:53
 
 from PySONIC.core import PointNeuron, ElectricDrive
 from PySONIC.utils import logger
@@ -142,3 +142,14 @@ class DrivenNode(Node):
         meta = super().meta
         meta['Idrive'] = self.Idrive
         return meta
+
+
+@addSonicFeatures
+class PassiveNode(Node.__original__):
+
+    has_passive_sections = True
+
+    def createSections(self):
+        self.section = self.createSection('node', mech='pas', Cm0=self.pneuron.Cm0 * 1e2)
+        self.section.setPassiveG(self.pneuron.gLeak * 1e-4)  # S/cm2
+        self.section.setPassiveE(self.pneuron.Vm0)  # mV

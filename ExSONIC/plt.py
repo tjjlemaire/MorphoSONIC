@@ -3,14 +3,14 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-08-18 15:45:24
+# @Last Modified time: 2020-08-30 15:58:49
 
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import signal
 
 from PySONIC.plt import GroupedTimeSeries, CompTimeSeries, mirrorAxis
-from PySONIC.utils import logger, si_format, getPow10, rsquared
+from PySONIC.utils import logger, si_format, getPow10, rsquared, padleft, timeThreshold
 
 from .core import *
 from .utils import loadData, chronaxie
@@ -60,6 +60,11 @@ class SectionCompTimeSeries(CompTimeSeries):
         self.entry = filepath[0]
         self.model = None
         self.ref_meta = None
+        nsec = len(sections)
+        if nsec > NTRACES_MAX:
+            factor = int(np.ceil(nsec / NTRACES_MAX))
+            sections = sections[::factor]
+            logger.warning(f'Displaying only {len(sections)} traces out of {nsec}')
         super().__init__(sections, varname)
 
     def getModel(self, meta):
@@ -99,7 +104,6 @@ def thresholdCurve(fiber, x, thrs, thrs2=None,
                    yname='current', yfactor=1, yunit='A',
                    y2name='charge', y2factor=1, y2unit='C',
                    scale='log', plot_chr=True, fs=12, colors=None, limits=None, xlimits=None):
-
     if colors is None:
         colors = plt.get_cmap('tab10').colors
 
@@ -117,8 +121,12 @@ def thresholdCurve(fiber, x, thrs, thrs2=None,
         thrs = {k: -v for k, v in thrs.items()}
         if thrs2 is not None:
             thrs2 = {k: -v for k, v in thrs2.items()}
+    to_add = []
     for i, k in enumerate(thrs.keys()):
         ax.plot(x * xfactor, thrs[k] * yfactor, label=k, color=colors[i])
+        if any(np.isnan(thrs[k])):
+            ilastnan = np.where(np.isnan(thrs[k]))[0][-1]
+            to_add.append((x[ilastnan:ilastnan + 2], thrs[k][ilastnan + 1], colors[i]))
         if plot_chr:
             ax.axvline(chronaxie(x, thrs[k]) * xfactor, linestyle='-.', color=colors[i])
     if scale != 'log':
@@ -138,6 +146,8 @@ def thresholdCurve(fiber, x, thrs, thrs2=None,
             ymin = limits[0] * yfactor
             ymax = limits[1] * yfactor
         ax.set_ylim(ymin, ymax)
+    for xx, yy, cc in to_add:
+        ax.plot(xx * xfactor, [ax.get_ylim()[1], yy * yfactor], '--', color=cc)
     for item in ax.get_xticklabels() + ax.get_yticklabels():
         item.set_fontsize(fs)
     ax.legend(fontsize=fs / 1.8, frameon=False, loc='upper left', ncol=2)
@@ -517,3 +527,56 @@ def mergeFigs(*figs, linestyles=None, alphas=None, inplace=False):
         for fig in figs:
             plt.close(fig)
     return new_fig
+
+
+def plotPassiveCurrents(fiber, df):
+    # Extract time and currents vectors
+    t = df['t'].values
+    currents = fiber.getCurrentsDict(df)
+    inet = currents.pop('Net')
+
+    # Find time interval required to reach threshold charge build-up
+    dQnorm_thr = 5.  # mV
+    tthr = timeThreshold(t, df['Qm'].values / fiber.pneuron.Cm0 * V_TO_MV, dQnorm_thr)
+
+    # Plot currents temporal profiles
+    fig, ax = plt.subplots(figsize=(11, 4))
+    fig.subplots_adjust(left=0.1, right=0.8, bottom=0.15, top=0.95, hspace=0.5)
+    for sk in ['top', 'right']:
+        ax.spines[sk].set_visible(False)
+    ax.set_xlabel('time (ms)')
+    ax.set_ylabel('currents (A/m2)')
+    tonset = t.min() - 0.05 * np.ptp(t)
+    tplt = np.insert(t, 0, tonset)
+    for k, i in currents.items():
+        ax.plot(tplt * S_TO_MS, padleft(i) * MA_TO_A, label=k)
+    ax.plot(tplt * S_TO_MS, padleft(inet) * MA_TO_A, label='Net', c='k')
+    ax.axvline(tthr * S_TO_MS, c='k', linestyle='--')
+    ax.legend(frameon=False)
+    pulse = GroupedTimeSeries.getStimPulses(t, df['stimstate'].values)[0]
+    ax.axvspan(pulse[0] * S_TO_MS, pulse[1] * S_TO_MS,
+               edgecolor='none', facecolor='#8A8A8A', alpha=0.2)
+    if fiber.pneuron.name == 'FHnode':
+        ylims = [-140, 50]
+    else:
+        ylims = [-0.9, 0.7]
+    ax.set_ylim(*ylims)
+    ax.set_yticks(ylims)
+
+    # Plot charge accumulation bar chart
+    buildup_charges_norm = fiber.getBuildupContributions(df, tthr)
+    colors = plt.get_cmap('tab10').colors
+    ax = fig.add_axes([0.85, 0.15, 0.13, 0.8])
+    for sk in ['top', 'right']:
+        ax.spines[sk].set_visible(False)
+    x = np.arange(len(buildup_charges_norm))
+    ax.set_xticks(x)
+    # ax.set_yscale('symlog')
+    ax.set_ylabel('Normalized sub-threshold charge accumulation (mV)')
+    ax.set_xticklabels(list(buildup_charges_norm.keys()))
+    ax.bar(x, list(buildup_charges_norm.values()), color=colors)
+    ax.set_ylim(-1, dQnorm_thr)
+    ax.set_yticks([-1, 0, dQnorm_thr])
+    ax.axhline(0, c='k', linewidth=0.5)
+
+    return fig

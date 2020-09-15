@@ -3,16 +3,19 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-07-22 19:34:29
+# @Last Modified time: 2020-08-30 15:14:52
 
+import os
 import numpy as np
+import matplotlib.pyplot as plt
 
 from PySONIC.core import PulsedProtocol
 from PySONIC.utils import logger, si_format
+from PySONIC.plt import GroupedTimeSeries
 from ExSONIC.test import TestFiber
 from ExSONIC.core import SennFiber, UnmyelinatedFiber, MRGFiber, mrg_lkp
 from ExSONIC.core.sources import *
-from ExSONIC.plt import SectionCompTimeSeries, plotFieldDistribution
+from ExSONIC.plt import SectionCompTimeSeries, plotFieldDistribution, plotPassiveCurrents
 from ExSONIC.constants import MIN_FIBERL_FWHM_RATIO
 
 
@@ -21,7 +24,7 @@ class TestFiberAstim(TestFiber):
     a = 32e-9       # sonophore diameter (m)
     fs = 0.8       # sonophore membrane coverage (-)
     Fdrive = 500e3  # US frequency (Hz)
-    w = 1e-3       # Gaussian FWHM (m)
+    w = 5e-3       # Gaussian FWHM (m)
     thr_factor = 1.2  # threshold factor at which to display results
 
     def test_node(self, is_profiled=False):
@@ -75,23 +78,37 @@ class TestFiberAstim(TestFiber):
             self.Fdrive)
         logger.info(f'fiber length = {fiber.length * 1e3:.2f} mm, source FWHM = {self.w * 1e3:.2f} mm')
 
-        # Titrate for a specific duration and simulate fiber at threshold US amplitude
+        # # Titrate for a specific duration and simulate fiber at threshold US amplitude
         logger.info(f'Running titration for {si_format(pp.tstim)}s pulse')
-        Athr = fiber.titrate(source, pp)  # Pa
+        # Athr = fiber.titrate(source, pp)  # Pa
+        # Athr = Athr / self.thr_factor * 0.99
+        Athr = 120e3 / self.thr_factor
         data, meta = fiber.simulate(source.updatedX(self.thr_factor * Athr), pp)
-        plotFieldDistribution(fiber, source.updatedX(self.thr_factor * Athr))
+        # plotFieldDistribution(fiber, source.updatedX(self.thr_factor * Athr))
 
-        # Compute conduction velocity and spike amplitude from resulting data
-        sim_metrics = {
-           'Athr': Athr,                             # Pa
-           'cv': fiber.getConductionVelocity(data),  # m/s
-           'dV': fiber.getSpikeAmp(data)             # mV
-        }
+        # # Compute conduction velocity and spike amplitude from resulting data
+        # sim_metrics = {
+        #    'Athr': Athr,                             # Pa
+        #    'cv': fiber.getConductionVelocity(data),  # m/s
+        #    'dV': fiber.getSpikeAmp(data)             # mV
+        # }
 
         # Plot membrane potential and membrane charge density traces
-        varkeys = ['Cm', 'Vm', 'Qm', 'iax', 'iLeak']
-        for k in varkeys:
-            SectionCompTimeSeries([(data, meta)], k, fiber.nodeIDs).render()
+        # varkeys = ['Cm', 'Vm', 'Qm']
+        figs = {}
+        codebase = fiber.filecode(source, pp)
+        # for k in varkeys:
+        #     figs[k] = SectionCompTimeSeries([(data, meta)], k, fiber.nodeIDs).render()
+        figs['currents'] = plotPassiveCurrents(fiber, data[fiber.central_ID])
+        # meta2 = meta.copy()
+        # meta2['simkey'] = 'ASTIM'
+        # print(meta2)
+        # GroupedTimeSeries([(data[fiber.central_ID], meta2)]).render()
+        # outdir = input('output directory:')
+        # for k, fig in figs.items():
+        #     fname = f'{codebase}_{k}.pdf'
+        #     fpath = os.path.join(outdir, fname)
+        #     fig.savefig(fpath, transparent=True)
 
         # # Comparative SD curve
         # durations = np.logspace(-5, -3, 20)  # s
@@ -104,8 +121,8 @@ class TestFiberAstim(TestFiber):
         #     fiber, durations, {'myelinated': Athrs}, scale='log',
         #     yname='amplitude', yfactor=PA_TO_KPA, yunit='Pa', plot_chr=False)
 
-        # Log output metrics
-        self.logOutputMetrics(sim_metrics)
+        # # Log output metrics
+        # self.logOutputMetrics(sim_metrics)
 
     def test_gaussianSENN(self, is_profiled=False):
         logger.info('Test: gaussian distribution source on myelinated SENN fiber')
@@ -116,7 +133,7 @@ class TestFiberAstim(TestFiber):
 
     def test_gaussianSundt(self, is_profiled=False):
         logger.info('Test: gaussian distribution source on unmyelinated fiber')
-        fiber = UnmyelinatedFiber(0.8e-6, fiberL=5e-3, a=self.a, fs=self.fs)
+        fiber = UnmyelinatedFiber(0.8e-6, fiberL=20e-3, a=self.a, fs=self.fs)
         toffset = fiber.AP_travel_time_estimate * 1.5
         pp = PulsedProtocol(10e-3, toffset)
         return self.gaussian(fiber, pp)

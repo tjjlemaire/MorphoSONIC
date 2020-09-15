@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-08-18 14:38:06
+# @Last Modified time: 2020-08-24 20:15:47
 
 import abc
 import numpy as np
@@ -504,6 +504,7 @@ class VoltageSource(XSource):
 
     conv_factor = 1e0  # mV
     xkey = 'Ve'
+    key = 'Vext'
     polarities = ('anode', 'cathode')
 
     def __init__(self, Ve, mode=None):
@@ -651,6 +652,8 @@ class AcousticSource(XSource):
 
 
 class AbstractAcousticSource(AcousticSource):
+
+    key = 'A'
 
     def __init__(self, f, A=None):
         ''' Constructor.
@@ -988,6 +991,7 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
         xsource, ysource = DPSM_method(m)
         mact = len(xsource)
         for i in range(nx):
+            logger.debug(f'slice {i} / {nx}')
             for k in range(nz):
                 results[i, k] = self.DPSM_point(x[i], 0, z[k], xsource, ysource, mact)
         return results

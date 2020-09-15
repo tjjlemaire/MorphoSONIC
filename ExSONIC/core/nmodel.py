@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-08-18 10:16:47
+# @Last Modified time: 2020-09-09 16:33:47
 
 import abc
 from neuron import h
@@ -480,6 +480,7 @@ class NeuronModel(metaclass=abc.ABCMeta):
         sol = TimeSeries(t, stim, {k: v.to_array() for k, v in probes.items()})
         if 'Vext' in sol:  # add "Vin" field if solution has both "Vm" and "Vext" fields
             sol['Vin'] = sol['Vm'] + sol['Vext']
+        sol['Cm'] = sol['Qm'] / sol['Vm'] * V_TO_MV
         sol.prepend(t0=0)
         return sol
 
@@ -877,6 +878,33 @@ class SpatiallyExtendedNeuronModel(NeuronModel):
         if source.is_cathodal:
             xthr = -xthr
         return xthr
+
+    def getCurrentsDict(self, df):
+        ''' Compute currents dictionary. '''
+        Vm = df['Vm'].values
+        states = {k: df[k].values for k in self.pneuron.states.keys()}
+        membrane_currents = {k: cfunc(Vm, states) for k, cfunc in self.pneuron.currents().items()}
+        cdict = {
+            'Ax': df['iax'],
+            'Leak': membrane_currents.pop('iLeak')
+        }
+        cdict.update({k[1:]: v for k, v in membrane_currents.items()})
+        cdict['Net'] = self.pneuron.iNet(Vm, states) + cdict['Ax']
+        return cdict
+
+    def getBuildupContributions(self, df, tthr):
+        t, currents = df['t'].values, self.getCurrentsDict(df)
+        del currents['Net']
+        # Interpolate currents at regular time step during build-up interval
+        tsub = np.linspace(0, tthr, 100)  # s
+        buildup_currents = {k: np.interp(tsub, t, v) for k, v in currents.items()}  # mA/m2
+
+        # Compute charge variation associated to each current during build-up
+        dt = np.diff(tsub)[0]  # s
+        buildup_charges = {k: -np.sum(v) * dt * MA_TO_A for k, v in buildup_currents.items()}  # C/m2
+
+        # Return charge variations normalized by resting capacitance
+        return {k: v / self.pneuron.Cm0 * V_TO_MV for k, v in buildup_charges.items()}  # mV
 
 
 class FiberNeuronModel(SpatiallyExtendedNeuronModel):
