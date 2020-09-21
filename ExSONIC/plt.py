@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-08-30 15:58:49
+# @Last Modified time: 2020-09-21 17:26:27
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -580,3 +580,19 @@ def plotPassiveCurrents(fiber, df):
     ax.axhline(0, c='k', linewidth=0.5)
 
     return fig
+
+
+def setAxis(ax, precision, signed, axkey='y'):
+
+    lim_getter = getattr(ax, f'get_{axkey}lim')
+    lim_setter = getattr(ax, f'set_{axkey}lim')
+    tick_setter = getattr(ax, f'set_{axkey}ticks')
+    ticklabel_setter = getattr(ax, f'set_{axkey}ticklabels')
+
+    rfactor = np.power(10, precision)
+    lims = lim_getter()
+    lims = [np.floor(lims[0] * rfactor) / rfactor, np.ceil(lims[1] * rfactor) / rfactor]
+    fmt = f'{"+" if signed else ""}.{precision}f'
+    lim_setter(*lims)
+    tick_setter(lims)
+    ticklabel_setter([f'{y:{fmt}}' for y in lims])

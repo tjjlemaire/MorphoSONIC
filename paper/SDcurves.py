@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-08-24 19:34:35
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-09-21 17:01:45
+# @Last Modified time: 2020-09-21 17:29:48
 
 import os
 import logging
@@ -16,9 +16,11 @@ from ExSONIC.core import Node, SennFiber, UnmyelinatedFiber, StrengthDurationBat
 from ExSONIC.core.sources import *
 from ExSONIC.utils import rheobase, chronaxie
 
-from utils import dataroot, figdir, fontsize
+from root import datadir, figdir
 
 logger.setLevel(logging.INFO)
+
+fontsize = 10
 
 
 def getAcousticDrive(Fdrive):
@@ -132,7 +134,7 @@ source = GaussianVoltageSource(0., sigma, mode='cathode')
 EL_Athrs = {}
 for k, fiber in fibers.items():
     logger.info(f'fiber length = {fiber.length * 1e3:.2f} mm, source FWHM = {w * 1e3:.2f} mm')
-    sd_batch = StrengthDurationBatch('Vext (mV)', source, fiber, durations, toffset, root=dataroot)
+    sd_batch = StrengthDurationBatch('Vext (mV)', source, fiber, durations, toffset, root=datadir)
     EL_Athrs[k] = sd_batch.run()
 
 EL_thrs_variations = {}
@@ -144,13 +146,13 @@ for fiberD in myel_diams:
     k = f'fiberD = {si_format(fiberD, 1)}m'
     fiber = SennFiber(fiberD, 21, a=a, fs=fs)
     logger.info(f'fiber length = {fiber.length * 1e3:.2f} mm, source FWHM = {w * 1e3:.2f} mm')
-    sd_batch = StrengthDurationBatch('Vext (mV)', source, fiber, durations, toffset, root=dataroot)
+    sd_batch = StrengthDurationBatch('Vext (mV)', source, fiber, durations, toffset, root=datadir)
     EL_thrs_variations['fiber diameter']['myelinated'][k] = sd_batch.run()
 for fiberD in unmyel_diams:
     k = f'fiberD = {si_format(fiberD, 1)}m'
     fiber = UnmyelinatedFiber(fiberD, fiberL=5e-3, a=a, fs=fs)
     logger.info(f'fiber length = {fiber.length * 1e3:.2f} mm, source FWHM = {w * 1e3:.2f} mm')
-    sd_batch = StrengthDurationBatch('Vext (mV)', source, fiber, durations, toffset * 2, root=dataroot)
+    sd_batch = StrengthDurationBatch('Vext (mV)', source, fiber, durations, toffset * 2, root=datadir)
     EL_thrs_variations['fiber diameter']['unmyelinated'][k] = sd_batch.run()
 
 # EL: impact of beam width
@@ -160,7 +162,7 @@ for key, fiber in fibers.items():
         k = f'w = {si_format(w, 1)}m'
         source = GaussianVoltageSource(0., GaussianSource.from_FWHM(w), mode='cathode')
         logger.info(f'fiber length = {fiber.length * 1e3:.2f} mm, source FWHM = {w * 1e3:.2f} mm')
-        sd_batch = StrengthDurationBatch('Vext (mV)', source, fiber, durations, toffset, root=dataroot)
+        sd_batch = StrengthDurationBatch('Vext (mV)', source, fiber, durations, toffset, root=datadir)
         EL_thrs_variations['beam width'][key][k] = sd_batch.run()
 
 # US: default SD curves
@@ -168,14 +170,14 @@ source = GaussianAcousticSource(0., sigma, Fdrive)
 US_Athrs = {}
 for k, fiber in fibers.items():
     logger.info(f'fiber length = {fiber.length * 1e3:.2f} mm, source FWHM = {w * 1e3:.2f} mm')
-    sd_batch = StrengthDurationBatch('A (Pa)', source, fiber, durations, toffset, root=dataroot)
+    sd_batch = StrengthDurationBatch('A (Pa)', source, fiber, durations, toffset, root=datadir)
     US_Athrs[k] = sd_batch.run()
 
 # US: point-neuron SD curves
 drive = getAcousticDrive(Fdrive)
 US_node_Athrs = {}
 for k, node in nodes.items():
-    sd_batch = StrengthDurationBatch('A (Pa)', drive, node, durations, toffset, root=dataroot)
+    sd_batch = StrengthDurationBatch('A (Pa)', drive, node, durations, toffset, root=datadir)
     US_node_Athrs[node.pneuron.name] = sd_batch.run()
 
 US_thrs_variations = {}
@@ -187,13 +189,13 @@ for fiberD in myel_diams:
     k = f'fiberD = {si_format(fiberD)}m'
     fiber = SennFiber(fiberD, 21, a=a, fs=fs)
     logger.info(f'fiber length = {fiber.length * 1e3:.2f} mm, source FWHM = {w * 1e3:.2f} mm')
-    sd_batch = StrengthDurationBatch('A (Pa)', source, fiber, durations, toffset, root=dataroot)
+    sd_batch = StrengthDurationBatch('A (Pa)', source, fiber, durations, toffset, root=datadir)
     US_thrs_variations['fiber diameter']['myelinated'][k] = sd_batch.run()
 for fiberD in unmyel_diams:
     k = f'fiberD = {si_format(fiberD)}m'
     fiber = UnmyelinatedFiber(fiberD, fiberL=5e-3, a=a, fs=fs)
     logger.info(f'fiber length = {fiber.length * 1e3:.2f} mm, source FWHM = {w * 1e3:.2f} mm')
-    sd_batch = StrengthDurationBatch('A (Pa)', source, fiber, durations, toffset * 2, root=dataroot)
+    sd_batch = StrengthDurationBatch('A (Pa)', source, fiber, durations, toffset * 2, root=datadir)
     US_thrs_variations['fiber diameter']['unmyelinated'][k] = sd_batch.run()
 
 # US: impact of beam width
@@ -204,7 +206,7 @@ for key, fiber in fibers.items():
         k = f'w = {si_format(w)}m'
         source = GaussianAcousticSource(0., GaussianSource.from_FWHM(w), Fdrive)
         logger.info(f'fiber length = {fiber.length * 1e3:.2f} mm, source FWHM = {w * 1e3:.2f} mm')
-        sd_batch = StrengthDurationBatch('A (Pa)', source, fiber, durations, toffset, root=dataroot)
+        sd_batch = StrengthDurationBatch('A (Pa)', source, fiber, durations, toffset, root=datadir)
         US_thrs_variations['beam width'][key][k] = sd_batch.run()
 
 # US: impact of frequency
@@ -214,7 +216,7 @@ for key, refnode in nodes.items():
     for x in freqs:
         k = f'f = {si_format(x, 1)}Hz'
         sd_batch = StrengthDurationBatch(
-            'A (Pa)', getAcousticDrive(x), node, durations, toffset, root=dataroot)
+            'A (Pa)', getAcousticDrive(x), node, durations, toffset, root=datadir)
         US_thrs_variations['US frequency'][key][k] = sd_batch.run()
 
 # US: impact of sonophore radius
@@ -224,7 +226,7 @@ for key, refnode in nodes.items():
     for x in radii:
         k = f'a = {si_format(x, 1)}m'
         node = Node(refnode.pneuron, a=x, fs=1)
-        sd_batch = StrengthDurationBatch('A (Pa)', drive, node, durations, toffset, root=dataroot)
+        sd_batch = StrengthDurationBatch('A (Pa)', drive, node, durations, toffset, root=datadir)
         US_thrs_variations['sonophore radius'][key][k] = sd_batch.run()
 
 # US: impact of sonophore coverage
@@ -234,7 +236,7 @@ for key, refnode in nodes.items():
     for x in coverages:
         k = f'fs = {x * 1e2:.1f}%'
         node = Node(refnode.pneuron, a=a, fs=x)
-        sd_batch = StrengthDurationBatch('A (Pa)', drive, node, durations, toffset, root=dataroot)
+        sd_batch = StrengthDurationBatch('A (Pa)', drive, node, durations, toffset, root=datadir)
         US_thrs_variations['sonophore coverage'][key][k] = sd_batch.run()
 
 

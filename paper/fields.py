@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-08-22 14:14:17
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-09-21 16:57:19
+# @Last Modified time: 2020-09-21 17:29:33
 
 import os
 import logging
@@ -14,8 +14,9 @@ from scipy.stats import normaltest
 from PySONIC.utils import logger, si_format
 from PySONIC.plt import setNormalizer
 from ExSONIC.core import PlanarDiskTransducerSource, ExtracellularCurrent
+from ExSONIC.plt import setAxis
 
-from utils import dataroot, figdir, setAxis, fontsize
+from root import datadir, figdir
 
 
 logger.setLevel(logging.INFO)
@@ -26,12 +27,13 @@ freqs = [500e3, 2e6]  # Hz
 nperslice = 400
 radii_dense = np.linspace(1e-3, 1e-2, 5)
 xfocal = np.linspace(-20e-3, 20e-3, nperslice)
+fontsize = 10
 
 
 def computeTransverseFocalDistribution(r, Fdrive, x):
     code = f'{r * 1e3:.0f}mm_{Fdrive * 1e-3:.0f}kHz'
     fname = f'focalslice_{code}.csv'
-    fpath = os.path.join(dataroot, fname)
+    fpath = os.path.join(datadir, fname)
     if os.path.isfile(fpath):
         logger.info(f'Loading Pac focal distribution from file {fname}')
         amps = np.loadtxt(fpath)
@@ -106,7 +108,7 @@ for Fdrive in freqs:
         # Compute and plot amplitude distribution over 2D field
         sourcecode = '_'.join(source.filecodes.values())
         fname = f'2Dfield_{sourcecode}.csv'
-        fpath = os.path.join(dataroot, fname)
+        fpath = os.path.join(datadir, fname)
         if os.path.isfile(fpath):
             logger.info(f'Loading Pac field from file {fname}')
             amps = np.loadtxt(fpath)

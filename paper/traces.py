@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-09-14 11:50:12
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-09-21 16:58:05
+# @Last Modified time: 2020-09-21 17:29:17
 
 import os
 import logging
@@ -15,9 +15,12 @@ from PySONIC.plt import *
 from ExSONIC.core import SennFiber, UnmyelinatedFiber
 from ExSONIC.core.sources import *
 from ExSONIC.constants import *
+from ExSONIC.plt import setAxis
 from PySONIC.core import PulsedProtocol
 
-from utils import figdir, setAxis, fontsize
+from root import figdir
+
+fontsize = 10
 
 logger.setLevel(logging.INFO)
 

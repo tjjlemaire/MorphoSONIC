@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-08-27 11:33:16
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-09-21 17:06:21
+# @Last Modified time: 2020-09-21 17:29:58
 
 import os
 import logging
@@ -15,11 +15,14 @@ from PySONIC.neurons import getPointNeuron
 from PySONIC.constants import NPC_DENSE
 from PySONIC.core import BilayerSonophore, AcousticDrive, PulsedProtocol, PmCompMethod
 from ExSONIC.core import Node, StrengthDurationBatch
+from ExSONIC.plt import setAxis
 from ExSONIC.constants import *
 
-from utils import setAxis, figdir, dataroot, fontsize
+from root import figdir, datadir
 
 logger.setLevel(logging.INFO)
+
+fontsize = 10
 
 
 def energy(y, dt):
@@ -52,7 +55,7 @@ drive = AcousticDrive(Fdrive)
 drive.key = 'A'
 Athrs = {}
 for k, node in nodes.items():
-    sd_batch = StrengthDurationBatch('A (Pa)', drive, node, durations, toffset, root=dataroot)
+    sd_batch = StrengthDurationBatch('A (Pa)', drive, node, durations, toffset, root=datadir)
     Athrs[k] = sd_batch.run()
 
 # Extract rheobase threshold amplitudes
