@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-09-21 16:45:38
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-09-21 17:30:19
+# @Last Modified time: 2020-09-21 17:32:56
 
-datadir = 'C:\\Users\\lemaire\\Desktop\\morphoSONIC\\data'
-figdir = 'C:\\Users\\lemaire\\Desktop\\morphoSONIC\\figs'
+datadir = 'data'
+figdir = 'C:\\Users\\lemaire\\Desktop\\figs'
