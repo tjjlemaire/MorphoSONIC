@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-09-22 17:34:04
+# @Last Modified time: 2020-09-22 20:16:08
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -601,7 +601,8 @@ def setAxis(ax, precision, signed, axkey='y'):
     ticklabel_setter([f'{y:{fmt}}' for y in lims])
 
 
-def spatioTemporalMap(fiber, data, varkey, sec_type='node', fontsize=10, ypad=-10):
+def spatioTemporalMap(fiber, data, varkey, sec_type='node', fontsize=10, ypad=-10,
+                      plot_spikes=False):
 
     # Extract var info
     varinfo = fiber.pneuron.getPltVars()[varkey]
@@ -627,6 +628,10 @@ def spatioTemporalMap(fiber, data, varkey, sec_type='node', fontsize=10, ypad=-1
     tlims = np.array(bounds(t)) * S_TO_MS
     ax.set_xticks([])
     ax.set_xlim(*tlims)
+    if plot_spikes:
+        tspikes = fiber.getEndSpikeTrain(data)
+        if tspikes is not None:
+            ax.scatter(tspikes * 1e3, .5 * np.ones(tspikes.size), color=['C1'], marker='*')
 
     # Plot map
     ax = axes['b']
