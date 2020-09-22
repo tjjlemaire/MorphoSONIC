@@ -3,10 +3,11 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-09-21 17:26:27
+# @Last Modified time: 2020-09-22 17:34:04
 
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FormatStrFormatter
 from scipy import signal
 
 from PySONIC.plt import GroupedTimeSeries, CompTimeSeries, mirrorAxis
@@ -582,17 +583,82 @@ def plotPassiveCurrents(fiber, df):
     return fig
 
 
-def setAxis(ax, precision, signed, axkey='y'):
+def roundBounds(bounds, precision):
+    rfactor = np.power(10, precision)
+    return [np.floor(bounds[0] * rfactor) / rfactor, np.ceil(bounds[1] * rfactor) / rfactor]
 
+
+def setAxis(ax, precision, signed, axkey='y'):
     lim_getter = getattr(ax, f'get_{axkey}lim')
     lim_setter = getattr(ax, f'set_{axkey}lim')
     tick_setter = getattr(ax, f'set_{axkey}ticks')
     ticklabel_setter = getattr(ax, f'set_{axkey}ticklabels')
 
-    rfactor = np.power(10, precision)
-    lims = lim_getter()
-    lims = [np.floor(lims[0] * rfactor) / rfactor, np.ceil(lims[1] * rfactor) / rfactor]
+    lims = roundBounds(lim_getter(), precision)
     fmt = f'{"+" if signed else ""}.{precision}f'
     lim_setter(*lims)
     tick_setter(lims)
     ticklabel_setter([f'{y:{fmt}}' for y in lims])
+
+
+def spatioTemporalMap(fiber, data, varkey, sec_type='node', fontsize=10, ypad=-10):
+
+    # Extract var info
+    varinfo = fiber.pneuron.getPltVars()[varkey]
+
+    # Extract x, y and z arrays
+    t = data.time
+    xcoords = fiber.getXCoords()[sec_type]
+    zmap = data.getArray(varkey, prefix=sec_type)
+
+    # Create figure
+    fig = plt.figure(constrained_layout=True, figsize=(8, 2))
+    gs = fig.add_gridspec(5, 20)
+    subplots = {'a': gs[0, :-1], 'b': gs[1:, :-1], 'c': gs[:, -1]}
+    axes = {k: fig.add_subplot(v) for k, v in subplots.items()}
+
+    # Plot stim vector
+    ax = axes['a']
+    for sk in ['top', 'right', 'bottom', 'left']:
+        ax.spines[sk].set_visible(False)
+    ax.plot(t * S_TO_MS, data.stim, c='k')
+    ax.set_yticks([])
+    ax.set_ylabel('stimulus', fontsize=fontsize)
+    tlims = np.array(bounds(t)) * S_TO_MS
+    ax.set_xticks([])
+    ax.set_xlim(*tlims)
+
+    # Plot map
+    ax = axes['b']
+    for sk in ['top', 'right']:
+        ax.spines[sk].set_visible(False)
+    for sk in ['bottom', 'left']:
+        ax.spines[sk].set_position(('outward', 3))
+    ax.set_xlabel('time (ms)', fontsize=fontsize, labelpad=ypad)
+    ax.set_xticks(tlims)
+    ax.set_xlim(*tlims)
+    ax.set_ylabel('Fiber position (mm)')
+    nlims = bounds(xcoords * M_TO_MM)
+    ax.set_yticks(nlims)
+    ax.set_ylim(*nlims)
+    ax.yaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+    sm = ax.pcolormesh(t * S_TO_MS, xcoords * M_TO_MM, zmap * varinfo.get('factor', 1))
+    ax.get_shared_x_axes().join(ax, axes['a'])
+
+    # Plot colorbar
+    ax = axes['c']
+    cbar = fig.colorbar(sm, cax=ax)
+    lims = roundBounds(ax.get_ylim(), 0)
+    ax.set_ylim(*lims)
+    ax.tick_params(length=0, axis='y')
+    cbar.set_ticks(lims)
+    ax.set_yticklabels([f'{y:+.0f}' for y in lims])
+    ylabel = f'{varinfo["label"]} ({varinfo["unit"]})'
+    ax.set_ylabel(ylabel.replace('_', '').replace('^', ''), fontsize=fontsize, labelpad=ypad)
+
+    # Post-process figure
+    for ax in axes.values():
+        for item in ax.get_xticklabels() + ax.get_yticklabels():
+            item.set_fontsize(fontsize)
+
+    return fig
