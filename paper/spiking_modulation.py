@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-09-22 20:16:33
+# @Last Modified time: 2020-09-23 11:02:45
 
 import logging
 import numpy as np
@@ -54,7 +54,7 @@ source = GaussianAcousticSource(0, sigma, Fdrive, Adrive)
 
 # Pulsing parameters
 npulses = 10
-PDs = [100e-6, 200e-6, 500e-6, 1e-3]  # s
+PDs = [100e-6, 1e-3]  # s
 nPRF = 6
 
 PRFs = {}
@@ -82,7 +82,8 @@ for PD in PDs:
         data, meta = fiber.simulate(source, pp)
 
         # Plots resulting Qm timeseries and spatiotemporal maps
-        fig = spatioTemporalMap(fiber, data, 'Qm', fontsize=fontsize, plot_spikes=plot_spikes)
+        fig = spatioTemporalMap(
+            fiber, source, data, 'Qm', fontsize=fontsize, plot_spikes=plot_spikes)
         # fig.suptitle(', '.join(PD_key, PRF_key), fontsize=fontsize)
 
         # Detect spikes on end node

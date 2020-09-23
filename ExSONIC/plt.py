@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-09-22 20:16:08
+# @Last Modified time: 2020-09-23 10:59:34
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -601,7 +601,7 @@ def setAxis(ax, precision, signed, axkey='y'):
     ticklabel_setter([f'{y:{fmt}}' for y in lims])
 
 
-def spatioTemporalMap(fiber, data, varkey, sec_type='node', fontsize=10, ypad=-10,
+def spatioTemporalMap(fiber, source, data, varkey, sec_type='node', fontsize=10, ypad=-10,
                       plot_spikes=False):
 
     # Extract var info
@@ -609,13 +609,18 @@ def spatioTemporalMap(fiber, data, varkey, sec_type='node', fontsize=10, ypad=-1
 
     # Extract x, y and z arrays
     t = data.time
-    xcoords = fiber.getXCoords()[sec_type]
+    xcoords = fiber.getXCoords()[sec_type]  # m
     zmap = data.getArray(varkey, prefix=sec_type)
 
     # Create figure
     fig = plt.figure(constrained_layout=True, figsize=(8, 2))
     gs = fig.add_gridspec(5, 20)
-    subplots = {'a': gs[0, :-1], 'b': gs[1:, :-1], 'c': gs[:, -1]}
+    nfield, ncbar = 2, 1
+    subplots = {
+        'a': gs[0, nfield:-ncbar],
+        'b': gs[1:, :nfield],
+        'c': gs[1:, nfield:-ncbar],
+        'd': gs[:, -ncbar:]}
     axes = {k: fig.add_subplot(v) for k, v in subplots.items()}
 
     # Plot stim vector
@@ -633,8 +638,23 @@ def spatioTemporalMap(fiber, data, varkey, sec_type='node', fontsize=10, ypad=-1
         if tspikes is not None:
             ax.scatter(tspikes * 1e3, .5 * np.ones(tspikes.size), color=['C1'], marker='*')
 
-    # Plot map
+    xlims = bounds(xcoords * M_TO_MM)
+
+    # Plot field
     ax = axes['b']
+    xdense = np.linspace(*bounds(xcoords), 100)  # m
+    field = source.getField(xdense)
+    y = -field / field.max()
+    ax.plot(y, xdense * M_TO_MM, c='k')
+    ax.fill_betweenx(xdense * M_TO_MM, y, np.zeros(y.size), facecolor='r')
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_ylim(*xlims)
+    for sk in ['bottom', 'top', 'right', 'left']:
+        ax.spines[sk].set_visible(False)
+
+    # Plot map
+    ax = axes['c']
     for sk in ['top', 'right']:
         ax.spines[sk].set_visible(False)
     for sk in ['bottom', 'left']:
@@ -642,16 +662,15 @@ def spatioTemporalMap(fiber, data, varkey, sec_type='node', fontsize=10, ypad=-1
     ax.set_xlabel('time (ms)', fontsize=fontsize, labelpad=ypad)
     ax.set_xticks(tlims)
     ax.set_xlim(*tlims)
-    ax.set_ylabel('Fiber position (mm)')
-    nlims = bounds(xcoords * M_TO_MM)
-    ax.set_yticks(nlims)
-    ax.set_ylim(*nlims)
+    ax.set_ylabel('x (mm)', fontsize=fontsize, labelpad=2 * ypad)
+    ax.set_yticks(xlims)
+    ax.set_ylim(*xlims)
     ax.yaxis.set_major_formatter(FormatStrFormatter('%.1f'))
     sm = ax.pcolormesh(t * S_TO_MS, xcoords * M_TO_MM, zmap * varinfo.get('factor', 1))
     ax.get_shared_x_axes().join(ax, axes['a'])
 
     # Plot colorbar
-    ax = axes['c']
+    ax = axes['d']
     cbar = fig.colorbar(sm, cax=ax)
     lims = roundBounds(ax.get_ylim(), 0)
     ax.set_ylim(*lims)

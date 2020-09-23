@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-09-22 20:15:57
+# @Last Modified time: 2020-09-23 10:25:31
 
 import abc
 from neuron import h
@@ -1150,13 +1150,13 @@ class FiberNeuronModel(SpatiallyExtendedNeuronModel):
 
     def getEndSpikeTrain(self, data):
         ''' Detect spikes on end node. '''
-        end_IDs = [self.nodeIDs[0], self.nodeIDs[-1]]
-        tspikes = self.getSpikesTimings(data)
-        if not set(end_IDs).issubset(set(tspikes.keys())):
-            return None
-        end_tspikes = tspikes[end_IDs].values
-        assert all(np.abs(np.diff(end_tspikes, axis=1)) < 1e-15)
-        return end_tspikes[:, 0]
+
+        # Detect spikes on current trace
+        self.nodeIDs[-1]
+        ispikes, *_ = detectSpikes(
+            data[self.nodeIDs[-1]], key='Vm', mph=SPIKE_MIN_VAMP, mpt=SPIKE_MIN_DT,
+            mpp=SPIKE_MIN_VPROM)
+        return data.time[ispikes]
 
     def isExcited(self, data):
         ''' Determine if neuron is excited from simulation output.

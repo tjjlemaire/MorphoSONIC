@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-08-24 20:15:47
+# @Last Modified time: 2020-09-23 10:51:53
 
 import abc
 import numpy as np
@@ -177,11 +177,13 @@ class GaussianSource(XSource):
             }
         }
 
+    def getField(self, x):
+        return gaussian(x, mu=self.x0, sigma=self.sigma, A=self.xvar)
+
     def computeDistributedAmps(self, fiber):
         if fiber.length < MIN_FIBERL_FWHM_RATIO * self.FWHM:
             logger.warning('fiber is too short w.r.t stimulus FWHM')
-        return {k: gaussian(v, mu=self.x0, sigma=self.sigma, A=self.xvar)
-                for k, v in fiber.getXCoords().items()}
+        return {k: self.getField(v) for k, v in fiber.getXCoords().items()}
 
     def computeSourceAmp(self, fiber, A):
         return A
