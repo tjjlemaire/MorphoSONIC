@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-09-23 11:02:45
+# @Last Modified time: 2020-09-25 19:08:48
 
 import logging
 import numpy as np
@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from PySONIC.core import PulsedProtocol
 from PySONIC.utils import logger, si_format
 
-from ExSONIC.core import SennFiber
+from ExSONIC.core import SennFiber, UnmyelinatedFiber
 from ExSONIC.core.sources import GaussianAcousticSource
 from ExSONIC.plt import spatioTemporalMap
 
@@ -34,75 +34,98 @@ def getPulseTrain(PD, npulses, PRF):
     return PulsedProtocol(tstim + tstart, 0., PRF=PRF, DC=DC, tstart=tstart)
 
 
-# Plot parameters
-fontsize = 10
-plot_spikes = True
-
-# Fiber model
+# Fiber models
 a = 32e-9  # sonophore radius (m)
 fs = 1.    # sonophore coverage fraction (-)
-fiberD = 20e-6  # m
-nnodes = 21
-fiber = SennFiber(fiberD, nnodes, a=a, fs=fs)
+fibers = {
+    # 'unmyelinated': UnmyelinatedFiber(0.8e-6, fiberL=5e-3, a=a, fs=fs),
+    'myelinated': SennFiber(10e-6, 21, a=a, fs=fs),
+}
 
-# Acoustic source
+# Charactersitic chronaxies
+chronaxies = {
+    'myelinated': 76e-6,  # s
+    'unmyelinated': 8e-3  # s
+}
+
+# US parameters
 Fdrive = 500e3  # Hz
 Adrive = 300e3  # Pa
-w = 5e-3  # m
-sigma = GaussianAcousticSource.from_FWHM(w)  # m
-source = GaussianAcousticSource(0, sigma, Fdrive, Adrive)
 
 # Pulsing parameters
 npulses = 10
-PDs = [100e-6, 1e-3]  # s
-nPRF = 6
+nPD = 1
+nPRF = 1
+ncombs = len(fibers) * nPD * nPRF
+
+# Plot parameters
+fontsize = 10
+plot_spikes = True
+colors = plt.get_cmap('tab20c').colors
+colors = dict(zip(fibers.keys(), [colors[:3], colors[4:7]]))
 
 PRFs = {}
 FRs = {}
+for k, fiber in fibers.items():
 
-# For each pulse duration
-for PD in PDs:
-    PD_key = f'PD = {si_format(PD, 1)}s'
+    # Define acoustic source
+    w = fiber.length / 5  # m
+    sigma = GaussianAcousticSource.from_FWHM(w)  # m
+    source = GaussianAcousticSource(0, sigma, Fdrive, Adrive)
 
-    # Compute relevant PRF range
-    PRF_max = 0.99 / PD  # Hz
-    PRF_min = PRF_max / 100  # Hz
-    PRFs[PD_key] = np.logspace(np.log10(PRF_min), np.log10(PRF_max), nPRF)
+    # Define pulse duration range
+    PDs = np.logspace(-1, 1, nPD) * chronaxies[k]  # s
 
-    FRs[PD_key] = []
+    # For each pulse duration
+    PRFs[k] = {}
+    FRs[k] = {}
+    for PD in PDs:
+        PD_key = f'PD = {si_format(PD, 1)}s'
 
-    # For each PRF
-    for PRF in PRFs[PD_key]:
-        PRF_key = f'PRF = {si_format(PRF, 1)}Hz'
+        # Define PRF range
+        PRF_max = 0.99 / PD  # Hz
+        PRF_min = PRF_max / 100  # Hz
+        PRFs[k][PD_key] = np.logspace(np.log10(PRF_min), np.log10(PRF_max), nPRF)
+        FRs[k][PD_key] = []
 
-        # Get pulsing protocol
-        pp = getPulseTrain(PD, npulses, PRF)
+        # For each PRF
+        for PRF in PRFs[k][PD_key]:
+            PRF_key = f'PRF = {si_format(PRF, 1)}Hz'
 
-        # Simulate model
-        data, meta = fiber.simulate(source, pp)
+            # Get pulsing protocol
+            pp = getPulseTrain(PD, npulses, PRF)
 
-        # Plots resulting Qm timeseries and spatiotemporal maps
-        fig = spatioTemporalMap(
-            fiber, source, data, 'Qm', fontsize=fontsize, plot_spikes=plot_spikes)
-        # fig.suptitle(', '.join(PD_key, PRF_key), fontsize=fontsize)
+            # Simulate model
+            data, meta = fiber.simulate(source, pp)
 
-        # Detect spikes on end node
-        tspikes = fiber.getEndSpikeTrain(data)
-        if tspikes is not None:
-            FR = tspikes.size / pp.tstim
-        else:
-            FR = np.nan
-        FRs[PD_key].append(FR)
+            # Plots resulting Qm timeseries and spatiotemporal maps
+            if ncombs <= 15:
+                fig = spatioTemporalMap(
+                    fiber, source, data, 'Qm', fontsize=fontsize, plot_spikes=plot_spikes)
+                # fig.suptitle(', '.join(PD_key, PRF_key), fontsize=fontsize)
 
-    FRs[PD_key] = np.array(FRs[PD_key])
+            # Detect spikes on end node
+            tspikes = fiber.getEndSpikeTrain(data)
 
+            # Compute firing rate
+            if tspikes is not None:
+                FR = tspikes.size / pp.tstim
+            else:
+                FR = np.nan
+            FRs[k][PD_key].append(FR)
+
+        FRs[k][PD_key] = np.array(FRs[k][PD_key])
+
+# Plot FR vs PRF across cell types for various PDs
 FR_fig, FR_ax = plt.subplots()
 FR_ax.set_xscale('log')
 FR_ax.set_yscale('log')
 FR_ax.set_xlabel('PRF (Hz)')
 FR_ax.set_ylabel('FR (Hz)')
-for k in FRs.keys():
-    FR_ax.plot(PRFs[k], FRs[k], label=k)
+for k, FRdict in FRs.items():
+    clist = colors[k]
+    for c, (PD_key, FR) in zip(clist, FRdict.items()):
+        FR_ax.plot(PRFs[k][PD_key], FR, label=f'{k} - {PD_key}', c=c)
 xlims = FR_ax.get_xlim()
 FR_ax.plot(xlims, xlims, '--', c='k')
 FR_ax.legend(frameon=False)

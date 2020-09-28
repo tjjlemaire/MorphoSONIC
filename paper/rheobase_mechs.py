@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-08-27 11:33:16
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-09-21 17:29:58
+# @Last Modified time: 2020-09-24 13:29:00
 
 import os
 import logging
@@ -128,7 +128,7 @@ Pm_met = PmCompMethod.direct
 # For each node
 for k, node in nodes.items():
 
-    # Define corresponding bvilayer sonophore model
+    # Define corresponding bilayer sonophore model
     bls = BilayerSonophore(a, node.pneuron.Cm0, node.pneuron.Qm0)
     deltas[k] = bls.Delta
     A, Qm = subthr_amps[k][-1], Qss[k][-1]
@@ -167,8 +167,6 @@ for k, node in nodes.items():
     velocities[k] = U
     capcts[k] = Cm
     pressures[k] = pdict
-
-print(deltas)
 
 # Compute energies from pressure profiles
 energies = {}
@@ -263,6 +261,8 @@ for c, (k, Cm) in zip(colors, capcts.items()):
     Cm0 = nodes[k].pneuron.Cm0
     Cmeff = 1 / np.mean(1 / Cm)
     print(f'{k}: DCm/Cm0 = {(Cm0 - Cmeff) / Cm0 * 1e2:.1f} %')
+    gamma = np.ptp(Cm) / Cm0
+    print(f'{k}: gamma = {gamma:.2f}')
     ax.plot(tcycle * 1e6, Cm / Cm0, label=k, c=c)
     ax.axhline(Cmeff / Cm0, linestyle='--', c=c)
 setAxis(ax, 1, True)

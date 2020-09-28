@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-09-23 10:59:34
+# @Last Modified time: 2020-09-25 10:06:07
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -11,7 +11,7 @@ from matplotlib.ticker import FormatStrFormatter
 from scipy import signal
 
 from PySONIC.plt import GroupedTimeSeries, CompTimeSeries, mirrorAxis
-from PySONIC.utils import logger, si_format, getPow10, rsquared, padleft, timeThreshold
+from PySONIC.utils import logger, si_format, getPow10, rsquared, padleft, timeThreshold, bounds
 
 from .core import *
 from .utils import loadData, chronaxie
@@ -628,6 +628,7 @@ def spatioTemporalMap(fiber, source, data, varkey, sec_type='node', fontsize=10,
     for sk in ['top', 'right', 'bottom', 'left']:
         ax.spines[sk].set_visible(False)
     ax.plot(t * S_TO_MS, data.stim, c='k')
+    ax.fill_between(t * S_TO_MS, np.zeros(t.size), data.stim, facecolor='silver')
     ax.set_yticks([])
     ax.set_ylabel('stimulus', fontsize=fontsize)
     tlims = np.array(bounds(t)) * S_TO_MS
@@ -646,7 +647,7 @@ def spatioTemporalMap(fiber, source, data, varkey, sec_type='node', fontsize=10,
     field = source.getField(xdense)
     y = -field / field.max()
     ax.plot(y, xdense * M_TO_MM, c='k')
-    ax.fill_betweenx(xdense * M_TO_MM, y, np.zeros(y.size), facecolor='r')
+    ax.fill_betweenx(xdense * M_TO_MM, y, np.zeros(y.size), facecolor='r', alpha=0.5)
     ax.set_xticks([])
     ax.set_yticks([])
     ax.set_ylim(*xlims)

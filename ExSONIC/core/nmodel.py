@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-09-23 10:25:31
+# @Last Modified time: 2020-09-24 11:02:29
 
 import abc
 from neuron import h
@@ -1156,6 +1156,8 @@ class FiberNeuronModel(SpatiallyExtendedNeuronModel):
         ispikes, *_ = detectSpikes(
             data[self.nodeIDs[-1]], key='Vm', mph=SPIKE_MIN_VAMP, mpt=SPIKE_MIN_DT,
             mpp=SPIKE_MIN_VPROM)
+        if len(ispikes) == 0:
+            return None
         return data.time[ispikes]
 
     def isExcited(self, data):

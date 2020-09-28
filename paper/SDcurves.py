@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-08-24 19:34:35
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-09-21 17:29:48
+# @Last Modified time: 2020-09-24 10:44:11
 
 import os
 import logging
@@ -60,11 +60,26 @@ def plotTypicalSDs(ax, thrs_dict, xfactor=1, yfactor=1, colors=None, plt_markers
                 '--', color=c)
             y_corrected[k][ilastnan] = ymax
         if plt_markers:
-            rh, tch = rheobase(thrs), chronaxie(durations, thrs)
-            ax.axhline(rh * yfactor, linestyle=':', c=c)
-            ax.plot([ax.get_xlim()[0], tch * xfactor], [2 * rh * yfactor] * 2, ':', c=c)
-            ax.plot([tch * xfactor] * 2, [ax.get_ylim()[0], 2 * rh * yfactor], ':', c=c)
-            ax.scatter(tch * xfactor, 2 * rh * yfactor, c=[c, ], s=20, zorder=2.5)
+            tch, yrh = chronaxie(durations, thrs), rheobase(thrs)
+            ych = 2 * yrh
+            xmin, ymin = ax.get_xlim()[0], ax.get_ylim()[0]
+            ax.plot([xmin, tch * xfactor], [ych * yfactor] * 2, ':', c=c)
+            ax.plot([tch * xfactor] * 2, [ymin, ych * yfactor], ':', c=c)
+            ax.scatter(tch * xfactor, ych * yfactor, c=[c, ], s=20, zorder=2.5)
+
+            axis_to_data = ax.transAxes + ax.transData.inverted()
+            data_to_axis = axis_to_data.inverted()
+            ax_tch, ax_ych = data_to_axis.transform((tch * xfactor, ych * yfactor))
+            _, ax_yrh = data_to_axis.transform((tch * xfactor, yrh * yfactor))
+
+            ax.text(ax_tch + 0.02, 0.02, f'tch = {si_format(tch, 0)}s', c=c, fontsize=fontsize,
+                    transform=ax.transAxes)
+            ysymbol = 'Vrh' if yfactor == 1 else 'Arh'
+            yunit = 'mV' if yfactor == 1 else 'Pa'
+            ax.text(1.0, ax_yrh + 0.02, f'{ysymbol} = {si_format(yrh)}{yunit}', c=c,
+                    fontsize=fontsize, transform=ax.transAxes, horizontalalignment='right')
+            ax.text(ax_tch / 2, ax_ych + 0.02, f'2{ysymbol}', c=c, fontsize=fontsize,
+                    transform=ax.transAxes, horizontalalignment='center')
 
 
 def plotSDandMarkers(ax, durations, thrs_dict, xfactor=1, yfactor=1, colors=None):

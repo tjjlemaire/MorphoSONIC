@@ -3,12 +3,11 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-08-07 19:43:50
+# @Last Modified time: 2020-09-24 22:21:39
 
 import sys
 import inspect
 
-from .benchmark import *
 from .cgi_network import *
 from .sonic import *
 from .node import *
