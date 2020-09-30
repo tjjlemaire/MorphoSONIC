@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-09-24 11:02:29
+# @Last Modified time: 2020-09-30 19:32:01
 
 import abc
 from neuron import h
@@ -1152,7 +1152,6 @@ class FiberNeuronModel(SpatiallyExtendedNeuronModel):
         ''' Detect spikes on end node. '''
 
         # Detect spikes on current trace
-        self.nodeIDs[-1]
         ispikes, *_ = detectSpikes(
             data[self.nodeIDs[-1]], key='Vm', mph=SPIKE_MIN_VAMP, mpt=SPIKE_MIN_DT,
             mpp=SPIKE_MIN_VPROM)
