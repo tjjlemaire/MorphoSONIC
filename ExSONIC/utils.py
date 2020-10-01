@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 14:38:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-09-11 10:39:14
+# @Last Modified time: 2020-09-22 16:53:51
 
 import os
 import pickle
@@ -218,3 +218,21 @@ class SpatiallyExtendedTimeSeries:
     def prepend(self, *args, **kwargs):
         for k in self.keys():
             self.data[k].prepend(*args, **kwargs)
+
+    def getArray(self, varkey, prefix=None):
+        section_keys = list(self.keys())
+        if prefix is not None:
+            section_keys = list(filter(lambda x: x.startswith(prefix), section_keys))
+        return np.array([self[k][varkey].values for k in section_keys])
+
+    @property
+    def refkey(self):
+        return list(self.keys())[0]
+
+    @property
+    def time(self):
+        return self.data[self.refkey].time
+
+    @property
+    def stim(self):
+        return self.data[self.refkey].stim

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-08-30 15:14:52
+# @Last Modified time: 2020-09-21 17:19:09
 
 import os
 import numpy as np
@@ -80,35 +80,20 @@ class TestFiberAstim(TestFiber):
 
         # # Titrate for a specific duration and simulate fiber at threshold US amplitude
         logger.info(f'Running titration for {si_format(pp.tstim)}s pulse')
-        # Athr = fiber.titrate(source, pp)  # Pa
-        # Athr = Athr / self.thr_factor * 0.99
-        Athr = 120e3 / self.thr_factor
+        Athr = fiber.titrate(source, pp)  # Pa
         data, meta = fiber.simulate(source.updatedX(self.thr_factor * Athr), pp)
-        # plotFieldDistribution(fiber, source.updatedX(self.thr_factor * Athr))
+        plotFieldDistribution(fiber, source.updatedX(self.thr_factor * Athr))
 
-        # # Compute conduction velocity and spike amplitude from resulting data
-        # sim_metrics = {
-        #    'Athr': Athr,                             # Pa
-        #    'cv': fiber.getConductionVelocity(data),  # m/s
-        #    'dV': fiber.getSpikeAmp(data)             # mV
-        # }
+        # Compute conduction velocity and spike amplitude from resulting data
+        sim_metrics = {
+           'Athr': Athr,                             # Pa
+           'cv': fiber.getConductionVelocity(data),  # m/s
+           'dV': fiber.getSpikeAmp(data)             # mV
+        }
 
         # Plot membrane potential and membrane charge density traces
-        # varkeys = ['Cm', 'Vm', 'Qm']
-        figs = {}
-        codebase = fiber.filecode(source, pp)
-        # for k in varkeys:
-        #     figs[k] = SectionCompTimeSeries([(data, meta)], k, fiber.nodeIDs).render()
-        figs['currents'] = plotPassiveCurrents(fiber, data[fiber.central_ID])
-        # meta2 = meta.copy()
-        # meta2['simkey'] = 'ASTIM'
-        # print(meta2)
-        # GroupedTimeSeries([(data[fiber.central_ID], meta2)]).render()
-        # outdir = input('output directory:')
-        # for k, fig in figs.items():
-        #     fname = f'{codebase}_{k}.pdf'
-        #     fpath = os.path.join(outdir, fname)
-        #     fig.savefig(fpath, transparent=True)
+        for k in ['Cm', 'Vm', 'Qm']:
+            SectionCompTimeSeries([(data, meta)], k, fiber.nodeIDs).render()
 
         # # Comparative SD curve
         # durations = np.logspace(-5, -3, 20)  # s
@@ -121,8 +106,8 @@ class TestFiberAstim(TestFiber):
         #     fiber, durations, {'myelinated': Athrs}, scale='log',
         #     yname='amplitude', yfactor=PA_TO_KPA, yunit='Pa', plot_chr=False)
 
-        # # Log output metrics
-        # self.logOutputMetrics(sim_metrics)
+        # Log output metrics
+        self.logOutputMetrics(sim_metrics)
 
     def test_gaussianSENN(self, is_profiled=False):
         logger.info('Test: gaussian distribution source on myelinated SENN fiber')
