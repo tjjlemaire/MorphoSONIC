@@ -3,9 +3,10 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-09-30 22:26:27
+# @Last Modified time: 2020-10-01 11:38:41
 
 import logging
+import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -41,11 +42,8 @@ class FRvsPRFBatch(LogBatch):
 
     def compute(self, PRF):
         pp = getPulseTrainProtocol(self.PD, self.npulses, PRF)
-        data, meta = fiber.simulate(source, pp)
-        tspikes = fiber.getEndSpikeTrain(data)
-        if tspikes is None:
-            return np.nan
-        return np.mean(1 / np.diff(tspikes))
+        data, meta = fiber.simulate(self.source, pp)
+        return fiber.getEndFiringRate(data)
 
     @property
     def sourcecode(self):
@@ -98,13 +96,10 @@ class NormalizedFiringRateMap(XYMap):
 
     def compute(self, x):
         DC, A = x
-        source.A = A
+        self.source.A = A
         pp = getPulseTrainProtocol(DC / self.PRF, self.npulses, self.PRF)
-        data, meta = fiber.simulate(source, pp)
-        tspikes = fiber.getEndSpikeTrain(data)
-        if tspikes is None:
-            return np.nan
-        return np.mean(1 / np.diff(tspikes)) / self.PRF
+        data, meta = fiber.simulate(self.source, pp)
+        return fiber.EndFiringRate(data) / self.PRF
 
 
 def plotFRvsPRF(PRFs, FRs, cmaps):
@@ -131,10 +126,12 @@ def plotFRvsPRF(PRFs, FRs, cmaps):
                 print(f'{lbl}: all NaNs')
             else:
                 PRF = PRFs[k][PD_key]
-                ax.plot(np.hstack(([PRF_min], PRF)), np.hstack(([PRF_min], FR)), label=lbl, c=c)
+                if not np.isnan(FR[0]) and np.isclose(FR[0] / PRF[0], 1, atol=1e-2):
+                    PRF, FR = np.hstack(([PRF_min], PRF)), np.hstack(([PRF_min], FR))
+                ax.plot(PRF, FR, label=lbl, c=c)
                 ax.axvline(PRF.max(), c=c, linestyle='--')
     ax.legend(frameon=False)
-    plt.show()
+    return fig
 
 
 # Fiber models
@@ -165,28 +162,28 @@ ncombs = len(fibers) * nPD * nPRF
 fontsize = 10
 plot_spikes = True
 cmaps = {
-    'myelinated': 'Blues',
-    'unmyelinated': 'Oranges'
+    'unmyelinated': 'Blues',
+    'myelinated': 'Oranges'
 }
-colors = plt.get_cmap('tab20c').colors
-colors = dict(zip(fibers.keys(), [colors[:3], colors[4:7]]))
-
-subsets = {
-    'myelinated': [],
-    'unmyelinated': []
+subset_colors = {
+    'unmyelinated': 'C0',
+    'myelinated': 'C1'
 }
 
+# Define acoustic sources
+sources = {}
+for k, fiber in fibers.items():
+    w = fiber.length / 5  # m
+    sigma = GaussianAcousticSource.from_FWHM(w)  # m
+    sources[k] = GaussianAcousticSource(0, sigma, Fdrive, Adrive)
+
+# FR vs PRF batches
 PRFs = {}
 FRs = {}
 for k, fiber in fibers.items():
-
-    # Define acoustic source
-    w = fiber.length / 5  # m
-    sigma = GaussianAcousticSource.from_FWHM(w)  # m
-    source = GaussianAcousticSource(0, sigma, Fdrive, Adrive)
-
     # Define pulse duration range
     PDs = np.logspace(-1, 1, nPD) * chronaxies[k]  # s
+    # PDs = [PDs[4]]
 
     # For each pulse duration
     PRFs[k] = {}
@@ -194,20 +191,43 @@ for k, fiber in fibers.items():
     for PD in PDs:
         # Run FR batch
         PD_key = f'PD = {si_format(PD, 1)}s'
-        frbatch = FRvsPRFBatch(fiber, source, PD, npulses, nPRF=nPRF, root=datadir)
+        frbatch = FRvsPRFBatch(fiber, sources[k], PD, npulses, nPRF=nPRF, root=datadir)
         PRFs[k][PD_key] = frbatch.inputs
         FRs[k][PD_key] = frbatch.run()
 
-    # Plot spatiotemporal maps for fiber-specific subsets
-    for PD, PRF in subsets[k]:
-        key = f'PD = {si_format(PD, 1)}s, PRF = {si_format(PRF, 1)}Hz'
-        pp = getPulseTrainProtocol(PD, npulses, PRF)
-        data, meta = fiber.simulate(source, pp)
-        fig = spatioTemporalMap(
-            fiber, source, data, 'Qm', fontsize=fontsize, plot_spikes=plot_spikes)
-        fig.suptitle(key, fontsize=fontsize)
+fig = plotFRvsPRF(PRFs, FRs, cmaps)
 
-plotFRvsPRF(PRFs, FRs, cmaps)
+# # Spatiotemporal maps for fiber-specific subsets
+# subsets = {
+#     'myelinated': [
+#         (chronaxies['myelinated'], 5e2),
+#         (chronaxies['myelinated'], 3e3),
+#         (chronaxies['myelinated'], 1e4)
+#     ],
+#     'unmyelinated': []
+# }
+# FRax = fig.axes[0]
+# minFR = FRax.get_ylim()[0]
+# subset_FRs = {}
+# for k, fiber in fibers.items():
+#     subset_FRs[k] = []
+#     for PD, PRF in subsets[k]:
+#         key = f'PD = {si_format(PD, 1)}s, PRF = {si_format(PRF, 1)}Hz'
+#         pp = getPulseTrainProtocol(PD, npulses, PRF)
+#         # data, meta = fiber.simulate(sources[k], pp)
+#         fpath = fiber.simAndSave(sources[k], pp, overwrite=False, outputdir=datadir)
+#         with open(fpath, 'rb') as fh:
+#             frame = pickle.load(fh)
+#             data, meta = frame['data'], frame['meta']
+#         fig = spatioTemporalMap(
+#             fiber, sources[k], data, 'Qm', fontsize=fontsize, plot_spikes=plot_spikes)
+#         fig.suptitle(key, fontsize=fontsize)
+#         subset_FRs[k].append(fiber.getEndFiringRate(data))
+
+#     subset_FRs[k] = np.array(subset_FRs[k])  # convert to array
+#     subset_FRs[k][np.isnan(subset_FRs[k])] = minFR  # convert nans to inferior ylim
+#     FRax.scatter([x[1] for x in subsets[k]], subset_FRs[k],
+#                  c=[subset_colors[k]], zorder=2.5)
 
 # map_PRFs = {
 #     'myelinated': [100],
