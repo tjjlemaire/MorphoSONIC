@@ -56,7 +56,7 @@ class FRvsPRFBatch(LogBatch):
     def getPRFrange(self, n):
         ''' Get pulse-duration-dependent PRF range. '''
         PRF_max = 0.99 / self.PD  # Hz
-        PRF_min = PRF_max / 100  # Hz
+        PRF_min = max(PRF_max / 100, 10)  # Hz
         return np.logspace(np.log10(PRF_min), np.log10(PRF_max), n)
 
 
@@ -183,7 +183,7 @@ FRs = {}
 for k, fiber in fibers.items():
     # Define pulse duration range
     PDs = np.logspace(-1, 1, nPD) * chronaxies[k]  # s
-    # PDs = [PDs[4]]
+    PDs = [PDs[4]]
 
     # For each pulse duration
     PRFs[k] = {}
@@ -234,16 +234,12 @@ fig = plotFRvsPRF(PRFs, FRs, cmaps)
 #     'unmyelinated': []
 # }
 
-# nperax = 5
+# nperax = 40
 # DCs = np.linspace(0.01, 1, nperax)
 # amps = np.logspace(np.log10(1e0), np.log10(600e3), nperax)
 # for k, fiber in fibers.items():
-#     # Define acoustic source
-#     w = fiber.length / 5  # m
-#     sigma = GaussianAcousticSource.from_FWHM(w)  # m
-#     source = GaussianAcousticSource(0, sigma, Fdrive)
 #     for PRF in map_PRFs[k]:
-#         frmap = NormalizedFiringRateMap(fiber, source, DCs, amps, npulses, PRF, root=datadir)
+#         frmap = NormalizedFiringRateMap(fiber, sources[k], DCs, amps, npulses, PRF, root=datadir)
 #         frmap.run()
 #         frmap.render(yscale='log', zbounds=(0, 1))
 
