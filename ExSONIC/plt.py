@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-09-25 10:06:07
+# @Last Modified time: 2020-10-02 11:03:01
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -653,6 +653,7 @@ def spatioTemporalMap(fiber, source, data, varkey, sec_type='node', fontsize=10,
     ax.set_ylim(*xlims)
     for sk in ['bottom', 'top', 'right', 'left']:
         ax.spines[sk].set_visible(False)
+    ax.get_shared_y_axes().join(ax, axes['c'])
 
     # Plot map
     ax = axes['c']

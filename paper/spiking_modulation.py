@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-10-01 11:38:41
+# @Last Modified time: 2020-10-01 19:28:07
 
 import logging
 import pickle
@@ -56,7 +56,7 @@ class FRvsPRFBatch(LogBatch):
     def getPRFrange(self, n):
         ''' Get pulse-duration-dependent PRF range. '''
         PRF_max = 0.99 / self.PD  # Hz
-        PRF_min = PRF_max / 100  # Hz
+        PRF_min = max(PRF_max / 100, 10)  # Hz
         return np.logspace(np.log10(PRF_min), np.log10(PRF_max), n)
 
 
@@ -183,7 +183,7 @@ FRs = {}
 for k, fiber in fibers.items():
     # Define pulse duration range
     PDs = np.logspace(-1, 1, nPD) * chronaxies[k]  # s
-    # PDs = [PDs[4]]
+    PDs = PDs[:3]
 
     # For each pulse duration
     PRFs[k] = {}
