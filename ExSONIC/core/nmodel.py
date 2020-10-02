@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-10-01 11:13:45
+# @Last Modified time: 2020-10-02 12:11:47
 
 import abc
 from neuron import h
@@ -1162,7 +1162,8 @@ class FiberNeuronModel(SpatiallyExtendedNeuronModel):
         tspikes = self.getEndSpikeTrain(data)
         if tspikes is None:
             return np.nan
-        return np.mean(1 / np.diff(tspikes))
+        # return np.mean(1 / np.diff(tspikes))
+        return 1 / np.mean(np.diff(tspikes))
 
     def isExcited(self, data):
         ''' Determine if neuron is excited from simulation output.

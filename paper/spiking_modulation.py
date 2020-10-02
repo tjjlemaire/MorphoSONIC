@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-10-02 11:30:07
+# @Last Modified time: 2020-10-02 13:50:32
 
 import logging
 import pickle
@@ -109,10 +109,11 @@ def plotFRvsPRF(PRFs, FRs, cmaps):
     ax.set_yscale('log')
     ax.set_xlabel('pulse repetition frequency (Hz)')
     ax.set_ylabel('firing rate (Hz)')
-    PRF_min = 1e0
+    PRF_min = 1e1
     PRF_max = max(max(v.max() for v in val.values()) for val in PRFs.values())
     PRF_range = [PRF_min, PRF_max]
     ax.plot(PRF_range, PRF_range, '--', c='k')
+    ax.plot(PRF_range, 3 * np.array(PRF_range), '--', c='k')
     ax.set_xlim(*PRF_range)
     ax.set_ylim(*PRF_range)
     for k, FRdict in FRs.items():
@@ -126,10 +127,10 @@ def plotFRvsPRF(PRFs, FRs, cmaps):
                 print(f'{lbl}: all NaNs')
             else:
                 PRF = PRFs[k][PD_key]
-                if not np.isnan(FR[0]) and np.isclose(FR[0] / PRF[0], 1, atol=1e-2):
-                    PRF, FR = np.hstack(([PRF_min], PRF)), np.hstack(([PRF_min], FR))
+                # if not np.isnan(FR[0]) and np.isclose(FR[0] / PRF[0], 1, atol=1e-2):
+                #     PRF, FR = np.hstack(([PRF_min], PRF)), np.hstack(([PRF_min], FR))
                 ax.plot(PRF, FR, label=lbl, c=c)
-                ax.axvline(PRF.max(), c=c, linestyle='--')
+                # ax.axvline(PRF.max(), c=c, linestyle='--')
     ax.legend(frameon=False)
     return fig
 
@@ -142,10 +143,15 @@ fibers = {
     'myelinated': SennFiber(10e-6, 21, a=a, fs=fs),
 }
 
-# Charactersitic chronaxies
-chronaxies = {
-    'myelinated': 76e-6,  # s
-    'unmyelinated': 8e-3  # s
+# # Charactersitic chronaxies
+# chronaxies = {
+#     'myelinated': 76e-6,  # s
+#     'unmyelinated': 8e-3  # s
+# }
+
+PDs = {
+    'myelinated': np.array([20e-6, 100e-6, 1e-3]),
+    'unmyelinated': np.array([1e-3, 5e-3, 10e-3])
 }
 
 # US parameters
@@ -182,12 +188,12 @@ PRFs = {}
 FRs = {}
 for k, fiber in fibers.items():
     # Define pulse duration range
-    PDs = np.logspace(-1, 1, nPD) * chronaxies[k]  # s
+    # PDs = np.logspace(-1, 1, nPD) * chronaxies[k]  # s
 
     # For each pulse duration
     PRFs[k] = {}
     FRs[k] = {}
-    for PD in PDs:
+    for PD in PDs[k]:
         # Run FR batch
         PD_key = f'PD = {si_format(PD, 1)}s'
         frbatch = FRvsPRFBatch(fiber, sources[k], PD, npulses, nPRF=nPRF, root=datadir)
@@ -196,45 +202,48 @@ for k, fiber in fibers.items():
 
 fig = plotFRvsPRF(PRFs, FRs, cmaps)
 
-# # Spatiotemporal maps for fiber-specific subsets
-# subsets = {
-#     'myelinated': [
-#         (chronaxies['myelinated'], 5e2),
-#         (chronaxies['myelinated'], 3e3),
-#         (chronaxies['myelinated'], 1e4)
-#     ],
-#     'unmyelinated': []
-# }
-# FRax = fig.axes[0]
-# minFR = FRax.get_ylim()[0]
-# subset_FRs = {}
-# for k, fiber in fibers.items():
-#     subset_FRs[k] = []
-#     for PD, PRF in subsets[k]:
-#         key = f'PD = {si_format(PD, 1)}s, PRF = {si_format(PRF, 1)}Hz'
-#         pp = getPulseTrainProtocol(PD, npulses, PRF)
-#         # data, meta = fiber.simulate(sources[k], pp)
-#         fpath = fiber.simAndSave(sources[k], pp, overwrite=False, outputdir=datadir)
-#         with open(fpath, 'rb') as fh:
-#             frame = pickle.load(fh)
-#             data, meta = frame['data'], frame['meta']
-#         fig = spatioTemporalMap(
-#             fiber, sources[k], data, 'Qm', fontsize=fontsize, plot_spikes=plot_spikes)
-#         fig.suptitle(key, fontsize=fontsize)
-#         subset_FRs[k].append(fiber.getEndFiringRate(data))
+# Spatiotemporal maps for fiber-specific subsets
+subsets = {
+    'myelinated': [
+        (100e-6, 500),
+        (100e-6, 2e3),
+        (100e-6, 1e4),
+    ],
+    'unmyelinated': [
+        (1e-3, 200.),
+        (5e-3, 100.),
+        (10e-3, 50.)
+    ]
+}
+FRax = fig.axes[0]
+minFR = FRax.get_ylim()[0]
+subset_FRs = {}
+for k, fiber in fibers.items():
+    subset_FRs[k] = []
+    for PD, PRF in subsets[k]:
+        key = f'PD = {si_format(PD, 1)}s, PRF = {si_format(PRF, 1)}Hz'
+        pp = getPulseTrainProtocol(PD, npulses, PRF)
+        # data, meta = fiber.simulate(sources[k], pp)
+        fpath = fiber.simAndSave(sources[k], pp, overwrite=False, outputdir=datadir)
+        with open(fpath, 'rb') as fh:
+            frame = pickle.load(fh)
+            data, meta = frame['data'], frame['meta']
+        fig = spatioTemporalMap(
+            fiber, sources[k], data, 'Qm', fontsize=fontsize, plot_spikes=plot_spikes)
+        fig.suptitle(key, fontsize=fontsize)
+        subset_FRs[k].append(fiber.getEndFiringRate(data))
 
-#     subset_FRs[k] = np.array(subset_FRs[k])  # convert to array
-#     subset_FRs[k][np.isnan(subset_FRs[k])] = minFR  # convert nans to inferior ylim
-#     FRax.scatter([x[1] for x in subsets[k]], subset_FRs[k],
-#                  c=[subset_colors[k]], zorder=2.5)
+    subset_FRs[k] = np.array(subset_FRs[k])  # convert to array
+    subset_FRs[k][np.isnan(subset_FRs[k])] = minFR  # convert nans to inferior ylim
+    FRax.scatter([x[1] for x in subsets[k]], subset_FRs[k],
+                 c=[subset_colors[k]], zorder=2.5)
 
 # map_PRFs = {
-#     'myelinated': [100],
-#     'unmyelinated': []
+#     'myelinated': [500., 2e3],
+#     'unmyelinated': [50., 200.]
 # }
-
 # nperax = 40
-# DCs = np.linspace(0.01, 1, nperax)
+# DCs = np.linspace(0.0, 1, nperax)
 # amps = np.logspace(np.log10(1e0), np.log10(600e3), nperax)
 # for k, fiber in fibers.items():
 #     for PRF in map_PRFs[k]:
