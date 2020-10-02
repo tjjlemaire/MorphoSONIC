@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-10-01 19:28:07
+# @Last Modified time: 2020-10-02 11:30:07
 
 import logging
 import pickle
@@ -183,7 +183,6 @@ FRs = {}
 for k, fiber in fibers.items():
     # Define pulse duration range
     PDs = np.logspace(-1, 1, nPD) * chronaxies[k]  # s
-    PDs = PDs[:3]
 
     # For each pulse duration
     PRFs[k] = {}
@@ -234,16 +233,12 @@ fig = plotFRvsPRF(PRFs, FRs, cmaps)
 #     'unmyelinated': []
 # }
 
-# nperax = 5
+# nperax = 40
 # DCs = np.linspace(0.01, 1, nperax)
 # amps = np.logspace(np.log10(1e0), np.log10(600e3), nperax)
 # for k, fiber in fibers.items():
-#     # Define acoustic source
-#     w = fiber.length / 5  # m
-#     sigma = GaussianAcousticSource.from_FWHM(w)  # m
-#     source = GaussianAcousticSource(0, sigma, Fdrive)
 #     for PRF in map_PRFs[k]:
-#         frmap = NormalizedFiringRateMap(fiber, source, DCs, amps, npulses, PRF, root=datadir)
+#         frmap = NormalizedFiringRateMap(fiber, sources[k], DCs, amps, npulses, PRF, root=datadir)
 #         frmap.run()
 #         frmap.render(yscale='log', zbounds=(0, 1))
 

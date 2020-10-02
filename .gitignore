@@ -1,3 +1,5 @@
+.texpadtmp/
+
 # Sphinx tools and doc
 _build/
 _static/
