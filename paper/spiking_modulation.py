@@ -3,22 +3,23 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-10-02 13:50:32
+# @Last Modified time: 2020-10-12 13:58:44
 
+import os
 import logging
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 
 from PySONIC.core import getPulseTrainProtocol, LogBatch
-from PySONIC.utils import logger, si_format
+from PySONIC.utils import logger, si_format, bounds
 from PySONIC.plt import setNormalizer, XYMap
 
 from ExSONIC.core import SennFiber, UnmyelinatedFiber
 from ExSONIC.core.sources import GaussianAcousticSource
 from ExSONIC.plt import spatioTemporalMap
 
-from root import datadir
+from root import datadir, figdir
 
 # Set logging level
 logger.setLevel(logging.INFO)
@@ -99,36 +100,55 @@ class NormalizedFiringRateMap(XYMap):
         self.source.A = A
         pp = getPulseTrainProtocol(DC / self.PRF, self.npulses, self.PRF)
         data, meta = fiber.simulate(self.source, pp)
-        return fiber.EndFiringRate(data) / self.PRF
+        return fiber.getEndFiringRate(data) / self.PRF
+
+    def onClick(self, event):
+        DC, A = self.getOnClickXY(event)
+        self.source.A = A
+        pp = getPulseTrainProtocol(DC / self.PRF, self.npulses, self.PRF)
+        data, meta = fiber.simulate(self.source, pp)
+        fig = spatioTemporalMap(self.fiber, self.source, data, 'Qm', fontsize=fontsize)
+        plt.show()
 
 
 def plotFRvsPRF(PRFs, FRs, cmaps):
     ''' Plot FR vs PRF across cell types for various PDs. '''
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(constrained_layout=True, figsize=(4, 3.5))
     ax.set_xscale('log')
     ax.set_yscale('log')
     ax.set_xlabel('pulse repetition frequency (Hz)')
     ax.set_ylabel('firing rate (Hz)')
-    PRF_min = 1e1
-    PRF_max = max(max(v.max() for v in val.values()) for val in PRFs.values())
-    PRF_range = [PRF_min, PRF_max]
+
+    PRF_min = 1e0
+    PRF_max = 0.
+    for key, val in FRs.items():
+        for k, v in val.items():
+            imax = np.where(~np.isnan(v))[0][-1]
+            PRF_max = max(PRFs[key][k][imax], PRF_max)
+    PRF_range = np.array([PRF_min, PRF_max])
     ax.plot(PRF_range, PRF_range, '--', c='k')
-    ax.plot(PRF_range, 3 * np.array(PRF_range), '--', c='k')
+    for x in [2]:
+        ax.plot(PRF_range, PRF_range * x, '--', c='k')
+        ax.plot(PRF_range, PRF_range / x, '--', c='k')
     ax.set_xlim(*PRF_range)
     ax.set_ylim(*PRF_range)
+
     for k, FRdict in FRs.items():
         nPDs = len(FRdict)
         _, sm = setNormalizer(plt.get_cmap(cmaps[k]), (0, 1))
-        xstart = 0.2  # avoid white-ish colors
+        xstart = 0.4  # avoid white-ish colors
         clist = [sm.to_rgba((1 - xstart) / (nPDs - 1) * i + xstart) for i in range(nPDs)]
         for c, (PD_key, FR) in zip(clist, FRdict.items()):
             lbl = f'{k} - {PD_key}'
             if np.all(np.isnan(FR)):
-                print(f'{lbl}: all NaNs')
+                logger.info(f'{lbl}: all NaNs')
             else:
                 PRF = PRFs[k][PD_key]
-                # if not np.isnan(FR[0]) and np.isclose(FR[0] / PRF[0], 1, atol=1e-2):
-                #     PRF, FR = np.hstack(([PRF_min], PRF)), np.hstack(([PRF_min], FR))
+                if np.all(~np.isnan(FR[:3])):  # if starts with 3 real values
+                    s0, s1, *_ = np.diff(FR) / np.diff(PRF)
+                    if np.isclose(s1, s0, atol=1e-2):  # if first 2 slopes are similar
+                        # Extend linear range to minimum PRF (assuming to vertical offset)
+                        PRF, FR = np.hstack(([PRF_min], PRF)), np.hstack(([s0 * PRF_min], FR))
                 ax.plot(PRF, FR, label=lbl, c=c)
                 # ax.axvline(PRF.max(), c=c, linestyle='--')
     ax.legend(frameon=False)
@@ -166,7 +186,10 @@ ncombs = len(fibers) * nPD * nPRF
 
 # Plot parameters
 fontsize = 10
-plot_spikes = True
+Qbounds = {
+    'myelinated': (-175, 75),
+    'unmyelinated': (-80, 36)
+}
 cmaps = {
     'unmyelinated': 'Blues',
     'myelinated': 'Oranges'
@@ -175,6 +198,7 @@ subset_colors = {
     'unmyelinated': 'C0',
     'myelinated': 'C1'
 }
+maponly = False
 
 # Define acoustic sources
 sources = {}
@@ -200,22 +224,22 @@ for k, fiber in fibers.items():
         PRFs[k][PD_key] = frbatch.inputs
         FRs[k][PD_key] = frbatch.run()
 
-fig = plotFRvsPRF(PRFs, FRs, cmaps)
+FRfig = plotFRvsPRF(PRFs, FRs, cmaps)
 
 # Spatiotemporal maps for fiber-specific subsets
 subsets = {
     'myelinated': [
         (100e-6, 500),
-        (100e-6, 2e3),
-        (100e-6, 1e4),
+        (100e-6, 2600),
+        (20e-6, 5000),
     ],
     'unmyelinated': [
-        (1e-3, 200.),
-        (5e-3, 100.),
-        (10e-3, 50.)
+        (10e-3, 15.),
+        (5e-3, 15.),
+        (1e-3, 400.)
     ]
 }
-FRax = fig.axes[0]
+FRax = FRfig.axes[0]
 minFR = FRax.get_ylim()[0]
 subset_FRs = {}
 for k, fiber in fibers.items():
@@ -228,9 +252,18 @@ for k, fiber in fibers.items():
         with open(fpath, 'rb') as fh:
             frame = pickle.load(fh)
             data, meta = frame['data'], frame['meta']
-        fig = spatioTemporalMap(
-            fiber, sources[k], data, 'Qm', fontsize=fontsize, plot_spikes=plot_spikes)
-        fig.suptitle(key, fontsize=fontsize)
+        # fig = spatioTemporalMap(
+        #     fiber, sources[k], data, 'Qm', fontsize=fontsize,
+        #     cmap=cmaps[k], zbounds=Qbounds[k], maponly=maponly)
+        # if not maponly:
+        #     fig.suptitle(key, fontsize=fontsize)
+        #     ext = '.pdf'
+        #     kwargs = {}
+        # else:
+        #     ext = '.png'
+        #     kwargs = {'dpi': 300}
+        # fname = f'Qmap_{k}_{key}{ext}'.replace(' ', '').replace(',', '_').replace('=', '')
+        # fig.savefig(os.path.join(figdir, fname), transparent=True, **kwargs)
         subset_FRs[k].append(fiber.getEndFiringRate(data))
 
     subset_FRs[k] = np.array(subset_FRs[k])  # convert to array
@@ -238,18 +271,26 @@ for k, fiber in fibers.items():
     FRax.scatter([x[1] for x in subsets[k]], subset_FRs[k],
                  c=[subset_colors[k]], zorder=2.5)
 
-# map_PRFs = {
-#     'myelinated': [500., 2e3],
-#     'unmyelinated': [50., 200.]
-# }
-# nperax = 40
-# DCs = np.linspace(0.0, 1, nperax)
-# amps = np.logspace(np.log10(1e0), np.log10(600e3), nperax)
-# for k, fiber in fibers.items():
-#     for PRF in map_PRFs[k]:
-#         frmap = NormalizedFiringRateMap(fiber, sources[k], DCs, amps, npulses, PRF, root=datadir)
-#         frmap.run()
-#         frmap.render(yscale='log', zbounds=(0, 1))
+FRfig.savefig(os.path.join(figdir, 'FRvsPRF.pdf'), transparent=True)
 
+map_PRFs = {
+    'myelinated': [500, 2600],
+    'unmyelinated': [50., 200.]
+}
+FRbounds = {
+    'myelinated': (0, 1),
+    'unmyelinated': (0, 3.1)
+}
+nperax = 40
+DCs = np.linspace(0.0, 1, nperax)
+amps = np.logspace(np.log10(10e3), np.log10(600e3), nperax)
+for k, fiber in fibers.items():
+    for PRF in map_PRFs[k]:
+        frmap = NormalizedFiringRateMap(fiber, sources[k], DCs, amps, npulses, PRF, root=datadir)
+        frmap.run()
+        fig = frmap.render(yscale='log', cmap=cmaps[k], zbounds=FRbounds[k], interactive=True)
+        print(k, PRF, np.nanmax(frmap.getOutput()))
+        # code = f'normFRmap_{k}_PRF_{si_format(PRF, 1)}Hz.pdf'
+        # fig.savefig(os.path.join(figdir, code), transparent=True)
 
 plt.show()

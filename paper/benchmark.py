@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-09-24 13:42:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-09-28 23:33:56
+# @Last Modified time: 2020-10-05 11:47:42
 
 import os
 import logging
@@ -35,7 +35,7 @@ default_gm = 1e0  # dummy value (S/m2)
 passive = True
 div_criterion = 'rmse'
 tau_bounds = (1e-7, 1e-2)  # s
-div_levels = [0.1, 1.0, 10.0]  # mV
+div_levels = [1.0]  # mV
 tau_range = np.logspace(*np.log10(tau_bounds), nperax)  # s
 interactive = True
 fontsize = 10
@@ -165,7 +165,7 @@ for (k, (f, gammas)), ax in zip(fgamma_pairs.items(), submaps_axes):
     title = f'f = {bm.fstr}' if f != Fdrive else f'g = {bm.gammastr}'
     divmap.render(
         ax=ax, cbarax=cbarax, fs=fontsize, title=title, insets=fiber_insets,
-        minimal=True, interactive=interactive)
+        minimal=True, interactive=interactive, levels=div_levels)
 
 # Colorbar aspect
 cbarax.set_aspect(15)

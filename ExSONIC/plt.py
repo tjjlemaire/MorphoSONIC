@@ -3,14 +3,15 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-10-02 11:03:01
+# @Last Modified time: 2020-10-05 09:51:32
 
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
 from scipy import signal
 
-from PySONIC.plt import GroupedTimeSeries, CompTimeSeries, mirrorAxis
+from PySONIC.core import Lookup
+from PySONIC.plt import GroupedTimeSeries, CompTimeSeries, mirrorAxis, setNormalizer
 from PySONIC.utils import logger, si_format, getPow10, rsquared, padleft, timeThreshold, bounds
 
 from .core import *
@@ -602,7 +603,8 @@ def setAxis(ax, precision, signed, axkey='y'):
 
 
 def spatioTemporalMap(fiber, source, data, varkey, sec_type='node', fontsize=10, ypad=-10,
-                      plot_spikes=False):
+                      cmap='viridis', zbounds=None, max_size_t=None, max_size_x=None,
+                      maponly=False):
 
     # Extract var info
     varinfo = fiber.pneuron.getPltVars()[varkey]
@@ -610,77 +612,118 @@ def spatioTemporalMap(fiber, source, data, varkey, sec_type='node', fontsize=10,
     # Extract x, y and z arrays
     t = data.time
     xcoords = fiber.getXCoords()[sec_type]  # m
-    zmap = data.getArray(varkey, prefix=sec_type)
+    zmap = data.getArray(varkey, prefix=sec_type) * varinfo.get('factor', 1)
+
+    # Use lookup object to resample along both dimensions if needed
+    lkp = Lookup({'t': t, 'x': xcoords}, {varkey: zmap.T})
+    if max_size_t is not None:
+        if lkp.refs['t'].size > max_size_t:
+            lkp = lkp.project('t', np.linspace(*bounds(t), max_size_t))
+    if max_size_x is not None:
+        if lkp.refs['x'].size > max_size_x:
+            lkp = lkp.project('x', np.linspace(*bounds(xcoords), max_size_x))
+    t = lkp.refs['t']
+    xcoords = lkp.refs['x']
+    zmap = lkp[varkey].T
+    stim = np.interp(t, data.time, data.stim)
+
+    # Determine axes boundaries
+    tlims = np.array(bounds(t)) * S_TO_MS
+    xlims = bounds(xcoords * M_TO_MM)
+    if zbounds is None:
+        zbounds = bounds(zmap)
+    norm, sm = setNormalizer(cmap, zbounds, 'lin')
 
     # Create figure
     fig = plt.figure(constrained_layout=True, figsize=(8, 2))
-    gs = fig.add_gridspec(5, 20)
-    nfield, ncbar = 2, 1
-    subplots = {
-        'a': gs[0, nfield:-ncbar],
-        'b': gs[1:, :nfield],
-        'c': gs[1:, nfield:-ncbar],
-        'd': gs[:, -ncbar:]}
+    gs = fig.add_gridspec(7, 20)
+    if not maponly:
+        nfield, ncbar = 2, 1
+        subplots = {
+            'a': gs[0, nfield:-ncbar],
+            'b': gs[1, nfield:-ncbar],
+            'c': gs[2:, :nfield],
+            'd': gs[2:, nfield:-ncbar],
+            'e': gs[:, -ncbar:]}
+    else:
+        subplots = {'d': gs[:, :]}
     axes = {k: fig.add_subplot(v) for k, v in subplots.items()}
 
-    # Plot stim vector
-    ax = axes['a']
-    for sk in ['top', 'right', 'bottom', 'left']:
-        ax.spines[sk].set_visible(False)
-    ax.plot(t * S_TO_MS, data.stim, c='k')
-    ax.fill_between(t * S_TO_MS, np.zeros(t.size), data.stim, facecolor='silver')
-    ax.set_yticks([])
-    ax.set_ylabel('stimulus', fontsize=fontsize)
-    tlims = np.array(bounds(t)) * S_TO_MS
-    ax.set_xticks([])
-    ax.set_xlim(*tlims)
-    if plot_spikes:
+    if not maponly:
+        for ax in [axes['a'], axes['b'], axes['c'], axes['e']]:
+            for sk in ['top', 'right', 'bottom', 'left']:
+                ax.spines[sk].set_visible(False)
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+    # Organize temporal axes
+    if not maponly:
+        taxes = [axes['a'], axes['b'], axes['d']]
+    else:
+        taxes = [axes['d']]
+    for ax in taxes:
+        ax.set_xlim(*tlims)
+    for ax in taxes[1:]:
+        ax.get_shared_x_axes().join(ax, taxes[0])
+    if not maponly:
+        taxes[-1].set_xlabel('time (ms)', fontsize=fontsize, labelpad=ypad)
+        taxes[-1].set_xticks(tlims)
+    else:
+        taxes[-1].set_xticks([])
+
+    # Stim vector plot
+    if not maponly:
+        ax = axes['a']
+        ax.plot(t * S_TO_MS, stim, c='k')
+        ax.fill_between(t * S_TO_MS, np.zeros(t.size), stim, facecolor='silver')
+
+    # End-node spikes raster plot
+    if not maponly:
+        ax = axes['b']
         tspikes = fiber.getEndSpikeTrain(data)
         if tspikes is not None:
-            ax.scatter(tspikes * 1e3, .5 * np.ones(tspikes.size), color=['C1'], marker='*')
+            for ts in tspikes:
+                ax.axvline(ts * S_TO_MS, lw=2, color='k')
 
-    xlims = bounds(xcoords * M_TO_MM)
+    # Stimulus field distribution plot
+    if not maponly:
+        ax = axes['c']
+        xdense = np.linspace(*bounds(xcoords), 100)  # m
+        field = source.getField(xdense)
+        y = -field / field.max()
+        ax.plot(y, xdense * M_TO_MM, c='k')
+        ax.fill_betweenx(xdense * M_TO_MM, y, np.zeros(y.size), facecolor='silver', alpha=0.5)
+        ax.set_ylim(*xlims)
+        ax.get_shared_y_axes().join(ax, axes['c'])
 
-    # Plot field
-    ax = axes['b']
-    xdense = np.linspace(*bounds(xcoords), 100)  # m
-    field = source.getField(xdense)
-    y = -field / field.max()
-    ax.plot(y, xdense * M_TO_MM, c='k')
-    ax.fill_betweenx(xdense * M_TO_MM, y, np.zeros(y.size), facecolor='r', alpha=0.5)
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.set_ylim(*xlims)
-    for sk in ['bottom', 'top', 'right', 'left']:
-        ax.spines[sk].set_visible(False)
-    ax.get_shared_y_axes().join(ax, axes['c'])
-
-    # Plot map
-    ax = axes['c']
+    # Spatio-temporal map
+    ax = axes['d']
     for sk in ['top', 'right']:
         ax.spines[sk].set_visible(False)
-    for sk in ['bottom', 'left']:
-        ax.spines[sk].set_position(('outward', 3))
-    ax.set_xlabel('time (ms)', fontsize=fontsize, labelpad=ypad)
-    ax.set_xticks(tlims)
-    ax.set_xlim(*tlims)
-    ax.set_ylabel('x (mm)', fontsize=fontsize, labelpad=2 * ypad)
-    ax.set_yticks(xlims)
     ax.set_ylim(*xlims)
-    ax.yaxis.set_major_formatter(FormatStrFormatter('%.1f'))
-    sm = ax.pcolormesh(t * S_TO_MS, xcoords * M_TO_MM, zmap * varinfo.get('factor', 1))
-    ax.get_shared_x_axes().join(ax, axes['a'])
+    ax.pcolormesh(t * S_TO_MS, xcoords * M_TO_MM, zmap, cmap=cmap, norm=norm)
+    if not maponly:
+        for sk in ['bottom', 'left']:
+            ax.spines[sk].set_position(('outward', 3))
+        ax.set_ylabel('x (mm)', fontsize=fontsize, labelpad=2 * ypad)
+        ax.set_yticks(xlims)
+        ax.yaxis.set_major_formatter(FormatStrFormatter('%.1f'))
+    else:
+        for sk in ['bottom', 'left']:
+            ax.spines[sk].set_visible(False)
+        ax.set_yticks([])
 
     # Plot colorbar
-    ax = axes['d']
-    cbar = fig.colorbar(sm, cax=ax)
-    lims = roundBounds(ax.get_ylim(), 0)
-    ax.set_ylim(*lims)
-    ax.tick_params(length=0, axis='y')
-    cbar.set_ticks(lims)
-    ax.set_yticklabels([f'{y:+.0f}' for y in lims])
-    ylabel = f'{varinfo["label"]} ({varinfo["unit"]})'
-    ax.set_ylabel(ylabel.replace('_', '').replace('^', ''), fontsize=fontsize, labelpad=ypad)
+    if not maponly:
+        ax = axes['e']
+        cbar = fig.colorbar(sm, cax=ax)
+        lims = roundBounds(ax.get_ylim(), 0)
+        ax.set_ylim(*lims)
+        ax.tick_params(length=0, axis='y')
+        cbar.set_ticks(lims)
+        ax.set_yticklabels([f'{y:+.0f}' for y in lims])
+        ylabel = f'{varinfo["label"]} ({varinfo["unit"]})'
+        ax.set_ylabel(ylabel.replace('_', '').replace('^', ''), fontsize=fontsize, labelpad=ypad)
 
     # Post-process figure
     for ax in axes.values():

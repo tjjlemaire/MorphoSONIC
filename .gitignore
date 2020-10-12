@@ -31,7 +31,6 @@ __pycache__/
 *.dll
 x86_64/
 
-
 # Distribution / packaging
 .Python
 env/
