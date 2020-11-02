@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-11-02 12:31:11
+# @Last Modified time: 2020-11-02 12:38:40
 
 import os
 import logging
@@ -247,23 +247,23 @@ for k, fiber in fibers.items():
     for PD, PRF in subsets[k]:
         key = f'PD = {si_format(PD, 1)}s, PRF = {si_format(PRF, 1)}Hz'
         pp = getPulseTrainProtocol(PD, npulses, PRF)
-        # data, meta = fiber.simulate(sources[k], pp)
-        fpath = fiber.simAndSave(sources[k], pp, overwrite=False, outputdir=datadir)
-        with open(fpath, 'rb') as fh:
-            frame = pickle.load(fh)
-            data, meta = frame['data'], frame['meta']
-        # fig = spatioTemporalMap(
-        #     fiber, sources[k], data, 'Qm', fontsize=fontsize,
-        #     cmap=cmaps[k], zbounds=Qbounds[k], maponly=maponly)
-        # if not maponly:
-        #     fig.suptitle(key, fontsize=fontsize)
-        #     ext = '.pdf'
-        #     kwargs = {}
-        # else:
-        #     ext = '.png'
-        #     kwargs = {'dpi': 300}
-        # fname = f'Qmap_{k}_{key}{ext}'.replace(' ', '').replace(',', '_').replace('=', '')
-        # fig.savefig(os.path.join(figdir, fname), transparent=True, **kwargs)
+        data, meta = fiber.simulate(sources[k], pp)
+        # fpath = fiber.simAndSave(sources[k], pp, overwrite=False, outputdir=datadir)
+        # with open(fpath, 'rb') as fh:
+        #     frame = pickle.load(fh)
+        #     data, meta = frame['data'], frame['meta']
+        fig = spatioTemporalMap(
+            fiber, sources[k], data, 'Qm', fontsize=fontsize,
+            cmap=cmaps[k], zbounds=Qbounds[k], maponly=maponly)
+        if not maponly:
+            fig.suptitle(key, fontsize=fontsize)
+            ext = '.pdf'
+            kwargs = {}
+        else:
+            ext = '.png'
+            kwargs = {'dpi': 300}
+        fname = f'fig6A_Qmap_{k}_{key}{ext}'.replace(' ', '').replace(',', '_').replace('=', '')
+        fig.savefig(os.path.join(figdir, fname), transparent=True, **kwargs)
         subset_FRs[k].append(fiber.getEndFiringRate(data))
 
     subset_FRs[k] = np.array(subset_FRs[k])  # convert to array
@@ -271,7 +271,7 @@ for k, fiber in fibers.items():
     FRax.scatter([x[1] for x in subsets[k]], subset_FRs[k],
                  c=[subset_colors[k]], zorder=2.5)
 
-FRfig.savefig(os.path.join(figdir, 'FRvsPRF.pdf'), transparent=True)
+FRfig.savefig(os.path.join(figdir, 'fig6A_raw.pdf'), transparent=True)
 
 map_PRFs = {
     'myelinated': [500, 2600],
@@ -289,7 +289,7 @@ for k, fiber in fibers.items():
         frmap = NormalizedFiringRateMap(fiber, sources[k], DCs, amps, npulses, PRF, root=datadir)
         frmap.run()
         fig = frmap.render(yscale='log', cmap=cmaps[k], zbounds=FRbounds[k], interactive=True)
-        # code = f'normFRmap_{k}_PRF_{si_format(PRF, 1)}Hz.pdf'
-        # fig.savefig(os.path.join(figdir, code), transparent=True)
+        code = f'fig6B_normFRmap_{k}_PRF_{si_format(PRF, 1)}Hz.pdf'
+        fig.savefig(os.path.join(figdir, code), transparent=True)
 
 plt.show()
