@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-10-12 13:58:44
+# @Last Modified time: 2020-11-02 12:31:11
 
 import os
 import logging
@@ -289,7 +289,6 @@ for k, fiber in fibers.items():
         frmap = NormalizedFiringRateMap(fiber, sources[k], DCs, amps, npulses, PRF, root=datadir)
         frmap.run()
         fig = frmap.render(yscale='log', cmap=cmaps[k], zbounds=FRbounds[k], interactive=True)
-        print(k, PRF, np.nanmax(frmap.getOutput()))
         # code = f'normFRmap_{k}_PRF_{si_format(PRF, 1)}Hz.pdf'
         # fig.savefig(os.path.join(figdir, code), transparent=True)
 

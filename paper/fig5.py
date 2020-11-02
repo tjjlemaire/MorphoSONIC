@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-08-27 11:33:16
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-09-24 13:29:00
+# @Last Modified time: 2020-11-02 12:25:58
 
 import os
 import logging
@@ -370,6 +370,6 @@ for ax in axes.values():
     for item in ax.get_xticklabels() + ax.get_yticklabels():
         item.set_fontsize(fontsize)
 
-fig.savefig(os.path.join(figdir, 'rheobase_mechs_raw.pdf'), transparent=True)
+fig.savefig(os.path.join(figdir, 'fig5_raw.pdf'), transparent=True)
 
 plt.show()

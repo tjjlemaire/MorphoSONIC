@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-09-14 11:50:12
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-09-21 17:29:17
+# @Last Modified time: 2020-11-02 12:20:58
 
 import os
 import logging
@@ -161,6 +161,6 @@ cbar.set_ticklabels(['proximal', 'central', 'distal'])
 for item in ax.get_yticklabels():
     item.set_fontsize(fontsize)
 
-fig.savefig(os.path.join(figdir, 'traces_raw.pdf'), transparent=True)
+fig.savefig(os.path.join(figdir, 'fig3_raw.pdf'), transparent=True)
 
 plt.show()

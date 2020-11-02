@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-09-24 13:42:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-10-05 11:47:42
+# @Last Modified time: 2020-11-02 12:19:22
 
 import os
 import logging
@@ -16,7 +16,6 @@ from PySONIC.neurons import passiveNeuron
 
 from ExSONIC.core import SennFiber, UnmyelinatedFiber
 from PySONIC.multicomp import GammaMap, SonicBenchmark, ModelDivergenceMap, GammaDivergenceMap
-# from ExSONIC.core.benchmark import *
 from ExSONIC.constants import *
 from root import datadir, figdir
 
@@ -170,7 +169,7 @@ for (k, (f, gammas)), ax in zip(fgamma_pairs.items(), submaps_axes):
 # Colorbar aspect
 cbarax.set_aspect(15)
 
-fig.savefig(os.path.join(figdir, 'benchmark_raw.pdf'), transparent=True)
+fig.savefig(os.path.join(figdir, 'fig2AB_raw.pdf'), transparent=True)
 
 # Cell-type-specific benchmarks and gamma divergence maps
 gamma_range = np.linspace(0, 1.6, nperax)
@@ -233,7 +232,7 @@ for ax, (k, fiber) in zip(mainaxes, fibers.items()):
                   levels=div_levels, insets=full_insets[k], interactive=interactive)
 
 # cbarax.set_aspect(15)
-fig.savefig(os.path.join(figdir, 'benchmark_raw2.pdf'), transparent=True)
+fig.savefig(os.path.join(figdir, 'fig2CD_raw.pdf'), transparent=True)
 
 
 plt.show()

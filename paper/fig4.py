@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-08-24 19:34:35
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-09-24 10:44:11
+# @Last Modified time: 2020-11-02 12:24:15
 
 import os
 import logging
@@ -319,6 +319,6 @@ for k in other_keys:
     ax.minorticks_off()
 
 # Save as pdf
-fig.savefig(os.path.join(figdir, 'SDcurves_raw.pdf'), transparent=True)
+fig.savefig(os.path.join(figdir, 'fig4_raw.pdf'), transparent=True)
 
 plt.show()

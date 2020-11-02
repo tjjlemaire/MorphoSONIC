@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-08-22 14:14:17
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-09-21 17:29:33
+# @Last Modified time: 2020-11-02 12:13:54
 
 import os
 import logging
@@ -254,6 +254,6 @@ for ax in axes.values():
     for sk in ['top', 'right']:
         ax.spines[sk].set_visible(False)
 
-fig.savefig(os.path.join(figdir, f'fields_raw.pdf'), transparent=True)
+fig.savefig(os.path.join(figdir, f'figS1_raw.pdf'), transparent=True)
 
 plt.show()
