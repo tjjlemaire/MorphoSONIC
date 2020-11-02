@@ -215,13 +215,12 @@ Similarly, you can run simulations of myelinated and unmyelinated fiber models u
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-18 15:08:42
+# @Last Modified time: 2020-05-08 18:41:56
 
 import logging
 import matplotlib.pyplot as plt
 
-from PySONIC.core import PulsedProtocol
-from PySONIC.neurons import getPointNeuron
+from PySONIC.core import PulsedProtocol, BalancedPulsedProtocol
 from PySONIC.utils import logger
 
 from ExSONIC.core import SennFiber
@@ -230,9 +229,6 @@ from ExSONIC.plt import SectionCompTimeSeries
 
 # Set logging level
 logger.setLevel(logging.INFO)
-
-# Define point-neuron model
-pneuron = getPointNeuron('RS')
 
 # Define sonophore parameters
 a = 32e-9  # sonophore radius (m)
@@ -246,40 +242,50 @@ nnodes = 21
 fiber = SennFiber(fiberD, nnodes, a=a, fs=fs)
 
 # Define various sources
-sources = [
-    IntracellularCurrent(
-        sec_id=fiber.central_ID,  # target section
-        I=3.0e-9),                # current amplitude (A)
-    ExtracellularCurrent(
-        x=(0., fiber.interL),  # point-source electrode position (m)
-        I=-0.68e-3),           # current amplitude (A)
-    GaussianVoltageSource(
-        0,                   # gaussian center (m)
-        fiber.length / 10.,  # gaussian width (m)
-        Ve=-80.),            # peak extracellular voltage (mV)
-    SectionAcousticSource(
-        fiber.central_ID,  # target section
-        500e3,             # US frequency (Hz)
-        A=100e3),          # peak acoustic amplitude (Pa)
-    GaussianAcousticSource(
-        0,                   # gaussian center (m)
-        fiber.length / 10.,  # gaussian width (m)
-        500e3,               # US frequency (Hz)
-        A=100e3),            # peak acoustic amplitude (Pa)
-    PlanarDiskTransducerSource(
-        (0., 0., 'focus'),  # transducer position (m)
-        500e3,              # US frequency (Hz)
-        r=2e-3,             # transducer radius (m)
-        u=0.04)             # m/s
+iintra_source = IntracellularCurrent(
+    sec_id=fiber.central_ID,  # target section
+    I=3.0e-9)                 # current amplitude (A)
+iextra_source = ExtracellularCurrent(
+    x=(0., fiber.interL),  # point-source electrode position (m)
+    I=-0.70e-3)            # current amplitude (A)
+voltage_source = GaussianVoltageSource(
+    0,                   # gaussian center (m)
+    fiber.length / 10.,  # gaussian width (m)
+    Ve=-80.)             # peak extracellular voltage (mV)
+section_US_source = SectionAcousticSource(
+    fiber.central_ID,  # target section
+    500e3,             # US frequency (Hz)
+    A=100e3)           # peak acoustic amplitude (Pa)
+gaussian_US_source = GaussianAcousticSource(
+    0,                   # gaussian center (m)
+    fiber.length / 10.,  # gaussian width (m)
+    500e3,               # US frequency (Hz)
+    A=100e3)             # peak acoustic amplitude (Pa)
+transducer_source = PlanarDiskTransducerSource(
+    (0., 0., 'focus'),  # transducer position (m)
+    500e3,              # US frequency (Hz)
+    r=2e-3,             # transducer radius (m)
+    u=0.04)             # m/s
+
+# Define pulsing protocols
+tpulse = 100e-6  # s
+xratio = 0.2     # (-)
+toffset = 3e-3   # s
+standard_pp = PulsedProtocol(tpulse, toffset)                  # (for US sources)
+balanced_pp = BalancedPulsedProtocol(tpulse, xratio, toffset)  # (for electrical sources)
+
+# Define source-protocol pairs
+pairs = [
+    (iintra_source, balanced_pp),
+    (iextra_source, balanced_pp),
+    (voltage_source, balanced_pp),
+    (section_US_source, standard_pp),
+    (gaussian_US_source, standard_pp),
+    (transducer_source, standard_pp)
 ]
 
-# Set pulsing protocol
-pulse_width = 100e-6  # s
-toffset = 3e-3        # s
-pp = PulsedProtocol(pulse_width, toffset)
-
-# Simulate model with each source and plot results
-for source in sources:
+# Simulate model with each source-protocol pair, and plot results
+for source, pp in pairs:
     data, meta = fiber.simulate(source, pp)
     SectionCompTimeSeries([(data, meta)], 'Vm', fiber.nodeIDs).render()
 
@@ -320,6 +326,20 @@ To save simulation results in binary `.pkl` files, you can use the `-s` option. 
 When running simulation batches, it is highly advised to specify the `-s` option in order to save results of each simulation. You can then visualize results at a later stage.
 
 To visualize results, use the `plot_ext_timeseries.py` script. You will be prompted to select the output files containing the simulation(s) results. By default, separate figures will be created for each simulation, showing the time profiles of all resulting variables in the default morphological section of the model. Here again, you can choose to show only a subset of variables using the `-p [xxx]` option, and specify morphological sections of interest with the `--section [xxx]` option. Moreover, if you select a subset of variables, you can visualize resulting profiles across sections in comparative figures wih the `--compare` option.
+
+### morphoSONIC paper simulations
+
+The `/paper/` subfolder contains the scripts used to generate figures reported in the morphoSONIC paper.
+
+Before running the scripts, you will need to specify an output directory to save the figures in. To do so, update the `figdir` variable in the `root.py` module of this subfolder:
+
+`figdir = '/path/to/your/output/directory'`
+
+Once that is done, you can run each script from the command line:
+
+```python figX.py ```
+
+replacing `X` with the appropriate number.
 
 ## On the integration of SONIC model representations within *NEURON*
 
