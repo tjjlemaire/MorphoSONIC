@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-10-02 12:11:47
+# @Last Modified time: 2021-02-11 12:33:11
 
 import abc
 from neuron import h
@@ -12,7 +12,7 @@ import pandas as pd
 from scipy import stats
 from boltons.strutils import cardinalize
 
-from PySONIC.core import Model, PointNeuron, BilayerSonophore
+from PySONIC.core import Model, PointNeuron, BilayerSonophore, EffectiveVariablesDict
 from PySONIC.postpro import detectSpikes
 from PySONIC.utils import logger, si_format, filecode, simAndSave, isIterable, TimeSeries
 from PySONIC.constants import *
@@ -417,7 +417,8 @@ class NeuronModel(metaclass=abc.ABCMeta):
         ''' Get zero amplitude lookup . '''
         pylkp = self.pneuron.getLookup()  # get 1D charge-dependent lookup
         pylkp.refs = {'A': np.array([0.]), **pylkp.refs}  # add amp as first dimension
-        pylkp.tables = {k: np.array([v]) for k, v in pylkp.items()}  # add amp dimension to tables
+        pylkp.tables = EffectiveVariablesDict(
+            {k: np.array([v]) for k, v in pylkp.items()})  # add amp dimension to tables
         return pylkp
 
     def setPyLookup(self):
