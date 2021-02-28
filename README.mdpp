@@ -148,6 +148,30 @@ python
 - Go to the package directory (where the setup.py file is located): `cd <path_to_directory>`
 - Install the package and all its dependencies: `pip install -e .`
 
+## Compile NEURON membrane mechanisms
+
+In order to use the package, you will need to compile a specific set of equations describing the membrane dynamics of the different neuron types.
+
+### Windows
+
+- In the folder named `NEURON 7.x x86_64` on your Desktop, run the `mknrndll` executable.
+
+- In the displayed window, select the directory containing the source files for the membrane mechanisms: *.../exsonic/ExSONIC/nmodl/*
+
+- Click on "make nrnmech.dll"
+
+- Upon completion, hit enter in the terminal to close it.
+
+### Mac OSx and Ubuntu
+
+- Open a terminal window and move to the directory containing the source files for the membrane mechanisms:
+
+```cd <path_to_exsonic_package/ExSONIC/nmodl/```
+
+- Run the *nrnivmodl* executable:
+
+```nrnivmodl```
+
 # Usage
 
 ## Python scripts
