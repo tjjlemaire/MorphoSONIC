@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-02-11 12:33:11
+# @Last Modified time: 2021-05-15 12:20:39
 
 import abc
 from neuron import h
@@ -13,14 +13,15 @@ from scipy import stats
 from boltons.strutils import cardinalize
 
 from PySONIC.core import Model, PointNeuron, BilayerSonophore, EffectiveVariablesDict
+from PySONIC.core.timeseries import TimeSeries, SpatiallyExtendedTimeSeries
 from PySONIC.postpro import detectSpikes
-from PySONIC.utils import logger, si_format, filecode, simAndSave, isIterable, TimeSeries
+from PySONIC.utils import logger, si_format, filecode, simAndSave, isIterable
 from PySONIC.constants import *
 from PySONIC.threshold import threshold, titrate, Thresholder
 
 from .pyhoc import *
 from .sources import *
-from ..utils import array_print_options, load_mechanisms, getNmodlDir, SpatiallyExtendedTimeSeries
+from ..utils import array_print_options, load_mechanisms, getNmodlDir
 from ..constants import *
 
 

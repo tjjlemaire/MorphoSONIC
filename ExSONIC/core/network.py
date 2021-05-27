@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-01-13 20:15:35
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-27 16:34:23
+# @Last Modified time: 2021-05-03 11:44:38
 
 import pandas as pd
 from neuron import h
@@ -47,7 +47,11 @@ class NodeCollection:
         self.ids = ids
         self.refnode = self.nodes[self.ids[0]]
         self.pneuron = self.refnode.pneuron
-        unit, factor = [self.refnode.modality[k] for k in ['unit', 'factor']]
+        if self.refnode.a is not None:
+            unit, factor = 'Pa', 1e3
+        else:
+            unit, factor = 'A/m2', 1e-3
+        # unit, factor = [self.refnode.modality[k] for k in ['unit', 'factor']]
         self.unit = f'{prefix_map[factor]}{unit}'
 
     def strNodes(self):
@@ -106,7 +110,7 @@ class NodeCollection:
             :param amps: model-sized dictionary of stimulus amplitudes
         '''
         for id, node in self.nodes.items():
-            node.setStimAmp(amps[id])
+            node.setDrive(amps[id])
         self.amps = amps
 
     def initToSteadyState(self):
@@ -137,9 +141,9 @@ class NodeCollection:
         logger.info(self.desc(self.meta(amps, pp)))
 
         # Set recording vectors
-        t = self.setTimeProbe()
+        t = self.refnode.setTimeProbe()
         stim = self.refnode.section.setStimProbe()
-        probes = {k: v.section.setProbes(v.pneuron.statesNames()) for k, v in self.nodes.items()}
+        probes = {k: v.section.setProbes() for k, v in self.nodes.items()}
 
         # Set distributed stimulus amplitudes
         self.setStimAmps(amps)
@@ -171,7 +175,7 @@ class NodeCollection:
     def meta(self, amps, pp):
         return {
             **self.modelMeta(),
-            'nodes': {k: v.meta(amps[k], pp) for k, v in self.nodes.items()},
+            'nodes': {k: v.meta for k, v in self.nodes.items()},
             'amps': amps,
             'pp': pp
         }
