@@ -9,6 +9,7 @@ Makefile
 conf.py
 
 # Sublime Workspace files
+*.sublime-project
 *.sublime-workspace
 
 # PNG images
