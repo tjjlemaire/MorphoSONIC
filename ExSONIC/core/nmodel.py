@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-05-15 12:20:39
+# @Last Modified time: 2021-06-05 14:35:09
 
 import abc
 from neuron import h
@@ -23,6 +23,8 @@ from .pyhoc import *
 from .sources import *
 from ..utils import array_print_options, load_mechanisms, getNmodlDir
 from ..constants import *
+
+cvode = h.CVode()
 
 
 class NeuronModel(metaclass=abc.ABCMeta):
@@ -235,31 +237,32 @@ class NeuronModel(metaclass=abc.ABCMeta):
 
     def setIntegrator(self, dt, atol):
         ''' Set CVODE integration parameters. '''
-        self.cvode = h.CVode()
         if dt is not None:
             h.secondorder = 0  # using backward Euler method if fixed time step
             h.dt = dt * S_TO_MS
-            self.cvode.active(0)
+            if cvode.active():
+                cvode.active(0)
         else:
-            self.cvode.active(1)
+            if not cvode.active():
+                cvode.active(1)
             if atol is not None:
-                self.cvode.atol(atol)
+                cvode.atol(atol)
 
     def resetIntegrator(self):
         ''' Re-initialize the integrator. '''
         # If adaptive solver: re-initialize the integrator
-        if self.cvode.active():
-            self.cvode.re_init()
+        if cvode.active():
+            cvode.re_init()
         # Otherwise, re-align currents with states and potential
         else:
             h.fcurrent()
 
     def getIntegrationMethod(self):
         ''' Get the method used by NEURON for the numerical integration of the system. '''
-        method_type_code = self.cvode.current_method() % 1000 // 100
+        method_type_code = cvode.current_method() % 1000 // 100
         method_type_str = self.int_methods[method_type_code]
-        if self.cvode.active():
-            return f'{method_type_str} (atol = {self.cvode.atol()})'
+        if cvode.active():
+            return f'{method_type_str} (atol = {cvode.atol()})'
         else:
             return f'{method_type_str} (fixed dt = {h.dt} ms)'
 
@@ -347,9 +350,9 @@ class NeuronModel(metaclass=abc.ABCMeta):
     #     self.xmod.play(h._ref_stimflag, self.tmod, True)
 
     def setTransitionEvent(self, t, value, new_dt):
-        # self.cvode.event((t - TRANSITION_DT) * S_TO_MS, self.fadvanceLogger)
-        self.cvode.event((t - TRANSITION_DT) * S_TO_MS)
-        self.cvode.event(t * S_TO_MS, self.createStimSetter(value, new_dt))
+        # cvode.event((t - TRANSITION_DT) * S_TO_MS, self.fadvanceLogger)
+        cvode.event((t - TRANSITION_DT) * S_TO_MS)
+        cvode.event(t * S_TO_MS, self.createStimSetter(value, new_dt))
 
     def setTransitionEvents(self, events, tstop, dt):
         ''' Set integration events for transitions. '''

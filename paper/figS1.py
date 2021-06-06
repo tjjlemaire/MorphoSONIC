@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-08-22 14:14:17
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-11-02 12:13:54
+# @Last Modified time: 2021-06-04 15:39:56
 
 import os
 import logging
@@ -102,6 +102,7 @@ for Fdrive in freqs:
 
         # Determine evaluation plane
         dfocal = source.getFocalDistance()
+
         x = np.linspace(-5 * r, 5 * r, nperslice)
         z = np.linspace(0.1e-3, 20 * r, nperslice)
 
@@ -123,6 +124,7 @@ for Fdrive in freqs:
         ax.set_yticks([])
         ax.spines['left'].set_visible(False)
         sm = ax.pcolormesh(x * 1e3, z * 1e3, amps.T, cmap='viridis')
+        ax.axhline(dfocal * 1e3, c='white', ls='--')
         iax += 1
 
 for ax, Fdrive in zip([axes['a'], axes['c']], freqs):

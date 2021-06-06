@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-09-23 10:51:53
+# @Last Modified time: 2021-06-04 19:14:11
 
 import abc
 import numpy as np
@@ -937,16 +937,17 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
         '''
         return self.u * self.relNormalAxisAmp(z)
 
-    def DPSM_squaredsources(self, m):
-        return getCircle2DGrid(self.r, m, 'square')
+    def getXYSources(self, m=None, d='concentric'):
+        ''' Wrapper around the method to obtain a source distribution for this transducer.
 
-    def DPSM_concentricsources(self, m):
-        return getCircle2DGrid(self.r, m, 'concentric')
+            :param m: number of point sources we want to use to approximate the transducer surface
+            :param d: type of point sources distribution used
+        '''
+        if m is None:
+            m = int(np.ceil(self.source_density * self.area()))
+        return getCircle2DGrid(self.r, m, d)
 
-    def DPSM_sunflowersources(self, m, alpha=1):
-        return getCircle2DGrid(r, m, 'sunflower')
-
-    def DPSM_point(self, x, y, z, xsource, ysource, mact):
+    def DPSM_point(self, x, y, z, xsource, ysource, m):
         ''' Compute acoustic amplitude in the point (x,z), given the transducer normal particle
             velocity and the distribution of point sources used to approximate the transducer.
             It follows the Distributed Point Source Method (DPSM) from Yamada 2009 (eq. 15).
@@ -956,76 +957,57 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
             :param xsource: x coordinates of the point sources (m)
             :param ysource: y coordinates of the point sources, y perpendicular to x
                 and parallel to the transducer surface (m)
-            :param meff: number of point sources actually used
+            :param m: number of point sources used
             :return: acoustic amplitude (Pa)
         '''
-        j = complex(0, 1)        # imaginary number
-        ds = self.area() / mact  # surface associated at each point source
-        deltax = xsource + self.x[0] * np.ones(mact) - x * np.ones(mact)
-        deltay = ysource + self.y * np.ones(mact) - y * np.ones(mact)
-        deltaz = (self.z - z) * np.ones(mact)
+        j = complex(0, 1)  # imaginary number
+        ds = self.area() / m  # surface associated at each point source
+        deltax = xsource + self.x[0] * np.ones(m) - x * np.ones(m)
+        deltay = ysource + self.y * np.ones(m) - y * np.ones(m)
+        deltaz = (self.z - z) * np.ones(m)
         # distances of the point (x,z) to the point sources on the transducer surface
         distances = np.sqrt(deltax**2 + deltay**2 + deltaz**2)
         exp_sum = sum(np.exp(j * self.kf * distances) / distances)
         return np.abs(-j * self.rho * self.f * ds * self.u * exp_sum)
 
-    def DPSM2d(self, x, z, m=None, d='concentric'):
-        ''' Compute acoustic amplitude in the 2D space xz, given the transducer normal particle
+    def DPSM_xz(self, x, z, **kwargs):
+        ''' Compute acoustic amplitude in the XZ plane, given the transducer normal particle
             velocity and the transducer approximation to use.
             It follows the Distributed Point Source Method (DPSM) from Yamada 2009 (eq. 15).
 
             :param x: axis parallel to a fixed diameter of the transducer (m)
             :param z: transducer normal axis (m)
-            :param m: number of point sources we want to use to approximate the transducer surface
-            :param d: type of point sources distribution used
+
             :return: acoustic amplitude matrix (Pa)
         '''
-        if m is None:
-            m = int(np.ceil(self.source_density * self.area()))
-        nx = len(x)
-        nz = len(z)
+        nx, nz = len(x), len(z)
         results = np.zeros((nx, nz))
-        DPSM_method = {
-            'sunflower': self.DPSM_sunflowersources,
-            'squared': self.DPSM_squaredsources,
-            'concentric': self.DPSM_concentricsources
-        }[d]
-        xsource, ysource = DPSM_method(m)
-        mact = len(xsource)
-        for i in range(nx):
+        xsource, ysource = self.getXYSources(m, **kwargs)
+        m = len(xsource)
+        for i, xx in enumerate(nx):
             logger.debug(f'slice {i} / {nx}')
-            for k in range(nz):
-                results[i, k] = self.DPSM_point(x[i], 0, z[k], xsource, ysource, mact)
+            for zz in z:
+                results[i, k] = self.DPSM_point(xx, 0, zz, xsource, ysource, m)
         return results
 
-    def DPSMxy(self, x, y, z, m=None, d='concentric'):
-        ''' Compute acoustic amplitude in the 2D space xz, given the transducer normal particle
+    def DPSM_xy(self, x, y, z, **kwargs):
+        ''' Compute acoustic amplitude in the XY-plane, given the transducer normal particle
             velocity and the transducer approximation to use.
             It follows the Distributed Point Source Method (DPSM) from Yamada 2009 (eq. 15).
 
             :param x: axis parallel to a fixed diameter of the transducer (m)
             :param y: axis parallel to the transducer and perpendiculr to x (m)
             :param z: transducer normal axis (m)
-            :param m: number of point sources we want to use to approximate the transducer surface
-            :param d: type of point sources distribution used
             :return: acoustic amplitude matrix (Pa)
         '''
-        if m is None:
-            m = int(np.ceil(self.source_density * self.area()))
-
+        xsource, ysource = self.getXYSources(m, **kwargs)
         nx = len(x)
         ny = len(y)
         results = np.zeros((nx, ny))
-        if d == 'sunflower':
-            xsource, ysource = self.DPSM_sunflowersources(m)
-        if d == 'squared':
-            xsource, ysource = self.DPSM_squaredsources(m)
-        if d == 'concentric':
-            xsource, ysource = self.DPSM_concentricsources(m)
-        mact = len(xsource)
+        m = len(xsource)
         for i in range(nx):
             for j in range(ny):
-                results[i, j] = self.DPSM_point(x[i], y[j], z, xsource, ysource, mact)
+                results[i, j] = self.DPSM_point(x[i], y[j], z, xsource, ysource, m)
         return results
 
     def computeDistributedAmps(self, fiber):
@@ -1043,7 +1025,7 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
         node_coords = rotAroundPoint2D(node_coords, self.theta, self.xz)
 
         # Compute amplitudes
-        node_amps = self.DPSM2d(node_xcoords, np.array([0]))
+        node_amps = self.DPSM_xz(node_xcoords, np.array([0]))
         return {'node': node_amps.ravel()}   # Pa
 
     def computeMaxNodeAmp(self, fiber):

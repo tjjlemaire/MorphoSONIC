@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 14:38:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-05-15 12:19:13
+# @Last Modified time: 2021-06-05 13:26:06
 
 import os
 import pickle
@@ -93,15 +93,18 @@ def getNmodlDir():
 def chronaxie(durations, thrs):
     ''' Return chronaxie, i.e. stimulus duration for which threshold amplitude
         is twice the rheobase. '''
+    if all(np.isnan(thrs)):
+        return np.nan
     if np.all(thrs[np.logical_not(np.isnan(thrs))] < 0.):
         thrs = -thrs
-
     Ich = 2 * np.nanmin(thrs)   # rheobase current
     return np.interp(Ich, thrs[::-1], durations[::-1], left=np.nan, right=np.nan)  # s
 
 
 def rheobase(thrs):
     ''' Return rheobase. '''
+    if all(np.isnan(thrs)):
+        return np.nan
     return np.nanmin(np.abs(thrs))
 
 
