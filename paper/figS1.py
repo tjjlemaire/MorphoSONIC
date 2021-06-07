@@ -3,16 +3,18 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-08-22 14:14:17
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-06 22:56:22
+# @Last Modified time: 2021-06-07 13:20:48
 
 import os
 import logging
 import numpy as np
+from argparse import ArgumentParser
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
+from matplotlib.ticker import StrMethodFormatter
 from scipy.stats import normaltest
 
-from PySONIC.utils import logger, si_format
+from PySONIC.utils import logger, si_format, rangecode, isIterable
 from PySONIC.plt import setNormalizer, XYMap
 from ExSONIC.core import PlanarDiskTransducerSource, ExtracellularCurrent
 from ExSONIC.plt import setAxis
@@ -28,20 +30,26 @@ freqs = [500e3, 2e6]  # Hz
 nperslice = 400
 radii_dense = np.linspace(1e-3, 1e-2, 5)
 xfocal = np.linspace(-20e-3, 20e-3, nperslice)
+phase_insets_bounds = (-2e-3, 2e-3)  # m
+is_xinset = np.all([xfocal > phase_insets_bounds[0], xfocal < phase_insets_bounds[1]], axis=0)
+xinset = xfocal[is_xinset]
 fontsize = 10
 
 
-def computeTransverseFocalDistribution(r, Fdrive, x):
-    code = f'{r * 1e3:.0f}mm_{Fdrive * 1e-3:.0f}kHz'
-    fname = f'focalslice_{code}.csv'
+def getPacField(source, x, y, z):
+    scode = f'r_{source.r * 1e3:.0f}mm_f_{source.f * 1e-3:.0f}kHz'
+    xyz = []
+    for k, v in {'x': x, 'y': y, 'z': z}.items():
+        xyz.append(rangecode(v, k, 'm') if isIterable(v) else f'{k}{si_format(v, 1, space="")}m')
+    xyzcode = '_'.join(xyz)
+    fname = f'Pacfield_{scode}_{xyzcode}.csv'
     fpath = os.path.join(datadir, fname)
     if os.path.isfile(fpath):
-        logger.info(f'Loading Pac focal distribution from file {fname}')
+        logger.info(f'Loading Pac field from file {fname}')
         Pac_field = np.loadtxt(fpath, dtype=np.complex128)
     else:
-        source = PlanarDiskTransducerSource(xc, Fdrive, u=1, r=r)
         logger.info(f'Computing Pac focal distribution for {source}')
-        Pac_field = source.DPSM(x, 0, source.getFocalDistance())
+        Pac_field = source.DPSM(x, y, z)
         logger.info(f'Saving Pac field in file {fname}')
         np.savetxt(fpath, Pac_field)
     return Pac_field
@@ -60,19 +68,12 @@ def getFWHM(x, y):
     return 2 * np.abs(np.interp(0.5 * y.max(), y[xneg], x[xneg]))
 
 
-def addFiberAxisArrow(ax):
-    arrowwidth = 0.7
-    xarrow = [0.5 - arrowwidth / 2, 0.5 + arrowwidth / 2]
-    yarrow = 0.6
-    ax.text(np.mean(xarrow), yarrow + 0.1, 'fiber axis', fontsize=fontsize,
-            transform=ax.transAxes, ha='center', color='w')
-    ax.annotate('', xy=(xarrow[0], yarrow), xytext=(xarrow[1], yarrow),
-                xycoords='axes fraction', textcoords='axes fraction',
-                arrowprops=dict(edgecolor='w', facecolor='w', arrowstyle='<|-|>'))
-
-
 # Encpasulation to enable multiprocessing
 if __name__ == '__main__':
+
+    parser = ArgumentParser()
+    parser.add_argument('-s', '--save', default=False, action='store_true', help='Save figure')
+    args = parser.parse_args()
 
     # Figure backbone
     fig = plt.figure(constrained_layout=True, figsize=(11, 6))
@@ -85,8 +86,10 @@ if __name__ == '__main__':
         'a4': gs[4:, 1],
         'sources': gs[4:, 2],
         'cbar1': gs[:4, 2],
-        'b1': gs[:2, 3:5],
-        'b2': gs[2:4, 3:5],
+        'b1': gs[:2, 3],
+        'b2': gs[:2, 4],
+        'b3': gs[2:4, 3],
+        'b4': gs[2:4, 4],
         'c': gs[4:, 3:5],
         'd': gs[:4, 5],
         'e': gs[4:, 5:],
@@ -99,29 +102,15 @@ if __name__ == '__main__':
     iax = 0
     for r in radii:
         for Fdrive in freqs:
-            title = f'r = {r * 1e3:.0f} mm, f = {si_format(Fdrive)}Hz'
-
             # Create transducer object
             source = PlanarDiskTransducerSource(xc, Fdrive, u=1, r=r)
 
             # Determine evaluation plane
-            dfocal = source.getFocalDistance()
-
             x = np.linspace(-5 * r, 5 * r, nperslice)
             z = np.linspace(0.1e-3, 20 * r, nperslice)
 
             # Compute and plot amplitude distribution over 2D field
-            sourcecode = '_'.join(source.filecodes.values())
-            fname = f'2Dfield_{sourcecode}_{nperslice}perslice.csv'
-            fpath = os.path.join(datadir, fname)
-            if os.path.isfile(fpath):
-                logger.info(f'Loading Pac field from file {fname}')
-                Pac_field = np.loadtxt(fpath, dtype=np.complex128)
-            else:
-                logger.info(f'Computing Pac field for {source}')
-                Pac_field = source.DPSM(x, 0, z)  # Pa
-                logger.info(f'Saving Pac field in file {fname}')
-                np.savetxt(fpath, Pac_field)
+            Pac_field = getPacField(source, x, 0, z)
             ax = axes[axkeys[iax]]
             ax.set_aspect(1.0)
             ax.set_xticks([])
@@ -129,11 +118,15 @@ if __name__ == '__main__':
             for sk in ['left', 'bottom']:
                 ax.spines[sk].set_visible(False)
             xedges, zedges = [XYMap.computeMeshEdges(xx, 'lin') for xx in [x, z]]
-            sm = ax.pcolormesh(xedges * 1e3, zedges * 1e3, np.abs(Pac_field).T, cmap='viridis')
-            ax.axhline(dfocal * 1e3, c='white', ls='--')
+            sm = ax.pcolormesh(
+                xedges * 1e3, zedges * 1e3, np.abs(Pac_field).T, cmap='viridis', rasterized=True)
+            ax.axhline(source.getFocalDistance() * 1e3, c='white', ls='--')
+
             iax += 1
 
     for ax, Fdrive in zip([axes['a1'], axes['a2']], freqs):
+        ax.set_title(f'f = {si_format(Fdrive)}Hz', fontsize=fontsize)
+    for ax, Fdrive in zip([axes['a3'], axes['a4']], freqs):
         ax.set_title(f'f = {si_format(Fdrive)}Hz', fontsize=fontsize)
     for ax, r in zip([axes['a1'], axes['a3']], radii):
         ax.set_xlabel(f'r = {r * 1e3:.0f} mm', fontsize=fontsize)
@@ -145,6 +138,7 @@ if __name__ == '__main__':
         s.set_linewidth(3.0)
         ax.set_ylabel(f'{scale:.0f} mm', fontsize=fontsize)
 
+    # Transverse surface source distribution
     ax = axes['sources']
     transducer = PlanarDiskTransducerSource(xc, Fdrive, u=1, r=1e-3)
     xs, ys = transducer.getXYSources()
@@ -154,61 +148,90 @@ if __name__ == '__main__':
     ax.set_yticks([])
     for sk in ['bottom', 'left']:
         ax.spines[sk].set_visible(False)
+    ax.set_aspect(1.0)
 
     # Transverse pressure distributions at focal distance
     # Amplitude
     colors = plt.get_cmap('tab20').colors
-    ax = axes['b1']
-    ax.set_ylabel('rel. A', fontsize=fontsize)
+    axes['b1'].set_ylabel('rel. A', fontsize=fontsize)
+    axes['b3'].set_ylabel('phase (rad)', fontsize=fontsize)
     icolor = 0
+    max_phase_shift = 0.
     for r in radii:
         for Fdrive in freqs:
             color = colors[icolor]
-            code = f'{r * 1e3:.0f}mm_{Fdrive * 1e-3:.0f}kHz'
-            Pac_field = computeTransverseFocalDistribution(r, Fdrive, xfocal)
-            amps = np.abs(Pac_field)  # Pa
-            amps /= amps.max()  # (-)
-            ax.plot(xfocal * 1e3, amps, c=color, label=code)
-            FWHM = getFWHM(xfocal, amps)
+            code = f'{r * 1e3:.0f}mm {si_format(Fdrive, 0, space="")}Hz'
+            source = PlanarDiskTransducerSource(xc, Fdrive, u=1, r=r)
+            dfocal = source.getFocalDistance()
+            # z = np.linspace(0.1e-3, 20 * r, nperslice)
+            z = np.linspace(0.1e-3, 2 * dfocal, nperslice)
+            izfocal = int(np.interp(dfocal, z, np.arange(z.size)))
+            ix0 = int(np.interp(0., xfocal, np.arange(xfocal.size)))
+
+            # Transverse distributions
+            Pac_x = getPacField(source, xfocal, 0, dfocal)
+            ax = axes['b1']
+            amps_x = np.abs(Pac_x)  # Pa
+            amps_x /= amps_x.max()  # (-)
+            ax.plot(xfocal * 1e3, amps_x, c=color, label=code, clip_on=False)
+            FWHM = getFWHM(xfocal, amps_x)
             logger.info(f'FWHM = {FWHM * 1e3:.2f} mm')
             for i in [-0.5, 0.5]:
-                ax.axvline(i * FWHM * 1e3, c=color, linestyle='--')
+                ax.axvline(i * FWHM * 1e3, c=color, linestyle='--', clip_on=False)
+            phases_x = np.angle(Pac_x)  # rad
+            y = np.unwrap(phases_x) / np.pi
+            y = y[is_xinset] - y[ix0]
+            max_phase_shift = max(np.nanmax(np.abs(y)), max_phase_shift)
+            axes['b3'].plot(xinset * 1e3, y, c=color, clip_on=False)
+
+            # Longitudinal distributions
+            Pac_z = getPacField(source, 0, 0, z)
+            ax = axes['b2']
+            amps_z = np.abs(Pac_z)  # Pa
+            amps_z /= amps_z.max()  # (-)
+            ax.plot(z / dfocal, amps_z, c=color, clip_on=False)
+            phases_z = np.angle(Pac_z)  # rad
+
+            is_zinset = np.all(
+                [z > dfocal + phase_insets_bounds[0], z < dfocal + phase_insets_bounds[1]], axis=0)
+            y = np.unwrap(phases_z) / np.pi
+            y = y[is_zinset] - y[izfocal]
+            max_phase_shift = max(np.nanmax(np.abs(y)), max_phase_shift)
+            zinset = z[is_zinset]
+            axes['b4'].plot((zinset - dfocal) * 1e3, y, c=color, clip_on=False)
+
             icolor += 1
-    xlims = [xfocal.min() * 1e3, xfocal.max() * 1e3]
-    ax.set_xticks(xlims)
-    ax.set_xlim(*xlims)
-    ylims = [0, 1]
-    ax.set_yticks(ylims)
-    ax.set_ylim(*ylims)
-    ax.legend(frameon=False, fontsize=fontsize)
-    # Phase
-    ax = axes['b2']
-    ax.set_xlabel('Transverse distance (mm)', fontsize=fontsize)
-    ax.set_ylabel('phase (rad)', fontsize=fontsize)
-    icolor = 0
-    for r in radii:
-        for Fdrive in freqs:
-            color = colors[icolor]
-            Pac_field = computeTransverseFocalDistribution(r, Fdrive, xfocal)
-            phases = np.angle(Pac_field)  # rad
-            ax.plot(xfocal * 1e3, np.abs(phases), c=color)
-            icolor += 1
-    xlims = [xfocal.min() * 1e3, xfocal.max() * 1e3]
-    ax.set_xticks(xlims)
-    ax.set_xlim(*xlims)
-    ylims = [0, np.pi]
-    ax.set_yticks(ylims)
-    ax.set_yticklabels(['0', 'PI'])
-    ax.set_ylim(*ylims)
+
+    for axkey in ['b1', 'b2', 'b3', 'b4']:
+        ax = axes[axkey]
+        ax.margins(0)
+        ax.set_xticks(ax.get_xlim())
+        ax.set_yticks(ax.get_ylim())
+    for axkey in ['b1', 'b2']:
+        axes[axkey].yaxis.set_major_formatter(StrMethodFormatter('{x:.0f}'))
+    for axkey in ['b3', 'b4']:
+        ax = axes[axkey]
+        ax.axhline(0, ls='--', c='k', clip_on=False)
+        ylims = [-np.ceil(max_phase_shift), np.ceil(max_phase_shift)]
+        ax.set_ylim(*ylims)
+        ax.set_yticks(ylims)
+        ax.yaxis.set_major_formatter(StrMethodFormatter('{x:.0f} PI'))
+    for axkey in ['b1', 'b3', 'b4']:
+        axes[axkey].xaxis.set_major_formatter(StrMethodFormatter('{x:.0f}'))
+    axes['b2'].xaxis.set_major_formatter(StrMethodFormatter('{x:.0f} d'))
+    axes['b1'].legend(frameon=False, fontsize=fontsize)
 
     # FWHM at focal distance vs transducer radius
     ax = axes['c']
     US_FWHM_vs_radius = {}
     for Fdrive in freqs:
-        US_FWHM_vs_radius[f'{si_format(Fdrive)}Hz'] = np.array([
-            getFWHM(xfocal, np.abs(computeTransverseFocalDistribution(r, Fdrive, xfocal)))
-            for r in radii_dense
-        ])
+        FWHMs = []
+        for r in radii_dense:
+            source = PlanarDiskTransducerSource(xc, Fdrive, u=1, r=r)
+            Pac_x = getPacField(source, xfocal, 0, source.getFocalDistance())
+            FWHMs.append(getFWHM(xfocal, np.abs(Pac_x)))
+        US_FWHM_vs_radius[f'{si_format(Fdrive)}Hz'] = np.array(FWHMs)
+
     ax.set_xlabel('transducer radius (mm)', fontsize=fontsize)
     ax.set_ylabel('FWHM (mm)', fontsize=fontsize)
     radii_dense = np.linspace(1e-3, 1e-2, 5)
@@ -236,7 +259,7 @@ if __name__ == '__main__':
         [source.Vext(source.I, source.vectorialDistance((xx, zz))) for zz in z]
         for xx in x])
     xedges, zedges = [XYMap.computeMeshEdges(xx, 'lin') for xx in [x, z]]
-    sm = ax.pcolormesh(xedges * 1e3, zedges * 1e3, amps.T, cmap='viridis')
+    sm = ax.pcolormesh(xedges * 1e3, zedges * 1e3, amps.T, cmap='viridis', rasterized=True)
     ax.set_aspect(1.0)
     ax.set_xticks([])
     ax.set_yticks([])
@@ -271,15 +294,21 @@ if __name__ == '__main__':
     for k in ['cbar1', 'cbar2']:
         ax = axes[k]
         cbar = fig.colorbar(sm, cax=ax)
-        ax.set_ylabel('relative\namplitude')
+        ax.set_ylabel('normalized \namplitude', fontsize=fontsize)
         cbar.set_ticks([])
-        ax.set_title('1')
-        ax.set_xlabel('0')
+        ax.set_title('1', fontsize=fontsize)
+        ax.set_xlabel('0', fontsize=fontsize)
+        ax.set_aspect(1.0)
 
     for ax in axes.values():
         for sk in ['top', 'right']:
             ax.spines[sk].set_visible(False)
+    for axkey in ['b1', 'b2', 'b3', 'b4', 'c', 'e']:
+        ax = axes[axkey]
+        for item in ax.get_xticklabels() + ax.get_yticklabels():
+            item.set_fontsize(fontsize)
 
-    fig.savefig(os.path.join(figdir, f'figS1_raw.pdf'), transparent=True)
+    if args.save:
+        fig.savefig(os.path.join(figdir, f'figS1_raw.pdf'), transparent=True)
 
 plt.show()
