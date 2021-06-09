@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-05 14:35:09
+# @Last Modified time: 2021-06-09 21:00:47
 
 import abc
 from neuron import h
@@ -317,6 +317,7 @@ class NeuronModel(metaclass=abc.ABCMeta):
             :param value: new stimulation state (0 = OFF, 1 = ON)
             :return: new stimulation state
         '''
+        logger.debug(f't = {h.t:.3f}ms, setting x = {value}')
         # Set "stimon" attribute in all model sections
         for sec in self.seclist:
             sec.setStimON(value)
@@ -370,6 +371,7 @@ class NeuronModel(metaclass=abc.ABCMeta):
 
     def integrateUntil(self, tstop):
         logger.debug(f'integrating system using {self.getIntegrationMethod()}')
+        h.t = 0
         while h.t < tstop:
             self.advance()
 
