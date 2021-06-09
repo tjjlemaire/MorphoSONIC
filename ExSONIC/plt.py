@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-08 16:26:13
+# @Last Modified time: 2021-06-10 00:03:19
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -11,7 +11,7 @@ from matplotlib.ticker import FormatStrFormatter
 from scipy import signal
 
 from PySONIC.core import Lookup
-from PySONIC.plt import GroupedTimeSeries, CompTimeSeries, mirrorAxis, setNormalizer, XYMap
+from PySONIC.plt import GroupedTimeSeries, CompTimeSeries, mirrorAxis, setNormalizer
 from PySONIC.utils import logger, si_format, getPow10, rsquared, padleft, timeThreshold, bounds
 
 from .core import *
@@ -625,6 +625,8 @@ def spatioTemporalMap(fiber, source, data, varkey, sec_type='node', fontsize=10,
     t = lkp.refs['t']
     xcoords = lkp.refs['x']
     zmap = lkp[varkey].T
+
+    # Get stim vector resampled along time vector
     stim = np.interp(t, data.time, data.stim)
 
     # Determine axes boundaries
@@ -701,10 +703,8 @@ def spatioTemporalMap(fiber, source, data, varkey, sec_type='node', fontsize=10,
     for sk in ['top', 'right']:
         ax.spines[sk].set_visible(False)
     ax.set_ylim(*xlims)
-
-    tedges, xedges = [XYMap.computeMeshEdges(xx, 'lin') for xx in [t, xcoords]]
-    ax.pcolormesh(
-        tedges * S_TO_MS, xedges * M_TO_MM, zmap, cmap=cmap, norm=norm, rasterized=rasterized)
+    ax.pcolormesh(t * S_TO_MS, xcoords * M_TO_MM, zmap, cmap=cmap, norm=norm, rasterized=rasterized,
+                  shading='auto')
     if not maponly:
         for sk in ['bottom', 'left']:
             ax.spines[sk].set_position(('outward', 3))
