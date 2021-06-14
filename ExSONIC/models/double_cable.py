@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-27 23:08:23
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-14 11:32:50
+# @Last Modified time: 2021-06-14 16:00:57
 
 import numpy as np
 
@@ -57,7 +57,7 @@ class MRGFiber(FiberNeuronModel):
     _nstin_per_inter = 6            # number of stin sections per internode
     correction_choices = ('myelin', 'axoplasm')  # possible choices of correction level
 
-    def __init__(self, fiberD, nnodes, correction_level=None, **kwargs):
+    def __init__(self, fiberD, nnodes=None, fiberL=None, correction_level=None, **kwargs):
         ''' Constructor.
 
             :param fiberD: fiber diameter (m)
@@ -65,13 +65,11 @@ class MRGFiber(FiberNeuronModel):
             :param correction_level: level at which model properties are adjusted to ensure correct
                 myelin representation with the extracellular mechanism ('myelin' or 'axoplasm')
         '''
-        self.fiberD = fiberD
-        self.nnodes = nnodes
         self.correction_level = correction_level
-        for k, v in mrg_lkp.project('fiberD', self.fiberD).items():
+        for k, v in mrg_lkp.project('fiberD', fiberD).items():
             setattr(self, k, v)
         self.setCelsius()
-        super().__init__(**kwargs)
+        super().__init__(fiberD, nnodes=nnodes, fiberL=fiberL, **kwargs)
 
     @property
     def meta(self):

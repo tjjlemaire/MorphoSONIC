@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2021-06-14 10:48:04
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-14 11:44:51
+# @Last Modified time: 2021-06-14 16:12:35
 
 import abc
 import numpy as np
@@ -22,6 +22,32 @@ class FiberNeuronModel(SpatiallyExtendedNeuronModel):
 
     # Boolean stating whether to use equivalent currents for imposed extracellular voltage fields
     use_equivalent_currents = True
+
+    def __init__(self, fiberD, nnodes=None, fiberL=None, **kwargs):
+        ''' Initialization.
+
+            :param fiberD: fiber outer diameter (m)
+            :param nnodes: number of nodes
+            :param fiberL: length of fiber (m)
+        '''
+        self.fiberD = fiberD
+        self.checkInitArgs(nnodes, fiberL)
+        # Compute number of nodes from fiberL if not explicited
+        if nnodes is None:
+            nnodes = self.getNnodes(fiberL, self.node_to_node_L)
+        self.nnodes = nnodes
+        super().__init__(**kwargs)
+
+    def checkInitArgs(self, nnodes, fiberL):
+        ''' Check that at least one of fiberL or nnodes is provided. '''
+        isnone = [x is None for x in [nnodes, fiberL]]
+        if all(isnone) or not any(isnone):
+            raise ValueError(
+                'one (and only one) of "fiberL" or "nnodes" parameters must be provided')
+
+    def getNnodes(self, fiberL, node_to_node_L):
+        ''' Compute number of nodes corresponding to a given fiber length. '''
+        return int(np.ceil(fiberL / node_to_node_L)) + 1
 
     def copy(self):
         other = self.__class__(self.fiberD, self.nnodes)
@@ -339,138 +365,3 @@ class FiberNeuronModel(SpatiallyExtendedNeuronModel):
         return super().simulate(
             source, pp,
             dt=self.fixed_dt if self.needsFixedTimeStep(source) else None)
-
-
-class SingleCableFiber(FiberNeuronModel):
-    ''' Generic single-cable fiber model. '''
-
-    def __init__(self, fiberD, nnodes=None, fiberL=None, **kwargs):
-        ''' Initialization.
-
-            :param fiberD: fiber outer diameter (m)
-            :param nnodes: number of nodes
-            :param fiberL: length of fiber (m)
-        '''
-        self.fiberD = fiberD
-        # Check that at least one of fiberL or nnodes is provided
-        isnone = [x is None for x in [nnodes, fiberL]]
-        if all(isnone) or not any(isnone):
-            raise ValueError(
-                'one (and only one) of "fiberL" or "nnodes" parameters must be provided')
-        # Compute number of nodes from fiberL if not explicited
-        if nnodes is None:
-            nnodes = int(np.ceil(fiberL / self.node_to_node_L)) + 1
-        self.nnodes = nnodes
-        super().__init__(**kwargs)
-
-    def copy(self):
-        other = super().copy()
-        other.innerD_ratio = self.innerD_ratio
-        other.interL_ratio = self.interL_ratio
-        return other
-
-    @property
-    def innerD_ratio(self):
-        return self._innerD_ratio
-
-    @innerD_ratio.setter
-    def innerD_ratio(self, value):
-        value = isWithin('axoplasm - fiber diameter ratio', value, (0., 1.))
-        self.set('innerD_ratio', value)
-
-    @property
-    def interL_ratio(self):
-        return self._interL_ratio
-
-    @interL_ratio.setter
-    def interL_ratio(self, value):
-        if value < 0:
-            raise ValueError('internode length - fiber diameter ratio must be positive or null')
-        self.set('interL_ratio', value)
-
-    @property
-    def nodeD(self):
-        return self.innerD_ratio * self.fiberD
-
-    @property
-    def interD(self):
-        return self.innerD_ratio * self.fiberD
-
-    @property
-    def interL(self):
-        return self.interL_ratio * self.fiberD
-
-    @property
-    def node_to_node_L(self):
-        return self.nodeL + self.interL
-
-    @property
-    def R_inter(self):
-        ''' Internodal intracellular axial resistance (Ohm). '''
-        return self.axialResistance(self.rs, self.interL, self.interD)
-
-    @property
-    def R_node_to_node(self):
-        ''' Nonde-to-node intracellular axial resistance (Ohm). '''
-        return self.R_node + self.R_inter
-
-    def clear(self):
-        ''' delete all model sections. '''
-        del self.nodes
-
-    def getNodeCoords(self):
-        ''' Return vector of node coordinates along axial dimension, centered at zero (um). '''
-        xcoords = (self.nodeL + self.interL) * np.arange(self.nnodes) + self.nodeL / 2
-        return xcoords - xcoords[int((self.nnodes - 1) / 2)]
-
-    def isInternodalDistance(self, d):
-        return np.isclose(d, (self.nodeL + self.interL))
-
-    @property
-    def length(self):
-        return self.nnodes * self.nodeL + (self.nnodes - 1) * self.interL
-
-    @property
-    def sections(self):
-        return {'node': self.nodes}
-
-    @property
-    def seclist(self):
-        return self.nodelist
-
-    def createSections(self):
-        self.nodes = {k: self.createSection(
-            k, mech=self.mechname, states=self.pneuron.statesNames()) for k in self.nodeIDs}
-
-    def setGeometry(self):
-        logger.debug(f'defining sections geometry: {self.str_geometry()}')
-        for sec in self.nodelist:
-            sec.setGeometry(self.nodeD, self.nodeL)
-
-    def setResistivity(self):
-        logger.debug(f'nominal nodal resistivity: rs = {self.rs:.0f} Ohm.cm')
-        rho_nodes = np.ones(self.nnodes) * self.rs  # Ohm.cm
-
-        # Adding extra resistivity to account for half-internodal resistance
-        # for each connected side of each node
-        if self.R_inter > 0:
-            logger.debug('adding extra-resistivity to account for internodal resistance')
-            rho_extra = self.R_extra * self.rs / self.R_node  # Ohm.cm
-            rho_nodes += rho_extra  # Ohm.cm
-
-        # Assigning resistivities to sections
-        for sec, rho in zip(self.nodelist, rho_nodes):
-            sec.setResistivity(rho)
-
-    @property
-    def R_extra(self):
-        ''' Vector of extra internodal resistances to add to nodal axial resistances. '''
-        return np.ones(self.nnodes) * self.R_inter  # Ohm
-
-    def setTopology(self):
-        for i in range(self.nnodes - 1):
-            self.connect('node', i, 'node', i + 1)
-
-    def toInjectedCurrents(self, Ve):
-        Iinj = np.diff(Ve['node'], 2) / (self.R_node + self.R_inter) * MA_TO_NA  # nA
-        return {'node': np.pad(Iinj, (1, 1), 'constant')}  # zero-padding on both extremities
