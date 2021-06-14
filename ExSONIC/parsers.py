@@ -3,13 +3,13 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-18 21:14:43
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-08-03 17:09:48
+# @Last Modified time: 2021-06-14 11:33:09
 
 import matplotlib.pyplot as plt
 from PySONIC.parsers import *
 
 from .plt import SectionGroupedTimeSeries, SectionCompTimeSeries
-from .core import models_dict
+from .models import models_dict
 from .constants import *
 
 

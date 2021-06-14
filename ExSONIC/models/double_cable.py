@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-27 23:08:23
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-08-05 11:44:18
+# @Last Modified time: 2021-06-14 11:32:50
 
 import numpy as np
 
@@ -12,8 +12,8 @@ from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import logger
 
 from ..constants import *
-from .nmodel import FiberNeuronModel
-from .sonic import addSonicFeatures
+from ..core import FiberNeuronModel, addSonicFeatures
+
 
 # MRG lookup table from McIntyre 2002
 mrg_lkp = Lookup(

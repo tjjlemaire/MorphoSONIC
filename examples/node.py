@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-04 16:46:52
+# @Last Modified time: 2021-06-14 11:40:11
 
 import logging
 import matplotlib.pyplot as plt
@@ -12,7 +12,7 @@ from PySONIC.core import PulsedProtocol, ElectricDrive, AcousticDrive
 from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import logger
 from PySONIC.plt import GroupedTimeSeries
-from ExSONIC.core import Node
+from ExSONIC.models import Node
 
 # Set logging level
 logger.setLevel(logging.INFO)

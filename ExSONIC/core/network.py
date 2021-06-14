@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-01-13 20:15:35
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-05-03 11:44:38
+# @Last Modified time: 2021-06-14 11:31:18
 
 import pandas as pd
 from neuron import h
@@ -14,7 +14,7 @@ from PySONIC.utils import si_prefixes, filecode, simAndSave
 from PySONIC.postpro import prependDataFrame
 
 from .pyhoc import *
-from .node import Node, DrivenNode
+from ..models import Node, DrivenNode
 from .synapses import *
 
 

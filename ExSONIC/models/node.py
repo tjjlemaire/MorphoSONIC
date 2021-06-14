@@ -3,15 +3,13 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-08-20 17:14:53
+# @Last Modified time: 2021-06-14 11:31:47
 
 from PySONIC.core import PointNeuron, ElectricDrive
 from PySONIC.utils import logger
 
 from ..constants import *
-from .pyhoc import IClamp
-from .nmodel import NeuronModel
-from .sonic import addSonicFeatures
+from ..core import IClamp, NeuronModel, addSonicFeatures
 
 
 @addSonicFeatures

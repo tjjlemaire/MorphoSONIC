@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-09-21 17:19:09
+# @Last Modified time: 2021-06-14 11:46:32
 
 import os
 import numpy as np
@@ -13,7 +13,7 @@ from PySONIC.core import PulsedProtocol
 from PySONIC.utils import logger, si_format
 from PySONIC.plt import GroupedTimeSeries
 from ExSONIC.test import TestFiber
-from ExSONIC.core import SennFiber, UnmyelinatedFiber, MRGFiber, mrg_lkp
+from ExSONIC.models import SennFiber, UnmyelinatedFiber, MRGFiber, mrg_lkp
 from ExSONIC.core.sources import *
 from ExSONIC.plt import SectionCompTimeSeries, plotFieldDistribution, plotPassiveCurrents
 from ExSONIC.constants import MIN_FIBERL_FWHM_RATIO

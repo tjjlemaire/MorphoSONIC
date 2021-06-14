@@ -3,14 +3,14 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-03-30 23:57:39
+# @Last Modified time: 2021-06-14 11:41:56
 
 import logging
 import matplotlib.pyplot as plt
 
 from PySONIC.core import PulsedProtocol
 from PySONIC.utils import logger
-from ExSONIC.core import SennFiber
+from ExSONIC.models import SennFiber
 from ExSONIC.core.sources import GaussianAcousticSource
 
 # Set logging level

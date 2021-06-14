@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-24 18:01:57
+# @Last Modified time: 2021-06-14 11:32:12
 
 import numpy as np
 
@@ -12,8 +12,7 @@ from PySONIC.utils import si_format, logger
 from PySONIC.postpro import detectSpikes
 
 from ..constants import *
-from .nmodel import SpatiallyExtendedNeuronModel
-from .sonic import addSonicFeatures
+from ..core import SpatiallyExtendedNeuronModel, addSonicFeatures
 
 
 @addSonicFeatures

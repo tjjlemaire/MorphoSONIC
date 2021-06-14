@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-10-28 18:33:04
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-02 18:27:08
+# @Last Modified time: 2021-06-14 11:47:23
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from PySONIC.core import PulsedProtocol
 from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import logger, si_format
-from ExSONIC.core import SennFiber, ExtracellularCurrent, PointSourceArray
+from ExSONIC.models import SennFiber, ExtracellularCurrent, PointSourceArray
 from ExSONIC.plt import SectionCompTimeSeries
 
 
