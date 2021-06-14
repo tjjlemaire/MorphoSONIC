@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-14 11:46:32
+# @Last Modified time: 2021-06-14 16:59:50
 
 import os
 import numpy as np
@@ -14,7 +14,7 @@ from PySONIC.utils import logger, si_format
 from PySONIC.plt import GroupedTimeSeries
 from ExSONIC.test import TestFiber
 from ExSONIC.models import SennFiber, UnmyelinatedFiber, MRGFiber, mrg_lkp
-from ExSONIC.core.sources import *
+from ExSONIC.sources import *
 from ExSONIC.plt import SectionCompTimeSeries, plotFieldDistribution, plotPassiveCurrents
 from ExSONIC.constants import MIN_FIBERL_FWHM_RATIO
 
@@ -164,7 +164,7 @@ class TestFiberAstim(TestFiber):
 
     def test_transducer2(self, is_profiled=False):
         logger.info('Test: transducer source on unmyelinated fiber')
-        fiber = UnmyelinatedFiber(0.8e-6, a=self.a, fs=self.fs)
+        fiber = UnmyelinatedFiber(0.8e-6, fiberL=5e-3, a=self.a, fs=self.fs)
         pp = PulsedProtocol(10e-3, 3e-3)
         self.transducer(fiber, pp)
 

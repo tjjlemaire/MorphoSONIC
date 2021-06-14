@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-14 11:41:56
+# @Last Modified time: 2021-06-14 16:32:42
 
 import logging
 import matplotlib.pyplot as plt
@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from PySONIC.core import PulsedProtocol
 from PySONIC.utils import logger
 from ExSONIC.models import SennFiber
-from ExSONIC.core.sources import GaussianAcousticSource
+from ExSONIC.sources import GaussianAcousticSource
 
 # Set logging level
 logger.setLevel(logging.INFO)

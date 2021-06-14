@@ -3,13 +3,14 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-08-24 12:12:52
+# @Last Modified time: 2021-06-14 16:54:01
 
 import numpy as np
 
 from PySONIC.core import PulsedProtocol
 from PySONIC.utils import logger, si_format
 from ExSONIC.core import *
+from ExSONIC.models import *
 from ExSONIC.test import TestFiber
 from ExSONIC.plt import SectionCompTimeSeries, strengthDurationCurve, plotFieldDistribution
 from ExSONIC.utils import chronaxie
@@ -253,7 +254,7 @@ class TestFiberEstim(TestFiber):
 
         # Unmyelinated fiber model (0.8 um diameter)
         fiberD = 0.8e-6  # m
-        fiber = UnmyelinatedFiber(fiberD)
+        fiber = UnmyelinatedFiber(fiberD, fiberL=5e-3)
 
         # Stimulation parameters
         tstim = 1e-3     # s

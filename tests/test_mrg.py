@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-03 18:02:39
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-14 11:43:29
+# @Last Modified time: 2021-06-14 16:32:58
 
 import logging
 import matplotlib.pyplot as plt
@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from PySONIC.core import PulsedProtocol
 from PySONIC.utils import logger
 from ExSONIC.models import MRGFiber
-from ExSONIC.core.sources import IntracellularCurrent, ExtracellularCurrent
+from ExSONIC.sources import IntracellularCurrent, ExtracellularCurrent
 from ExSONIC.plt import SectionCompTimeSeries
 
 logger.setLevel(logging.INFO)

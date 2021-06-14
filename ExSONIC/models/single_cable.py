@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-14 16:15:19
+# @Last Modified time: 2021-06-14 17:00:35
 
 import numpy as np
 
@@ -197,7 +197,7 @@ class UnmyelinatedFiber(SingleCableFiber):
         ''' nodeL: general threshold '''
         return min(cls.lin_NodeL_thr(fiberD), cls.abs_NodeL_thr)
 
-    def __init__(self, fiberD, nnodes=None, fiberL=5e-3, maxNodeL=None, **kwargs):
+    def __init__(self, fiberD, nnodes=None, fiberL=None, maxNodeL=None, **kwargs):
         ''' Initialization.
 
             :param fiberD: fiber outer diameter (m)

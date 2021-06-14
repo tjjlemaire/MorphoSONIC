@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-14 10:48:33
+# @Last Modified time: 2021-06-14 16:58:20
 
 import abc
 from neuron import h
@@ -19,7 +19,7 @@ from PySONIC.constants import *
 from PySONIC.threshold import threshold, titrate, Thresholder
 
 from .pyhoc import *
-from .sources import *
+from ..sources import *
 from ..utils import array_print_options, load_mechanisms, getNmodlDir
 from ..constants import *
 

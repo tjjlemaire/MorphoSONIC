@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2021-06-14 10:48:04
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-14 16:12:35
+# @Last Modified time: 2021-06-14 16:55:11
 
 import abc
 import numpy as np
@@ -13,7 +13,7 @@ from PySONIC.threshold import threshold
 from PySONIC.postpro import detectSpikes
 
 from .nmodel import SpatiallyExtendedNeuronModel
-from .sources import *
+from ..sources import *
 from ..constants import *
 
 
