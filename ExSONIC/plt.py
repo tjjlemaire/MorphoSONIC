@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-14 17:13:51
+# @Last Modified time: 2021-06-15 17:39:21
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -686,7 +686,7 @@ def spatioTemporalMap(fiber, source, data, varkey, sec_type='node', fontsize=10,
         tspikes = fiber.getEndSpikeTrain(data)
         if tspikes is not None:
             for ts in tspikes:
-                ax.axvline(ts * S_TO_MS, lw=2, color='k')
+                ax.axvline(ts * S_TO_MS, lw=1, color='k')
 
     # Stimulus field distribution plot
     if not maponly:
