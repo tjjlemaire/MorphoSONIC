@@ -3,16 +3,16 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-30 21:40:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-14 16:49:22
+# @Last Modified time: 2021-06-14 17:15:00
 
 import numpy as np
 
-from PySONIC.core import PointNeuron, NeuronalBilayerSonophore, AcousticDrive, ElectricDrive, EffectiveVariablesLookup
+from PySONIC.core import PointNeuron, NeuronalBilayerSonophore, AcousticDrive, ElectricDrive
 from PySONIC.utils import logger, isWithin
 
 from ..constants import *
 from ..utils import array_print_options
-from ..sources import AcousticSource, GammaSource
+from ..sources import AcousticSource
 from .pyhoc import *
 from .cgi_network import HybridNetwork
 
