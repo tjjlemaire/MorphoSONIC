@@ -3,12 +3,13 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-14 16:30:22
+# @Last Modified time: 2021-06-16 11:42:54
 
 import numpy as np
 
 from PySONIC.utils import logger, rotAroundPoint2D
 from PySONIC.core.drives import *
+from PySONIC.core.batches import Batch
 
 from ..grids import getCircle2DGrid
 from ..constants import *

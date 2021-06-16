@@ -3,51 +3,15 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-17 12:19:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-05 15:47:00
+# @Last Modified time: 2021-06-16 12:56:45
 
 import numpy as np
 
 from PySONIC.core import LogBatch, PulsedProtocol
-from PySONIC.utils import logger, si_format, isPickable
+from PySONIC.utils import logger, si_format
 from PySONIC.postpro import boundDataFrame
 
 from .constants import *
-
-
-class MPIBatch:
-
-    def __init__(self, pc, simfunc):
-        self.pc = pc
-        self.simfunc = simfunc
-
-    def run(self, queue):
-        if self.pc is None or self.pc.nhost() == 1:
-            return self.run_serial(queue)
-        else:
-            return self.run_parallel(queue)
-
-    def run_serial(self, queue):
-        return [self.simfunc(x) for x in queue]
-
-    def run_parallel(self, queue):
-
-        global pickable_simfunc
-
-        def pickable_simfunc(*args, **kwargs):
-            return self.simfunc(*args, **kwargs)
-
-        if not isPickable(pickable_simfunc):
-            raise ValueError('simulation function is not pickable')
-        index, output = [], []
-        for x in queue:
-            self.pc.submit(pickable_simfunc, x)
-        while True:
-            task_id = self.pc.working()
-            if task_id == 0:
-                break
-            output.append(self.pc.pyret())
-            index.append(task_id)
-        return [x for _, x in sorted(zip(index, output))]
 
 
 class StrengthDurationBatch(LogBatch):
