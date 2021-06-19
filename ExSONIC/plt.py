@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-15 17:39:21
+# @Last Modified time: 2021-06-19 18:40:03
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -605,7 +605,7 @@ def setAxis(ax, precision, signed, axkey='y'):
 
 def spatioTemporalMap(fiber, source, data, varkey, sec_type='node', fontsize=10, ypad=-10,
                       cmap='viridis', zbounds=None, max_size_t=None, max_size_x=None,
-                      maponly=False, rasterized=True):
+                      maponly=False, rasterized=True, axes=None):
 
     # Extract var info
     varinfo = fiber.pneuron.getPltVars()[varkey]
@@ -638,22 +638,32 @@ def spatioTemporalMap(fiber, source, data, varkey, sec_type='node', fontsize=10,
     norm, sm = setNormalizer(cmap, zbounds, 'lin')
 
     # Create figure
-    fig = plt.figure(constrained_layout=True, figsize=(8, 2))
-    gs = fig.add_gridspec(7, 20)
-    if not maponly:
-        nfield, ncbar = 2, 1
-        subplots = {
-            'a': gs[0, nfield:-ncbar],
-            'b': gs[1, nfield:-ncbar],
-            'c': gs[2:, :nfield],
-            'd': gs[2:, nfield:-ncbar],
-            'e': gs[:, -ncbar:]}
+    if axes is None:
+        fig = plt.figure(constrained_layout=True, figsize=(8, 2))
+        gs = fig.add_gridspec(7, 20)
+        if not maponly:
+            nfield, ncbar = 2, 1
+            subplots = {
+                'stim': gs[0, nfield:-ncbar],
+                'spikes': gs[1, nfield:-ncbar],
+                'field': gs[2:, :nfield],
+                f'{varkey}map': gs[2:, nfield:-ncbar],
+                f'{varkey}cbar': gs[:, -ncbar:]}
+        else:
+            subplots = {f'{varkey}map': gs[:, :]}
+        axes = {k: fig.add_subplot(v) for k, v in subplots.items()}
     else:
-        subplots = {'d': gs[:, :]}
-    axes = {k: fig.add_subplot(v) for k, v in subplots.items()}
+        fig = axes[f'{varkey}map'].get_figure()
+        assert isinstance(axes, dict), 'axes must be a dictionary'
+        required_keys = ['stim', 'spikes', 'field', f'{varkey}map', f'{varkey}cbar']
+        if maponly:
+            required_keys = [required_keys[-2]]
+        for k in required_keys:
+            assert k in axes, f'axes dict must contain a "{k}" field'
 
     if not maponly:
-        for ax in [axes['a'], axes['b'], axes['c'], axes['e']]:
+        for k in ['stim', 'spikes', 'field', f'{varkey}cbar']:
+            ax = axes[k]
             for sk in ['top', 'right', 'bottom', 'left']:
                 ax.spines[sk].set_visible(False)
             ax.set_xticks([])
@@ -661,9 +671,9 @@ def spatioTemporalMap(fiber, source, data, varkey, sec_type='node', fontsize=10,
 
     # Organize temporal axes
     if not maponly:
-        taxes = [axes['a'], axes['b'], axes['d']]
+        taxes = [axes['stim'], axes['spikes'], axes[f'{varkey}map']]
     else:
-        taxes = [axes['d']]
+        taxes = [axes[f'{varkey}map']]
     for ax in taxes:
         ax.set_xlim(*tlims)
     for ax in taxes[1:]:
@@ -676,13 +686,13 @@ def spatioTemporalMap(fiber, source, data, varkey, sec_type='node', fontsize=10,
 
     # Stim vector plot
     if not maponly:
-        ax = axes['a']
+        ax = axes['stim']
         ax.plot(t * S_TO_MS, stim, c='k')
         ax.fill_between(t * S_TO_MS, np.zeros(t.size), stim, facecolor='silver')
 
     # End-node spikes raster plot
     if not maponly:
-        ax = axes['b']
+        ax = axes['spikes']
         tspikes = fiber.getEndSpikeTrain(data)
         if tspikes is not None:
             for ts in tspikes:
@@ -690,17 +700,17 @@ def spatioTemporalMap(fiber, source, data, varkey, sec_type='node', fontsize=10,
 
     # Stimulus field distribution plot
     if not maponly:
-        ax = axes['c']
+        ax = axes['field']
         xdense = np.linspace(*bounds(xcoords), 100)  # m
         field = source.getField(xdense)
         y = -field / field.max()
         ax.plot(y, xdense * M_TO_MM, c='k')
         ax.fill_betweenx(xdense * M_TO_MM, y, np.zeros(y.size), facecolor='silver', alpha=0.5)
         ax.set_ylim(*xlims)
-        ax.get_shared_y_axes().join(ax, axes['c'])
+        ax.get_shared_y_axes().join(ax, axes['field'])
 
     # Spatio-temporal map
-    ax = axes['d']
+    ax = axes[f'{varkey}map']
     for sk in ['top', 'right']:
         ax.spines[sk].set_visible(False)
     ax.set_ylim(*xlims)
@@ -719,7 +729,7 @@ def spatioTemporalMap(fiber, source, data, varkey, sec_type='node', fontsize=10,
 
     # Plot colorbar
     if not maponly:
-        ax = axes['e']
+        ax = axes[f'{varkey}cbar']
         cbar = fig.colorbar(sm, cax=ax)
         lims = roundBounds(ax.get_ylim(), 0)
         ax.set_ylim(*lims)
