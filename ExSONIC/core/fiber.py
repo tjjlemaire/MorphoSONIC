@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2021-06-14 10:48:04
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-14 16:55:11
+# @Last Modified time: 2021-06-21 18:01:25
 
 import abc
 import numpy as np
@@ -72,8 +72,8 @@ class FiberNeuronModel(SpatiallyExtendedNeuronModel):
 
     @nnodes.setter
     def nnodes(self, value):
-        if value % 2 == 0:
-            logger.warning(f'even number of nodes ({value})')
+        # if value % 2 == 0:
+        #     logger.warning(f'even number of nodes ({value})')
         self.set('nnodes', value)
 
     @property
