@@ -3,7 +3,7 @@
 # @Email: andy.bonnetto@epfl.ch
 # @Date:   2021-05-21 08:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-22 15:06:40
+# @Last Modified time: 2021-06-22 16:11:25
 
 from tqdm import tqdm
 import random
@@ -13,11 +13,10 @@ from scipy.stats import rv_histogram
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle, Polygon
 from matplotlib.path import Path
-from neuron import h
 
-from PySONIC.utils import logger, TqdmHandler, my_log_formatter, setHandler, si_format
+from PySONIC.core import Batch
+from PySONIC.utils import logger, TqdmHandler, my_log_formatter, setHandler, si_format, loadData
 from ..models import SennFiber, UnmyelinatedFiber, getModel
-from ..core import getAllSecs
 
 
 def circleContour(r, n=10, closed=False):
@@ -342,26 +341,30 @@ class Bundle:
             d = pickle.load(fh)
         return cls.fromDict(d)
 
-    def forall(self, simfunc):
+    def forall(self, simfunc, mpi=False):
         ''' Apply function to each constituent fiber.
 
             :param simfunc: simulation function that takes a fiber object as input
             :param simargs: simulation argpulsing protocol object
         '''
-        output = []
-        for i, (fiber, pos) in enumerate(self.fibers):
+        def foo(meta, pos):
+            fiber = getModel(meta)
             fiber.construct()
-            output.append(simfunc(fiber, pos))
+            out = simfunc(fiber, pos)
             fiber.clear()
-        return output
+            return out
+        queue = [[x[0].meta, x[1]] for x in self.fibers]
+        batch = Batch(foo, queue)
+        return batch.run(loglevel=logger.getEffectiveLevel(), mpi=mpi)
 
     def rasterPlot(self, output):
         fig, ax = plt.subplots()
         ax.set_xlabel('time (ms)')
         ax.set_ylabel('fiber index')
         ax.set_ylim(0, len(self.fibers))
-        for i, ((fk, _), tspikes) in enumerate(zip(self.fibers, output)):
-            fk.getEndSpikeTrain(data)
+        for i, ((fk, _), fpath) in enumerate(zip(self.fibers, output)):
+            data, _ = loadData(fpath)
+            tspikes = fk.getEndSpikeTrain(data)
             c = {True: 'C1', False: 'C0'}[fk.is_myelinated]
             if tspikes is not None:
                 ax.vlines(tspikes * 1e3, i, i + 1, colors=c)
