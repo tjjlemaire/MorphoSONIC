@@ -3,7 +3,7 @@
 # @Email: andy.bonnetto@epfl.ch
 # @Date:   2021-05-21 08:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-22 16:11:25
+# @Last Modified time: 2021-06-22 19:49:54
 
 from tqdm import tqdm
 import random
@@ -353,7 +353,7 @@ class Bundle:
             out = simfunc(fiber, pos)
             fiber.clear()
             return out
-        queue = [[x[0].meta, x[1]] for x in self.fibers]
+        queue = [[x[0].meta, x[1]] for x in self.fibers[::-1]]
         batch = Batch(foo, queue)
         return batch.run(loglevel=logger.getEffectiveLevel(), mpi=mpi)
 
