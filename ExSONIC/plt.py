@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-09-26 17:11:28
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-19 18:40:03
+# @Last Modified time: 2021-06-22 15:14:30
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -12,11 +12,11 @@ from scipy import signal
 
 from PySONIC.core import Lookup
 from PySONIC.plt import GroupedTimeSeries, CompTimeSeries, mirrorAxis, setNormalizer
-from PySONIC.utils import logger, si_format, getPow10, rsquared, padleft, timeThreshold, bounds
+from PySONIC.utils import logger, si_format, getPow10, rsquared, padleft, timeThreshold, bounds, loadData
 
 from .core import *
 from .models import getModel, surroundedSonophore
-from .utils import loadData, chronaxie
+from .utils import chronaxie
 from .constants import *
 
 

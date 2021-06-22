@@ -3,7 +3,7 @@
 # @Email: andy.bonnetto@epfl.ch
 # @Date:   2021-05-21 08:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-22 14:46:27
+# @Last Modified time: 2021-06-22 15:06:40
 
 from tqdm import tqdm
 import random
@@ -342,21 +342,17 @@ class Bundle:
             d = pickle.load(fh)
         return cls.fromDict(d)
 
-    def simulate(self, source, pp):
-        ''' Simulate each constituent fiber for a givne source and pulsing protocol.
+    def forall(self, simfunc):
+        ''' Apply function to each constituent fiber.
 
-            :param source: stimulation source object
-            :param pp: pulsing protocol object
+            :param simfunc: simulation function that takes a fiber object as input
+            :param simargs: simulation argpulsing protocol object
         '''
         output = []
         for i, (fiber, pos) in enumerate(self.fibers):
             fiber.construct()
-            source.x0 = - pos[0]
-            data, meta = fiber.simulate(source, pp)
-            tspikes = fiber.getEndSpikeTrain(data)
+            output.append(simfunc(fiber, pos))
             fiber.clear()
-            h.allobjects()
-            output.append(tspikes)
         return output
 
     def rasterPlot(self, output):
@@ -365,6 +361,7 @@ class Bundle:
         ax.set_ylabel('fiber index')
         ax.set_ylim(0, len(self.fibers))
         for i, ((fk, _), tspikes) in enumerate(zip(self.fibers, output)):
+            fk.getEndSpikeTrain(data)
             c = {True: 'C1', False: 'C0'}[fk.is_myelinated]
             if tspikes is not None:
                 ax.vlines(tspikes * 1e3, i, i + 1, colors=c)

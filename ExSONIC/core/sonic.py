@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-30 21:40:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-22 14:46:03
+# @Last Modified time: 2021-06-22 15:18:44
 
 import numpy as np
 
@@ -330,7 +330,8 @@ def addSonicFeatures(Base):
             return self._network
 
         def clear(self):
-            self._network.clear()
+            if self._network is not None:
+                self._network.clear()
             super().clear()
 
         @network.setter

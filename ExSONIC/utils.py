@@ -3,16 +3,13 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 14:38:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-05 13:26:06
+# @Last Modified time: 2021-06-22 15:15:32
 
 import os
-import pickle
 import platform
 import numpy as np
 from scipy.optimize import curve_fit
 from neuron import h
-
-from PySONIC.utils import logger
 
 # global list of paths already loaded by load_mechanisms
 nrn_dll_loaded = []
@@ -71,17 +68,6 @@ def load_mechanisms(path, modfile=None):
     # Load library file and add directory to list of loaded libraries
     h.nrn_load_dll(lib_path)
     nrn_dll_loaded.append(path)
-
-
-def loadData(fpath, frequency=1):
-    ''' Load dataframe and metadata dictionary from pickle file. '''
-    logger.info(f'Loading data from "{os.path.basename(fpath)}"')
-    with open(fpath, 'rb') as fh:
-        frame = pickle.load(fh)
-        data = frame['data']
-        data = {k: df.iloc[::frequency] for k, df in data.items()}
-        meta = frame['meta']
-        return data, meta
 
 
 def getNmodlDir():
