@@ -3,7 +3,7 @@
 # @Email: andy.bonnetto@epfl.ch
 # @Date:   2021-05-21 08:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-22 19:49:54
+# @Last Modified time: 2021-06-22 20:14:56
 
 from tqdm import tqdm
 import random
@@ -300,6 +300,8 @@ class Bundle:
         factor = {'um': 1e6, 'mm': 1e3, 'm': 1e0}[unit]
         if ax is None:
             fig, ax = plt.subplots()
+            for sk in ['top', 'right']:
+                ax.spines[sk].set_visible(False)
             ax.set_title('bundle cross section')
             ax.set_xlabel('y (um)')
             ax.set_ylabel('z (um)')
@@ -317,6 +319,28 @@ class Bundle:
                 zlist.append(z)
             ax.scatter(y, z, c='y', marker='')
         ax.add_patch(Polygon(self.contours * factor, closed=True, fill=False, color='k'))
+        return fig
+
+    def plotLongitudinalOffsets(self, unit='um', ax=None):
+        factor = {'um': 1e6, 'mm': 1e3, 'm': 1e0}[unit]
+        if ax is None:
+            fig, ax = plt.subplots()
+            for sk in ['top', 'right']:
+                ax.spines[sk].set_visible(False)
+            ax.set_title('longitudinal offsets')
+            ax.set_xlabel('x (um)')
+            ax.set_ylabel('frequency')
+        else:
+            fig = None
+        if self.fibers is not None:
+            xpositions = {
+                'UN': np.array([x[1][0] for x in self.unmyelinated_fibers]),
+                'MY': np.array([x[1][0] for x in self.myelinated_fibers])
+            }
+            for k, data in xpositions.items():
+                ax.hist(data * factor, label=k, bins=50, alpha=0.7)
+        if fig is not None:
+            ax.legend(frameon=False)
         return fig
 
     def toDict(self):
