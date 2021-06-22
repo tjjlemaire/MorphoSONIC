@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2018-08-27 09:23:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-14 11:31:47
+# @Last Modified time: 2021-06-22 10:23:37
 
 from PySONIC.core import PointNeuron, ElectricDrive
 from PySONIC.utils import logger
@@ -31,9 +31,10 @@ class Node(NeuronModel):
         self.section = self.createSection(
             'node', mech=self.mechname, states=self.pneuron.statesNames())
 
-    def clear(self):
-        self.pylkp = None
+    def clearSections(self):
         self.section = None
+
+    def clearDrives(self):
         self.drive = None
 
     @property

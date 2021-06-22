@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-14 16:58:20
+# @Last Modified time: 2021-06-22 12:44:02
 
 import abc
 from neuron import h
@@ -202,10 +202,28 @@ class NeuronModel(metaclass=abc.ABCMeta):
         ''' Set the sections' extracellular mechanisms. '''
         pass
 
+    def clearLookups(self):
+        ''' Clear model-related lookups. '''
+        self.Aref = None
+        self.Qref = None
+        self.lkp = None
+        self.pylkp = None
+
     @abc.abstractmethod
-    def clear(self):
-        ''' Clear all model sections and drive objects. '''
+    def clearSections(self):
+        ''' Clear model-related neuron sections. '''
         raise NotImplementedError
+
+    @abc.abstractmethod
+    def clearDrives(self):
+        ''' Clear model-related drives. '''
+        raise NotImplementedError
+
+    def clear(self):
+        ''' Clear all model related NEURON objects. '''
+        self.clearSections()
+        self.clearLookups()
+        self.clearDrives()
 
     def reset(self):
         ''' Delete and re-construct all model sections. '''
@@ -511,6 +529,7 @@ class NeuronModel(metaclass=abc.ABCMeta):
         # Set drive and integrate model
         self.setDrive(drive)
         self.integrate(pp, dt, atol)
+        self.clearDrives()
 
         # Return output dataframe
         return self.outputDataFrame(t.to_array(), self.fixStimVec(stim.to_array(), dt), probes)
@@ -658,12 +677,15 @@ class SpatiallyExtendedNeuronModel(NeuronModel):
 
     @drives.setter
     def drives(self, value):
-        if not isIterable(value):
-            raise ValueError('drives must be an iterable')
-        for item in value:
-            if not hasattr(item, 'set'):
-                raise ValueError(f'drive {item} has no "set" method')
-        self._drives = value
+        if value is None:
+            self._drives = None
+        else:
+            if not isIterable(value):
+                raise ValueError('drives must be an iterable')
+            for item in value:
+                if not hasattr(item, 'set'):
+                    raise ValueError(f'drive {item} has no "set" method')
+            self._drives = value
 
     def desc(self, meta):
         return f'{self}: simulation @ {meta["source"]}, {meta["pp"].desc}'
@@ -738,6 +760,9 @@ class SpatiallyExtendedNeuronModel(NeuronModel):
         if not match:
             raise ValueError(f'Unknown source type: {source}')
 
+    def clearDrives(self):
+        self.drives = None
+
     @property
     def Aranges(self):
         return {
@@ -779,6 +804,7 @@ class SpatiallyExtendedNeuronModel(NeuronModel):
 
         # Integrate model
         self.integrate(pp, dt, atol)
+        self.clearDrives()
 
         # Return output dataframe dictionary
         t = t.to_array()  # s

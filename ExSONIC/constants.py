@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-08-24 20:31:19
+# @Last Modified time: 2021-06-22 09:44:58
 
 # Conversions
 V_TO_MV = 1e3            # V to  mV
@@ -29,7 +29,7 @@ OHM_TO_MOHM = 1e-6       # Ohm-> MOhm
 FIXED_DT = 1e-5                  # default time step for fixed integration (s)
 MIN_NSAMPLES_PER_INTERVAL = 10   # minimum number of integration steps per interval
 TRANSITION_DT = 1e-15            # time step for ON-OFF and OFF-ON sharp transitions (s)
-PRINT_FINITIALIZE_STEPS = True  # flag stating whether to print the different finitialize steps
+PRINT_FINITIALIZE_STEPS = False  # flag stating whether to print the different finitialize steps
 
 # Titration
 IINJ_RANGE = (1e-12, 1e-7)  # intracellular current range allowed at the fiber level (A)

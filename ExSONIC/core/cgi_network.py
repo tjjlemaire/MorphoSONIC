@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-06-07 14:42:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-08-28 13:16:56
+# @Last Modified time: 2021-06-22 11:48:05
 
 import numpy as np
 from neuron import h, hclass
@@ -562,23 +562,15 @@ class HybridNetwork:
             raise ValueError('Network does not have an extracellular layer')
         return self.y._ref_x[self.index(sec) + self.nsec]
 
-    @property
-    def relx(self):
-        return h.Vector([0.5] * self.nsec)
-
-    @property
-    def sl(self):
-        sl = h.SectionList()
-        for sec in self.seclist:
-            sl.append(sec=sec)
-        return sl
-
     def startLM(self):
         ''' Feed network into a LinearMechanism object. '''
         # Set initial conditions vector
         self.y0 = h.Vector(self.size)
-        # self.cm_over_time = np.zeros(self.nsec)
         # Define linear mechanism arguments
+        self.sl = h.SectionList()
+        for sec in self.seclist:
+            self.sl.append(sec=sec)
+        self.relx = h.Vector([0.5] * self.nsec)
         lm_args = [self.C, self.G, self.y, self.y0, self.I, self.sl, self.relx]
         # Add update callback for dynamic cm
         if self.is_dynamic_cm:
@@ -591,13 +583,38 @@ class HybridNetwork:
 
     def clear(self):
         ''' Delete the network's LinearMechanism object. '''
-        del self.lm
+        # Remove base layer components
+        self.Am = None
+        self.cm = None
+        self.ga = None
+        self.qm = None
+        self.iax = None
+        self.Gacm = None
+        self.istim = None
+        # Remove extracellular layer components
+        self.cx = None
+        self.gx = None
+        self.gp = None
+        self.Ga = None
+        self.Gp = None
+        self.Gx = None
+        self.vx = None
+        self.iex = None
+        # Remove global components
+        self.C = None
+        self.G = None
+        self.I = None
+        self.y = None
+        self.y0 = None
+        self.sl = None
+        self.relx = None
+        self.lm = None
+        self.seclist = None
 
     def updateCmTerms(self):
         ''' Update capacitance-dependent network components. '''
         # Update membrane capacitance vector
         self.cm = np.array([sec.getCm(x=0.5) for sec in self.seclist])
-        # self.cm_over_time = np.vstack([self.cm_over_time, self.cm])
 
         # Modify Gacm matrix accordingly
         self.Gacm.setCNorm(self.cm)

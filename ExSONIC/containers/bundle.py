@@ -3,7 +3,7 @@
 # @Email: andy.bonnetto@epfl.ch
 # @Date:   2021-05-21 08:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-21 22:55:37
+# @Last Modified time: 2021-06-22 09:36:36
 
 from tqdm import tqdm
 import random
@@ -13,10 +13,11 @@ from scipy.stats import rv_histogram
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle, Polygon
 from matplotlib.path import Path
+from neuron import h
 
 from PySONIC.utils import logger, TqdmHandler, my_log_formatter, setHandler, si_format
-
 from ..models import SennFiber, UnmyelinatedFiber, getModel
+from ..core import printAllSecs
 
 
 def circleContour(r, n=10, closed=False):
@@ -54,7 +55,7 @@ class Bundle:
     MIN_INTERSPACE = 5e-8  # minimum space between fibers (m)
 
     def __init__(self, contours, length, fibers=None, fiberD_hists=None,
-                 pratio=0.3, un_to_my_ratio=2.45):
+                 pratio=0.3, un_to_my_ratio=2.45, **fiber_kwargs):
         ''' Initialization.
             :param contours: set of sorted 2D points describing the contour coordinates (in m)
             :param length: bundle length (m)
@@ -62,6 +63,7 @@ class Bundle:
             :param fiberD_hists: reference histograms of fiber diameter distributions per fiber type
             :param pratio: overall fiber packing ratio in the bundle
             :param un_to_my_ratio: ratio of unmyelinated to myelinated fibers in the bundle
+            :param fiber_kwargs: common keyword arguments used to initialize fibers
         '''
         # Initialize attributes
         self.contours = contours
@@ -69,6 +71,7 @@ class Bundle:
         self.fiberD_hists = fiberD_hists
         self.target_pratio = pratio
         self.target_un_to_my_ratio = un_to_my_ratio
+        self.fiber_kwargs = fiber_kwargs
         # Assign fibers if provided
         if fibers is not None:
             self.fibers = fibers
@@ -168,7 +171,7 @@ class Bundle:
         if fiberD is None:
             fiberD = self.sampleFiberDiameter(is_myelinated)
         fclass = {True: SennFiber, False: UnmyelinatedFiber}[is_myelinated]
-        return fclass(fiberD, fiberL=self.length, construct=False)
+        return fclass(fiberD, fiberL=self.length, construct=False, **self.fiber_kwargs)
 
     def sampleFibers(self):
         ''' Get a list of fiber "kernels" that approaches the target packing ratio
@@ -338,3 +341,42 @@ class Bundle:
         with open(fpath, 'rb') as fh:
             d = pickle.load(fh)
         return cls.fromDict(d)
+
+    def simulate(self, source, pp):
+        ''' Simulate each constituent fiber for a givne source and pulsing protocol.
+
+            :param source: stimulation source object
+            :param pp: pulsing protocol object
+        '''
+        output = []
+        for i, (fiber, pos) in enumerate(self.fibers):
+            printAllSecs()
+            # print(h.allobjects())
+            print('CONSTRUCT')
+            fiber.construct()
+            printAllSecs()
+            # print(h.allobjects())
+            source.x0 = - pos[0]
+            print('SIMULATE')
+            data, meta = fiber.simulate(source, pp)
+            printAllSecs()
+            # print(h.allobjects())
+            tspikes = fiber.getEndSpikeTrain(data)
+            print('CLEAR')
+            fiber.clear()
+            printAllSecs()
+            # print(h.allobjects())
+            quit()
+            output.append(tspikes)
+        return output
+
+    def rasterPlot(self, output):
+        fig, ax = plt.subplots()
+        ax.set_xlabel('time (ms)')
+        ax.set_ylabel('fiber index')
+        ax.set_ylim(0, len(self.fibers))
+        for i, ((fk, _), tspikes) in enumerate(zip(self.fibers, output)):
+            c = {True: 'C1', False: 'C0'}[fk.is_myelinated]
+            if tspikes is not None:
+                ax.vlines(tspikes * 1e3, i, i + 1, colors=c)
+        return fig

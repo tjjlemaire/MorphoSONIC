@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-27 15:18:44
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-14 17:00:35
+# @Last Modified time: 2021-06-22 11:56:23
 
 import numpy as np
 
@@ -68,9 +68,9 @@ class SingleCableFiber(FiberNeuronModel):
         ''' Nonde-to-node intracellular axial resistance (Ohm). '''
         return self.R_node + self.R_inter
 
-    def clear(self):
+    def clearSections(self):
         ''' delete all model sections. '''
-        del self.nodes
+        self.nodes = None
 
     def getNodeCoords(self):
         ''' Return vector of node coordinates along axial dimension, centered at zero (um). '''

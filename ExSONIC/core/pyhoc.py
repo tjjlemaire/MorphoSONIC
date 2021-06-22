@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-08-18 21:24:17
+# @Last Modified time: 2021-06-22 12:16:36
 
 ''' Utilities to manipulate HOC objects. '''
 
@@ -34,6 +34,9 @@ class Probe(hclass(h.Vector)):
 
     def clear(self):
         super().__init__()
+
+    def __del__(self):
+        self.clear()
 
 
 class Matrix(hclass(h.Matrix)):
@@ -677,3 +680,11 @@ def getCustomConnectSection(section_class):
     CustomConnectSection.__name__ = f'CustomConnect{section_class.__name__}'
 
     return CustomConnectSection
+
+
+def printAllSecs():
+    secs = [str(sec) for sec in h.allsec()]
+    if len(secs) == 0:
+        print('NO SECTION')
+    else:
+        print('ALL SECTIONS:', ', '.join(secs))
