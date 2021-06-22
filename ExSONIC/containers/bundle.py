@@ -3,7 +3,7 @@
 # @Email: andy.bonnetto@epfl.ch
 # @Date:   2021-05-21 08:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-22 09:36:36
+# @Last Modified time: 2021-06-22 14:46:27
 
 from tqdm import tqdm
 import random
@@ -17,7 +17,7 @@ from neuron import h
 
 from PySONIC.utils import logger, TqdmHandler, my_log_formatter, setHandler, si_format
 from ..models import SennFiber, UnmyelinatedFiber, getModel
-from ..core import printAllSecs
+from ..core import getAllSecs
 
 
 def circleContour(r, n=10, closed=False):
@@ -350,23 +350,12 @@ class Bundle:
         '''
         output = []
         for i, (fiber, pos) in enumerate(self.fibers):
-            printAllSecs()
-            # print(h.allobjects())
-            print('CONSTRUCT')
             fiber.construct()
-            printAllSecs()
-            # print(h.allobjects())
             source.x0 = - pos[0]
-            print('SIMULATE')
             data, meta = fiber.simulate(source, pp)
-            printAllSecs()
-            # print(h.allobjects())
             tspikes = fiber.getEndSpikeTrain(data)
-            print('CLEAR')
             fiber.clear()
-            printAllSecs()
-            # print(h.allobjects())
-            quit()
+            h.allobjects()
             output.append(tspikes)
         return output
 

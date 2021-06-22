@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-30 21:40:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-22 11:51:43
+# @Last Modified time: 2021-06-22 14:46:03
 
 import numpy as np
 
@@ -317,8 +317,8 @@ def addSonicFeatures(Base):
                     CUSTOM_PASSIVE_MECHNAME, 'V', self.inter_lkp['V'], self.Aref, self.Qref)
 
         def clearLookups(self):
-            super().clearLookups()
             self.inter_lkp = None
+            super().clearLookups()
 
         def copy(self):
             other = super().copy()
@@ -330,8 +330,8 @@ def addSonicFeatures(Base):
             return self._network
 
         def clear(self):
-            super().clear()
             self._network.clear()
+            super().clear()
 
         @network.setter
         def network(self, value):

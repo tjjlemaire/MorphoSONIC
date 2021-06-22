@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-22 12:16:36
+# @Last Modified time: 2021-06-22 13:26:33
 
 ''' Utilities to manipulate HOC objects. '''
 
@@ -682,9 +682,13 @@ def getCustomConnectSection(section_class):
     return CustomConnectSection
 
 
+def getAllSecs():
+    return list(h.allsec())
+
+
 def printAllSecs():
-    secs = [str(sec) for sec in h.allsec()]
+    secs = getAllSecs()
     if len(secs) == 0:
         print('NO SECTION')
     else:
-        print('ALL SECTIONS:', ', '.join(secs))
+        print('ALL SECTIONS:', ', '.join([str(s) for s in secs]))

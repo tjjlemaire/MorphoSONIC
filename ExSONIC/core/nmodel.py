@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-22 12:44:02
+# @Last Modified time: 2021-06-22 14:45:36
 
 import abc
 from neuron import h
@@ -224,6 +224,8 @@ class NeuronModel(metaclass=abc.ABCMeta):
         self.clearSections()
         self.clearLookups()
         self.clearDrives()
+        if any(sec.cell() == self for sec in getAllSecs()):
+            raise ValueError(f'clearing error: remaining {self} sections')
 
     def reset(self):
         ''' Delete and re-construct all model sections. '''

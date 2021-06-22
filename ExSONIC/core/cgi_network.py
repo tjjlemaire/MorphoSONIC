@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-06-07 14:42:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-22 11:48:05
+# @Last Modified time: 2021-06-22 14:37:08
 
 import numpy as np
 from neuron import h, hclass
@@ -564,13 +564,15 @@ class HybridNetwork:
 
     def startLM(self):
         ''' Feed network into a LinearMechanism object. '''
-        # Set initial conditions vector
-        self.y0 = h.Vector(self.size)
-        # Define linear mechanism arguments
+        # Define section list (using explicit append statements to ensure retro-compatibility)
         self.sl = h.SectionList()
         for sec in self.seclist:
             self.sl.append(sec=sec)
+        # Define vector of relative positions in the sections (always at mid-point)
         self.relx = h.Vector([0.5] * self.nsec)
+        # Set initial conditions vector
+        self.y0 = h.Vector(self.size)
+        # Define linear mechanism arguments
         lm_args = [self.C, self.G, self.y, self.y0, self.I, self.sl, self.relx]
         # Add update callback for dynamic cm
         if self.is_dynamic_cm:
