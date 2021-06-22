@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2021-06-14 10:48:04
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-21 18:01:25
+# @Last Modified time: 2021-06-22 18:34:56
 
 import abc
 import numpy as np
@@ -361,7 +361,8 @@ class FiberNeuronModel(SpatiallyExtendedNeuronModel):
         #     return True
         return False
 
-    def simulate(self, source, pp):
+    def simulate(self, source, pp, atol=None):
         return super().simulate(
             source, pp,
-            dt=self.fixed_dt if self.needsFixedTimeStep(source) else None)
+            dt=self.fixed_dt if self.needsFixedTimeStep(source) else None,
+            atol=atol)

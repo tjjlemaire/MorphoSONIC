@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-02-19 14:42:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-22 14:45:36
+# @Last Modified time: 2021-06-22 18:54:18
 
 import abc
 from neuron import h
@@ -414,6 +414,7 @@ class NeuronModel(metaclass=abc.ABCMeta):
         self.initToSteadyState()
         # self.setDriveModulator(pp.stimEvents(), pp.tstop)
         self.setTransitionEvents(pp.stimEvents(), pp.tstop, dt)
+        # cvode.print_event_queue()
         self.integrateUntil(pp.tstop * S_TO_MS)
         return 0
 
