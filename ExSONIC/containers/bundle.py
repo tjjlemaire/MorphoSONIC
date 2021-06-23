@@ -3,8 +3,9 @@
 # @Email: andy.bonnetto@epfl.ch
 # @Date:   2021-05-21 08:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-22 20:14:56
+# @Last Modified time: 2021-06-23 18:48:53
 
+import types
 from tqdm import tqdm
 import random
 import pickle
@@ -16,7 +17,7 @@ from matplotlib.path import Path
 
 from PySONIC.core import Batch
 from PySONIC.utils import logger, TqdmHandler, my_log_formatter, setHandler, si_format, loadData
-from ..models import SennFiber, UnmyelinatedFiber, getModel
+from ..models import SennFiber, UnmyelinatedFiber, getModelClassAndMeta
 
 
 def circleContour(r, n=10, closed=False):
@@ -46,6 +47,51 @@ def getXYBounds(pts):
     return np.array([[xmin, xmax], [ymin, ymax]])
 
 
+def getConstituentFiber(fiber, owner, findex):
+
+    def index(self):
+        return findex
+
+    def modelcodes(self):
+        return {'owner': owner, 'findex': f'fiber{findex}'}
+
+    def meta(self):
+        return {**super().meta, 'owner': owner, 'index': findex}
+
+    fiber.index = property(types.MethodType(index, fiber))
+    fiber.modelcodes = property(types.MethodType(modelcodes, fiber))
+    fiber.meta = property(types.MethodType(meta, fiber))
+
+    return fiber
+
+
+def getConstituentFiberClass(fclass, owner, findex):
+    ''' Get a new fiber class with an additional index property. '''
+    class ConstituentFiber(fclass):
+
+        @property
+        def index(self):
+            return findex
+
+        @property
+        def modelcodes(self):
+            return {'owner': owner, 'findex': f'fiber{findex}'}
+
+        @property
+        def meta(self):
+            return {**super().meta, 'owner': owner, 'index': findex}
+
+    ConstituentFiber.__name__ = fclass.__name__
+    return ConstituentFiber
+
+
+class NotPopulatedError(Exception):
+    ''' Custom exception class for unpopulated bundle '''
+
+    def __init__(self, msg='bundle is not populated', *args, **kwargs):
+        super().__init__(msg, *args, **kwargs)
+
+
 class Bundle:
     ''' Bundle with myelinated and unmyelinated fibers. '''
 
@@ -71,23 +117,32 @@ class Bundle:
         self.target_pratio = pratio
         self.target_un_to_my_ratio = un_to_my_ratio
         self.fiber_kwargs = fiber_kwargs
-        # Assign fibers if provided
-        if fibers is not None:
-            self.fibers = fibers
-        else:
-            # Otherwise populate the bundle
-            self.populate()
+        self.fibers = fibers
 
     def __repr__(self):
-        s = f'{self.__class__.__name__}(A = {self.area * 1e6:.2f}mm2, L = {si_format(self.length)}m'
-        nfibers = {
-            'myelinated': len(self.myelinated_fibers),
-            'unmyelinated': len(self.unmyelinated_fibers),
-            'total': len(self.fibers)
-        }
-        nfibers_str = ', '.join([f'n_{k} = {v}' for k, v in nfibers.items()])
-        s = f'{s}, {nfibers_str}'
+        s = f'{self.__class__.__name__}('
+        s = f'{s}A = {si_format(self.area, precision=2, unit_dim=2)}m2'
+        s = f'{s}, L = {si_format(self.length)}m'
+        if self._fibers is not None:
+            nfibers = {
+                'myelinated': len(self.myelinated_fibers),
+                'unmyelinated': len(self.unmyelinated_fibers),
+                'total': len(self.fibers)
+            }
+            nfibers_str = ', '.join([f'n_{k} = {v}' for k, v in nfibers.items()])
+            s = f'{s}, {nfibers_str}'
+        else:
+            s = f'{s}, target packing pratio = {self.target_pratio:.2f}'
+            s = f'{s}, target UN:MY ratio = {self.target_un_to_my_ratio:.2f}'
         return f'{s})'
+
+    def filecode(self):
+        s = f'{self.__class__.__name__}'
+        s = f'{s}_A{si_format(self.area, precision=2, unit_dim=2, space="")}m2'
+        s = f'{s}_L{si_format(self.length, space="")}m'
+        s = f'{s}_pratio{self.target_pratio:.2f}'
+        s = f'{s}_UN2MYratio{self.target_un_to_my_ratio:.2f}'
+        return s
 
     @property
     def contours(self):
@@ -160,7 +215,7 @@ class Bundle:
         k = {True: 'MY', False: 'UN'}[is_myelinated]
         return self.fiberD_rv_samplers[k].rvs()
 
-    def getFiberKernel(self, is_myelinated, fiberD=None):
+    def getFiberKernel(self, is_myelinated, findex, fiberD=None):
         ''' Create a fiber "kernel" (i.e. with set parameters but no constructed sections)
             for a specific fiber type and diameter.
 
@@ -170,7 +225,10 @@ class Bundle:
         if fiberD is None:
             fiberD = self.sampleFiberDiameter(is_myelinated)
         fclass = {True: SennFiber, False: UnmyelinatedFiber}[is_myelinated]
-        return fclass(fiberD, fiberL=self.length, construct=False, **self.fiber_kwargs)
+        fclass = getConstituentFiberClass(fclass, self.filecode(), findex)
+        fiber = fclass(fiberD, fiberL=self.length, construct=False, **self.fiber_kwargs)
+        # fiber = getConstituentFiber(fiber, self.filecode(), findex)
+        return fiber
 
     def sampleFibers(self):
         ''' Get a list of fiber "kernels" that approaches the target packing ratio
@@ -185,7 +243,7 @@ class Bundle:
         fkernels = []
         while pratio < self.target_pratio:
             # Sample fiber from appropriate type and add it to kernel list
-            fkernel = self.getFiberKernel(next_myelinated)
+            fkernel = self.getFiberKernel(next_myelinated, len(fkernels))
             fkernels.append(fkernel)
             # Update process parameters and determine next fiber type
             nMY += int(next_myelinated)
@@ -194,7 +252,7 @@ class Bundle:
             next_myelinated = nUN / nMY > self.target_un_to_my_ratio
         assert len(fkernels) == nMY + nUN, 'fiber count not matching'
         # Assign kernel list sorted by decreasing fiber diameter
-        self.virtual_fkernels = sorted(fkernels, key=lambda x: x.fiberD, reverse=True)
+        self._virtual_fkernels = sorted(fkernels, key=lambda x: x.fiberD, reverse=True)
 
     def isInside(self, position, fiberD):
         ''' Check if position of the fiber is outside the faciscle or overlaps its boundary. '''
@@ -230,12 +288,12 @@ class Bundle:
 
     def placeFibers(self):
         # Place fibers within the bundle
-        nfibers = len(self.virtual_fkernels)
+        nfibers = len(self._virtual_fkernels)
         logger.info(f'Placing {nfibers} fibers...')
-        self.fibers = []
+        self._fibers = []
         setHandler(logger, TqdmHandler(my_log_formatter))
         pbar = tqdm(total=nfibers)
-        for fkernel in self.virtual_fkernels:
+        for i, fkernel in enumerate(self._virtual_fkernels):
             pbar.update()
             is_overlapping = True
             count = 0
@@ -247,10 +305,20 @@ class Bundle:
             # Raise error if not spot was found after a large number of trials
             if count == self.MAX_NTRIALS + 1:
                 raise ValueError(
-                    f'could not place fiber number {len(self.fibers)} (diameter = {fkernel.fiberD * 1e6:.2f} um')
+                    f'could not place fiber {i + 1} (diameter = {fkernel.fiberD * 1e6:.2f} um')
             # Append fiber to fibers list
-            self.fibers.append((fkernel, xyz))
+            self._fibers.append((fkernel, xyz))
         pbar.close()
+
+    @property
+    def fibers(self):
+        if self._fibers is None:
+            raise NotPopulatedError
+        return self._fibers
+
+    @fibers.setter
+    def fibers(self, value):
+        self._fibers = value
 
     @property
     def myelinated_fibers(self):
@@ -332,13 +400,12 @@ class Bundle:
             ax.set_ylabel('frequency')
         else:
             fig = None
-        if self.fibers is not None:
-            xpositions = {
-                'UN': np.array([x[1][0] for x in self.unmyelinated_fibers]),
-                'MY': np.array([x[1][0] for x in self.myelinated_fibers])
-            }
-            for k, data in xpositions.items():
-                ax.hist(data * factor, label=k, bins=50, alpha=0.7)
+        xpositions = {
+            'UN': np.array([x[1][0] for x in self.unmyelinated_fibers]),
+            'MY': np.array([x[1][0] for x in self.myelinated_fibers])
+        }
+        for k, data in xpositions.items():
+            ax.hist(data * factor, label=k, bins=50, alpha=0.7)
         if fig is not None:
             ax.legend(frameon=False)
         return fig
@@ -351,8 +418,14 @@ class Bundle:
         }
 
     @classmethod
+    def getModel(cls, meta):
+        fclass, meta = getModelClassAndMeta(meta)
+        fclass = getConstituentFiberClass(fclass, meta['owner'], meta['index'])
+        return fclass.initFromMeta(meta)
+
+    @classmethod
     def fromDict(cls, d):
-        fibers = [(getModel(x[0]), x[1]) for x in d['fibers']]
+        fibers = [(cls.getModel(x[0]), x[1]) for x in d['fibers']]
         return cls(d['contours'], d['length'], fibers=fibers)
 
     def toPickle(self, fpath):
@@ -372,7 +445,7 @@ class Bundle:
             :param simargs: simulation argpulsing protocol object
         '''
         def foo(meta, pos):
-            fiber = getModel(meta)
+            fiber = self.getModel(meta)
             fiber.construct()
             out = simfunc(fiber, pos)
             fiber.clear()
@@ -381,12 +454,12 @@ class Bundle:
         batch = Batch(foo, queue)
         return batch.run(loglevel=logger.getEffectiveLevel(), mpi=mpi)
 
-    def rasterPlot(self, output):
+    def rasterPlot(self, fpaths):
         fig, ax = plt.subplots()
         ax.set_xlabel('time (ms)')
         ax.set_ylabel('fiber index')
         ax.set_ylim(0, len(self.fibers))
-        for i, ((fk, _), fpath) in enumerate(zip(self.fibers, output)):
+        for i, ((fk, _), fpath) in enumerate(zip(self.fibers[::-1], fpaths)):
             data, _ = loadData(fpath)
             tspikes = fk.getEndSpikeTrain(data)
             c = {True: 'C1', False: 'C0'}[fk.is_myelinated]
