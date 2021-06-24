@@ -3,8 +3,9 @@
 # @Email: andy.bonnetto@epfl.ch
 # @Date:   2021-05-21 08:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-23 18:48:53
+# @Last Modified time: 2021-06-24 19:40:02
 
+import os
 import types
 from tqdm import tqdm
 import random
@@ -47,39 +48,40 @@ def getXYBounds(pts):
     return np.array([[xmin, xmax], [ymin, ymax]])
 
 
-def getConstituentFiber(fiber, owner, findex):
+# def getConstituentFiber(fiber, owner, findex):
 
-    def index(self):
-        return findex
+#     def index(self):
+#         return findex
 
-    def modelcodes(self):
-        return {'owner': owner, 'findex': f'fiber{findex}'}
+#     def modelcodes(self):
+#         return {'owner': owner, 'findex': f'fiber{findex}'}
 
-    def meta(self):
-        return {**super().meta, 'owner': owner, 'index': findex}
+#     def meta(self):
+#         return {**super().meta, 'owner': owner, 'index': findex}
 
-    fiber.index = property(types.MethodType(index, fiber))
-    fiber.modelcodes = property(types.MethodType(modelcodes, fiber))
-    fiber.meta = property(types.MethodType(meta, fiber))
+#     fiber.modelcodes = property(types.MethodType(modelcodes, fiber))
+#     fiber.meta = property(types.MethodType(meta, fiber))
+#     fiber.index = property(types.MethodType(index, fiber))
 
-    return fiber
+#     return fiber
 
 
-def getConstituentFiberClass(fclass, owner, findex):
+def getConstituentFiberClass(fclass, owner, index):
     ''' Get a new fiber class with an additional index property. '''
     class ConstituentFiber(fclass):
 
-        @property
-        def index(self):
-            return findex
+        def __init__(self, *args, **kwargs):
+            self.owner = owner
+            self.index = index
+            super().__init__(*args, **kwargs)
 
         @property
         def modelcodes(self):
-            return {'owner': owner, 'findex': f'fiber{findex}'}
+            return {'owner': self.owner, 'index': f'fiber{self.index}'}
 
         @property
         def meta(self):
-            return {**super().meta, 'owner': owner, 'index': findex}
+            return {**super().meta, 'owner': self.owner, 'index': self.index}
 
     ConstituentFiber.__name__ = fclass.__name__
     return ConstituentFiber
@@ -334,7 +336,7 @@ class Bundle:
         self.sampleFibers()
         self.placeFibers()
         nMY = len(self.myelinated_fibers)
-        nUN = len(self.myelinated_fibers)
+        nUN = len(self.unmyelinated_fibers)
         logger.info(
             f'{self.__class__.__name__} populated with {len(self.fibers)} fibers ({nMY} MY. and {nUN} UN.)')
         logger.info(
@@ -437,6 +439,20 @@ class Bundle:
         with open(fpath, 'rb') as fh:
             d = pickle.load(fh)
         return cls.fromDict(d)
+
+    @classmethod
+    def get(cls, *args, root='.', **kwargs):
+        bundle = cls(*args, **kwargs)
+        fname = f'{bundle.filecode()}.pkl'
+        fpath = os.path.join(root, fname)
+        if os.path.isfile(fpath):
+            logger.info(f'Loading bundle from "{fname}"')
+            bundle = cls.fromPickle(fpath)
+        else:
+            bundle.populate()
+            logger.info(f'Saving bundle to "{fname}"')
+            bundle.toPickle(fpath)
+        return bundle
 
     def forall(self, simfunc, mpi=False):
         ''' Apply function to each constituent fiber.
