@@ -3,10 +3,9 @@
 # @Email: andy.bonnetto@epfl.ch
 # @Date:   2021-05-21 08:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-24 19:40:02
+# @Last Modified time: 2021-06-25 18:12:54
 
 import os
-import types
 from tqdm import tqdm
 import random
 import pickle
@@ -18,7 +17,7 @@ from matplotlib.path import Path
 
 from PySONIC.core import Batch
 from PySONIC.utils import logger, TqdmHandler, my_log_formatter, setHandler, si_format, loadData
-from ..models import SennFiber, UnmyelinatedFiber, getModelClassAndMeta
+from ..models import SennFiber, UnmyelinatedFiber
 
 
 def circleContour(r, n=10, closed=False):
@@ -48,43 +47,46 @@ def getXYBounds(pts):
     return np.array([[xmin, xmax], [ymin, ymax]])
 
 
-# def getConstituentFiber(fiber, owner, findex):
+class ConstituentSennFiber(SennFiber):
 
-#     def index(self):
-#         return findex
+    def __init__(self, owner, index, *args, **kwargs):
+        self.owner = owner
+        self.index = index
+        super().__init__(*args, **kwargs)
 
-#     def modelcodes(self):
-#         return {'owner': owner, 'findex': f'fiber{findex}'}
+    @property
+    def modelcodes(self):
+        return {'owner': self.owner, 'index': f'fiber{self.index}'}
 
-#     def meta(self):
-#         return {**super().meta, 'owner': owner, 'index': findex}
+    @property
+    def meta(self):
+        return {**super().meta, 'owner': self.owner, 'index': self.index}
 
-#     fiber.modelcodes = property(types.MethodType(modelcodes, fiber))
-#     fiber.meta = property(types.MethodType(meta, fiber))
-#     fiber.index = property(types.MethodType(index, fiber))
+    @classmethod
+    def initFromMeta(cls, meta, construct=False):
+        args, kwargs = cls.getMetaArgs(meta)
+        return cls(meta['owner'], meta['index'], *args, construct=construct, **kwargs)
 
-#     return fiber
 
+class ConstituentUnmyelinatedFiber(UnmyelinatedFiber):
 
-def getConstituentFiberClass(fclass, owner, index):
-    ''' Get a new fiber class with an additional index property. '''
-    class ConstituentFiber(fclass):
+    def __init__(self, owner, index, *args, **kwargs):
+        self.owner = owner
+        self.index = index
+        super().__init__(*args, **kwargs)
 
-        def __init__(self, *args, **kwargs):
-            self.owner = owner
-            self.index = index
-            super().__init__(*args, **kwargs)
+    @property
+    def modelcodes(self):
+        return {'owner': self.owner, 'index': f'fiber{self.index}'}
 
-        @property
-        def modelcodes(self):
-            return {'owner': self.owner, 'index': f'fiber{self.index}'}
+    @property
+    def meta(self):
+        return {**super().meta, 'owner': self.owner, 'index': self.index}
 
-        @property
-        def meta(self):
-            return {**super().meta, 'owner': self.owner, 'index': self.index}
-
-    ConstituentFiber.__name__ = fclass.__name__
-    return ConstituentFiber
+    @classmethod
+    def initFromMeta(cls, meta, construct=False):
+        args, kwargs = cls.getMetaArgs(meta)
+        return cls(meta['owner'], meta['index'], *args, construct=construct, **kwargs)
 
 
 class NotPopulatedError(Exception):
@@ -97,8 +99,8 @@ class NotPopulatedError(Exception):
 class Bundle:
     ''' Bundle with myelinated and unmyelinated fibers. '''
 
-    MAX_PRATIO = 0.55  # packing ratio upper limit
-    MAX_NTRIALS = 500  # maximum number of fiber placing trials
+    MAX_PRATIO = 0.6       # packing ratio upper limit
+    MAX_NTRIALS = 1e4      # maximum number of fiber placing trials
     MIN_INTERSPACE = 5e-8  # minimum space between fibers (m)
 
     def __init__(self, contours, length, fibers=None, fiberD_hists=None,
@@ -226,10 +228,12 @@ class Bundle:
         '''
         if fiberD is None:
             fiberD = self.sampleFiberDiameter(is_myelinated)
-        fclass = {True: SennFiber, False: UnmyelinatedFiber}[is_myelinated]
-        fclass = getConstituentFiberClass(fclass, self.filecode(), findex)
-        fiber = fclass(fiberD, fiberL=self.length, construct=False, **self.fiber_kwargs)
-        # fiber = getConstituentFiber(fiber, self.filecode(), findex)
+        fclass = {
+            True: ConstituentSennFiber,
+            False: ConstituentUnmyelinatedFiber
+        }[is_myelinated]
+        fiber = fclass(self.filecode(), findex, fiberD, fiberL=self.length,
+                       construct=False, **self.fiber_kwargs)
         return fiber
 
     def sampleFibers(self):
@@ -295,21 +299,21 @@ class Bundle:
         self._fibers = []
         setHandler(logger, TqdmHandler(my_log_formatter))
         pbar = tqdm(total=nfibers)
-        for i, fkernel in enumerate(self._virtual_fkernels):
+        for i, fk in enumerate(self._virtual_fkernels):
             pbar.update()
             is_overlapping = True
             count = 0
             # Repat random position assignment until a free spot is found
             while is_overlapping and count <= self.MAX_NTRIALS:
-                xyz = self.randomPosition(fkernel)
-                is_overlapping = self.isOverlapping(fkernel, xyz)
+                xyz = self.randomPosition(fk)
+                is_overlapping = self.isOverlapping(fk, xyz)
                 count += 1
             # Raise error if not spot was found after a large number of trials
             if count == self.MAX_NTRIALS + 1:
                 raise ValueError(
-                    f'could not place fiber {i + 1} (diameter = {fkernel.fiberD * 1e6:.2f} um')
+                    f'could not place fiber {i} (d = {fk.fiberD * 1e6:.2f} um) in {count} trials')
             # Append fiber to fibers list
-            self._fibers.append((fkernel, xyz))
+            self._fibers.append((fk, xyz))
         pbar.close()
 
     @property
@@ -420,14 +424,16 @@ class Bundle:
         }
 
     @classmethod
-    def getModel(cls, meta):
-        fclass, meta = getModelClassAndMeta(meta)
-        fclass = getConstituentFiberClass(fclass, meta['owner'], meta['index'])
-        return fclass.initFromMeta(meta)
+    def getFiberModel(cls, meta):
+        fclass = {
+            'senn': ConstituentSennFiber,
+            'unmyelinated': ConstituentUnmyelinatedFiber
+        }[meta['simkey']]
+        return fclass.initFromMeta(meta, construct=False)
 
     @classmethod
     def fromDict(cls, d):
-        fibers = [(cls.getModel(x[0]), x[1]) for x in d['fibers']]
+        fibers = [(cls.getFiberModel(x[0]), x[1]) for x in d['fibers']]
         return cls(d['contours'], d['length'], fibers=fibers)
 
     def toPickle(self, fpath):
@@ -461,7 +467,7 @@ class Bundle:
             :param simargs: simulation argpulsing protocol object
         '''
         def foo(meta, pos):
-            fiber = self.getModel(meta)
+            fiber = self.getFiberModel(meta)
             fiber.construct()
             out = simfunc(fiber, pos)
             fiber.clear()
