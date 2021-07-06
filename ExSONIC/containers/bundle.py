@@ -3,7 +3,7 @@
 # @Email: andy.bonnetto@epfl.ch
 # @Date:   2021-05-21 08:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-25 18:12:54
+# @Last Modified time: 2021-07-06 18:51:47
 
 import os
 from tqdm import tqdm
@@ -102,9 +102,10 @@ class Bundle:
     MAX_PRATIO = 0.6       # packing ratio upper limit
     MAX_NTRIALS = 1e4      # maximum number of fiber placing trials
     MIN_INTERSPACE = 5e-8  # minimum space between fibers (m)
+    init_keys = ['fiberD_hists', 'target_pratio', 'target_un_to_my_ratio', 'fiber_kwargs']
 
     def __init__(self, contours, length, fibers=None, fiberD_hists=None,
-                 pratio=0.3, un_to_my_ratio=2.45, **fiber_kwargs):
+                 target_pratio=0.3, target_un_to_my_ratio=2.45, **fiber_kwargs):
         ''' Initialization.
             :param contours: set of sorted 2D points describing the contour coordinates (in m)
             :param length: bundle length (m)
@@ -118,10 +119,14 @@ class Bundle:
         self.contours = contours
         self.length = length
         self.fiberD_hists = fiberD_hists
-        self.target_pratio = pratio
-        self.target_un_to_my_ratio = un_to_my_ratio
+        self.target_pratio = target_pratio
+        self.target_un_to_my_ratio = target_un_to_my_ratio
         self.fiber_kwargs = fiber_kwargs
         self.fibers = fibers
+
+    @property
+    def init_kwargs(self):
+        return {k: getattr(self, k) for k in self.init_keys}
 
     def __repr__(self):
         s = f'{self.__class__.__name__}('
@@ -349,22 +354,48 @@ class Bundle:
             f'UN:MY ratio: {nUN / nMY:.2f} ({(nUN / nMY) / self.target_un_to_my_ratio * 1e2:.2f}% of target)')
         logger.info(f'density: {self.density * 1e-6:.2f} fibers / mm^2')
 
+    def plotRefDiameterDistribution(self, ax=None):
+        if ax is None:
+            fig, ax = plt.subplots()
+            for sk in ['top', 'right']:
+                ax.spines[sk].set_visible(False)
+            ax.set_title('reference diameter distributions per fiber type')
+            ax.set_xlabel('diameter (um)')
+            ax.set_ylabel('probability (%)')
+        else:
+            fig = None
+        for k, (heights, edges) in self.fiberD_hists.items():
+            fc = {'MY': 'C1', 'UN': 'C0'}[k]
+            width = (edges[1] - edges[0]) * 1e6
+            midpoints = (edges[1:] + edges[:-1]) / 2 * 1e6
+            ax.bar(midpoints, heights, width, fc=fc, ec='none', alpha=0.7, label=k)
+            ax.bar(midpoints, heights, width, fc='none', ec='k')
+        if fig is not None:
+            ax.legend(frameon=False)
+        return fig
+
     def plotDiameterDistribution(self, ax=None):
         if ax is None:
             fig, ax = plt.subplots()
             for sk in ['top', 'right']:
                 ax.spines[sk].set_visible(False)
-            ax.set_title('diameter distribution')
+            ax.set_title('sampled diameter distributions per fiber type')
             ax.set_xlabel('diameter (um)')
             ax.set_ylabel('frequency')
         else:
             fig = None
         is_myelinated = np.array([fk[0].is_myelinated for fk in self.fibers])
         fiberDs = np.array([fk[0].fiberD for fk in self.fibers])
+        # bin_interval = 0.5  # um
+        # bins = np.arange(0., np.ceil(fiberDs.max() * 1e6), bin_interval) + bin_interval
         for b in [False, True]:
             valid_fibers = is_myelinated == b
             k = {True: 'MY', False: 'UN'}[b]
-            ax.hist(fiberDs[valid_fibers] * 1e6, label=f'{k} (n = {sum(valid_fibers)})', bins=50)
+            fc = {'MY': 'C1', 'UN': 'C0'}[k]
+            lbl = f'{k} (n = {sum(valid_fibers)})'
+            bins = self.fiberD_hists[k][1] * 1e6
+            ax.hist(fiberDs[valid_fibers] * 1e6, bins=bins, fc=fc, ec='none', alpha=0.7, label=lbl)
+            ax.hist(fiberDs[valid_fibers] * 1e6, bins=bins, fc='none', ec='k')
         if fig is not None:
             ax.legend(frameon=False)
         return fig
@@ -392,7 +423,8 @@ class Bundle:
                 ylist.append(y)
                 zlist.append(z)
             ax.scatter(y, z, c='y', marker='')
-        ax.add_patch(Polygon(self.contours * factor, closed=True, fill=False, color='k'))
+        ax.add_patch(Polygon(self.contours * factor, closed=True, fc='none', ec='k'))
+        ax.add_patch(Polygon(self.contours * factor, closed=True, ec='none', fc='g', alpha=0.1))
         return fig
 
     def plotLongitudinalOffsets(self, unit='um', ax=None):
@@ -410,8 +442,11 @@ class Bundle:
             'UN': np.array([x[1][0] for x in self.unmyelinated_fibers]),
             'MY': np.array([x[1][0] for x in self.myelinated_fibers])
         }
+        bins = np.linspace(-500., 500., 100)
         for k, data in xpositions.items():
-            ax.hist(data * factor, label=k, bins=50, alpha=0.7)
+            fc = {'UN': 'C0', 'MY': 'C1'}[k]
+            ax.hist(data * factor, label=f'{k} (n = {len(data)})', bins=bins, fc=fc, alpha=0.7)
+            ax.hist(data * factor, bins=bins, ec='k', fc='none')
         if fig is not None:
             ax.legend(frameon=False)
         return fig
@@ -420,7 +455,8 @@ class Bundle:
         return {
             'contours': self.contours,
             'length': self.length,
-            'fibers': [(x[0].meta, x[1]) for x in self.fibers]
+            'fibers': [(x[0].meta, x[1]) for x in self.fibers],
+            **self.init_kwargs
         }
 
     @classmethod
@@ -434,7 +470,8 @@ class Bundle:
     @classmethod
     def fromDict(cls, d):
         fibers = [(cls.getFiberModel(x[0]), x[1]) for x in d['fibers']]
-        return cls(d['contours'], d['length'], fibers=fibers)
+        init_kwargs = {k: d[k] for k in cls.init_keys}
+        return cls(d['contours'], d['length'], fibers=fibers, **init_kwargs)
 
     def toPickle(self, fpath):
         with open(fpath, 'wb') as fh:

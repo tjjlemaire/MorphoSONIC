@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2021-06-21 15:52:03
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-21 22:54:38
+# @Last Modified time: 2021-06-27 17:49:00
 
 import matplotlib.pyplot as plt
 from matplotlib.path import Path
@@ -55,7 +55,8 @@ class Nerve(Bundle):
         ax.set_aspect(1.)
         for k, v in self.fascicles.items():
             v.plotCrossSection(ax=ax, unit=unit)
-        ax.add_patch(Polygon(self.contours * factor, closed=True, fill=False, color='k'))
+        ax.add_patch(Polygon(self.contours * factor, closed=True, fc='none', ec='k'))
+        ax.add_patch(Polygon(self.contours * factor, closed=True, ec='none', fc='gray', alpha=0.1))
         return fig
 
     def toDict(self):
