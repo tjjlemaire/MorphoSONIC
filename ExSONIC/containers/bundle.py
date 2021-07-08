@@ -3,7 +3,7 @@
 # @Email: andy.bonnetto@epfl.ch
 # @Date:   2021-05-21 08:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-07-06 18:51:47
+# @Last Modified time: 2021-07-08 11:14:36
 
 import os
 from tqdm import tqdm
@@ -354,6 +354,52 @@ class Bundle:
             f'UN:MY ratio: {nUN / nMY:.2f} ({(nUN / nMY) / self.target_un_to_my_ratio * 1e2:.2f}% of target)')
         logger.info(f'density: {self.density * 1e-6:.2f} fibers / mm^2')
 
+    def toDict(self):
+        return {
+            'contours': self.contours,
+            'length': self.length,
+            'fibers': [(x[0].meta, x[1]) for x in self.fibers],
+            **self.init_kwargs
+        }
+
+    @classmethod
+    def getFiberModel(cls, meta):
+        fclass = {
+            'senn': ConstituentSennFiber,
+            'unmyelinated': ConstituentUnmyelinatedFiber
+        }[meta['simkey']]
+        return fclass.initFromMeta(meta, construct=False)
+
+    @classmethod
+    def fromDict(cls, d):
+        fibers = [(cls.getFiberModel(x[0]), x[1]) for x in d['fibers']]
+        init_kwargs = {k: d[k] for k in cls.init_keys}
+        return cls(d['contours'], d['length'], fibers=fibers, **init_kwargs)
+
+    def toPickle(self, fpath):
+        with open(fpath, 'wb') as fh:
+            pickle.dump(self.toDict(), fh)
+
+    @classmethod
+    def fromPickle(cls, fpath):
+        with open(fpath, 'rb') as fh:
+            d = pickle.load(fh)
+        return cls.fromDict(d)
+
+    @classmethod
+    def get(cls, *args, root='.', **kwargs):
+        bundle = cls(*args, **kwargs)
+        fname = f'{bundle.filecode()}.pkl'
+        fpath = os.path.join(root, fname)
+        if os.path.isfile(fpath):
+            logger.info(f'Loading bundle from "{fname}"')
+            bundle = cls.fromPickle(fpath)
+        else:
+            bundle.populate()
+            logger.info(f'Saving bundle to "{fname}"')
+            bundle.toPickle(fpath)
+        return bundle
+
     def plotRefDiameterDistribution(self, ax=None):
         if ax is None:
             fig, ax = plt.subplots()
@@ -451,52 +497,6 @@ class Bundle:
             ax.legend(frameon=False)
         return fig
 
-    def toDict(self):
-        return {
-            'contours': self.contours,
-            'length': self.length,
-            'fibers': [(x[0].meta, x[1]) for x in self.fibers],
-            **self.init_kwargs
-        }
-
-    @classmethod
-    def getFiberModel(cls, meta):
-        fclass = {
-            'senn': ConstituentSennFiber,
-            'unmyelinated': ConstituentUnmyelinatedFiber
-        }[meta['simkey']]
-        return fclass.initFromMeta(meta, construct=False)
-
-    @classmethod
-    def fromDict(cls, d):
-        fibers = [(cls.getFiberModel(x[0]), x[1]) for x in d['fibers']]
-        init_kwargs = {k: d[k] for k in cls.init_keys}
-        return cls(d['contours'], d['length'], fibers=fibers, **init_kwargs)
-
-    def toPickle(self, fpath):
-        with open(fpath, 'wb') as fh:
-            pickle.dump(self.toDict(), fh)
-
-    @classmethod
-    def fromPickle(cls, fpath):
-        with open(fpath, 'rb') as fh:
-            d = pickle.load(fh)
-        return cls.fromDict(d)
-
-    @classmethod
-    def get(cls, *args, root='.', **kwargs):
-        bundle = cls(*args, **kwargs)
-        fname = f'{bundle.filecode()}.pkl'
-        fpath = os.path.join(root, fname)
-        if os.path.isfile(fpath):
-            logger.info(f'Loading bundle from "{fname}"')
-            bundle = cls.fromPickle(fpath)
-        else:
-            bundle.populate()
-            logger.info(f'Saving bundle to "{fname}"')
-            bundle.toPickle(fpath)
-        return bundle
-
     def forall(self, simfunc, mpi=False):
         ''' Apply function to each constituent fiber.
 
@@ -513,7 +513,7 @@ class Bundle:
         batch = Batch(foo, queue)
         return batch.run(loglevel=logger.getEffectiveLevel(), mpi=mpi)
 
-    def rasterPlot(self, fpaths):
+    def plotSpikeRaster(self, fpaths):
         fig, ax = plt.subplots()
         ax.set_xlabel('time (ms)')
         ax.set_ylabel('fiber index')
@@ -524,4 +524,29 @@ class Bundle:
             c = {True: 'C1', False: 'C0'}[fk.is_myelinated]
             if tspikes is not None:
                 ax.vlines(tspikes * 1e3, i, i + 1, colors=c)
+        return fig
+
+    def plotFiringRateDistribution(self, fr_data, ax=None):
+        if ax is None:
+            fig, ax = plt.subplots()
+            for sk in ['top', 'right']:
+                ax.spines[sk].set_visible(False)
+            ax.set_title('firing rate distributions per fiber type')
+            ax.set_xlabel('diameter (um)')
+            ax.set_ylabel('frequency')
+        else:
+            fig = None
+        # fr_data = {k: [] for k in ['MY', 'UN']}
+        # for i, ((fk, _), fpath) in enumerate(zip(self.fibers[::-1], fpaths)):
+        #     k = {True: 'MY', False: 'UN'}[fk.is_myelinated]
+        #     data, _ = loadData(fpath)
+        #     fr_data[k].append(fk.getEndFiringRate(data))
+        # fr_data = {k: np.array(v) for k, v in fr_data.items()}
+        bins = 50
+        for k, v in fr_data.items():
+            c = {'MY': 'C1', 'UN': 'C0'}[k]
+            ax.hist(v, bins=bins, fc=c, ec='none', label=f'{k} (n = {len(v)})', alpha=0.7)
+            ax.hist(v, bins=bins, fc='none', ec='k')
+        if fig is not None:
+            ax.legend(frameon=False)
         return fig
