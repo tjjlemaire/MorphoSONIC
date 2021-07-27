@@ -3,14 +3,14 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2017-02-13 18:16:09
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-14 17:08:33
+# @Last Modified time: 2021-07-27 17:46:49
 
 ''' Run A-STIM simulations of a specific point-neuron. '''
 
 from PySONIC.core import Batch, NeuronalBilayerSonophore
 from PySONIC.utils import logger
 from PySONIC.parsers import AStimParser
-from ExSONIC.models import Node
+from MorphoSONIC.models import Node
 
 
 def main():

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-14 16:28:51
+# @Last Modified time: 2021-07-27 17:45:43
 
 import logging
 import matplotlib.pyplot as plt
@@ -11,9 +11,9 @@ import matplotlib.pyplot as plt
 from PySONIC.core import PulsedProtocol, BalancedPulsedProtocol
 from PySONIC.utils import logger
 
-from ExSONIC.models import SennFiber
-from ExSONIC.sources import *
-from ExSONIC.plt import SectionCompTimeSeries
+from MorphoSONIC.models import SennFiber
+from MorphoSONIC.sources import *
+from MorphoSONIC.plt import SectionCompTimeSeries
 
 # Set logging level
 logger.setLevel(logging.INFO)

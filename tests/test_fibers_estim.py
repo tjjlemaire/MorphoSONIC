@@ -3,17 +3,17 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-14 16:54:01
+# @Last Modified time: 2021-07-27 17:46:57
 
 import numpy as np
 
 from PySONIC.core import PulsedProtocol
 from PySONIC.utils import logger, si_format
-from ExSONIC.core import *
-from ExSONIC.models import *
-from ExSONIC.test import TestFiber
-from ExSONIC.plt import SectionCompTimeSeries, strengthDurationCurve, plotFieldDistribution
-from ExSONIC.utils import chronaxie
+from MorphoSONIC.core import *
+from MorphoSONIC.models import *
+from MorphoSONIC.test import TestFiber
+from MorphoSONIC.plt import SectionCompTimeSeries, strengthDurationCurve, plotFieldDistribution
+from MorphoSONIC.utils import chronaxie
 
 
 class TestFiberEstim(TestFiber):

@@ -3,13 +3,13 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-03-18 18:06:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-02-19 14:37:55
+# @Last Modified time: 2021-07-27 17:46:05
 
 import os
 
 from PySONIC.utils import logger
 from PySONIC.parsers import Parser
-from ExSONIC.core import NmodlTranslator
+from MorphoSONIC.core import NmodlTranslator
 
 
 def main():

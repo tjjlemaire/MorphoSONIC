@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-01-13 19:51:33
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-05-03 11:36:19
+# @Last Modified time: 2021-07-27 17:47:02
 
 import logging
 
@@ -12,11 +12,11 @@ from PySONIC.neurons import getPointNeuron
 from PySONIC.test import TestBase
 from PySONIC.utils import logger
 
-from ExSONIC.plt import SectionCompTimeSeries, SectionGroupedTimeSeries
-from ExSONIC.core.node import Node, DrivenNode
-from ExSONIC.core.synapses import Exp2Synapse, FExp2Synapse, FDExp2Synapse
-from ExSONIC.core.network import NodeCollection, NodeNetwork
-from ExSONIC.parsers import TestNodeNetworkParser
+from MorphoSONIC.plt import SectionCompTimeSeries, SectionGroupedTimeSeries
+from MorphoSONIC.core.node import Node, DrivenNode
+from MorphoSONIC.core.synapses import Exp2Synapse, FExp2Synapse, FDExp2Synapse
+from MorphoSONIC.core.network import NodeCollection, NodeNetwork
+from MorphoSONIC.parsers import TestNodeNetworkParser
 
 ''' Create and simulate a small network of nodes. '''
 

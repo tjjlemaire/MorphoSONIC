@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-15 20:33:57
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-05-09 19:55:01
+# @Last Modified time: 2021-07-27 17:46:52
 
 ''' Run simulations of an SENN fiber model with a specific point-neuron mechanism
     upon extracellular electrical stimulation. '''
@@ -11,8 +11,8 @@
 from PySONIC.core import Batch, PointNeuron
 from PySONIC.utils import logger
 from PySONIC.parsers import EStimParser
-from ExSONIC.core import ExtracellularCurrent
-from ExSONIC.parsers import IextraFiberParser
+from MorphoSONIC.core import ExtracellularCurrent
+from MorphoSONIC.parsers import IextraFiberParser
 
 
 def main():

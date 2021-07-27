@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-01-17 11:59:50
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-05 17:36:33
+# @Last Modified time: 2021-07-27 17:47:07
 
 import logging
 import numpy as np
@@ -14,9 +14,9 @@ from PySONIC.utils import logger
 from PySONIC.neurons import getPointNeuron
 from PySONIC.core import PulsedProtocol
 
-from ExSONIC.core.synapses import *
-from ExSONIC.core.node import Node
-from ExSONIC.constants import *
+from MorphoSONIC.core.synapses import *
+from MorphoSONIC.core.node import Node
+from MorphoSONIC.constants import *
 
 logger.setLevel(logging.INFO)
 

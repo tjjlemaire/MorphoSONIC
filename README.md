@@ -1,8 +1,8 @@
 # Description
 
-`ExSONIC` is a Python+NEURON implementation of **spatially extended representations** of the **multi-Scale Optimized Neuronal Intramembrane Cavitation (SONIC) model [1]** to simulate the distributed electrical response of morphologically realistic neuron representations to acoustic stimuli, as predicted by the *intramembrane cavitation* hypothesis.
+`MorphoSONIC` is a Python+NEURON implementation of **spatially extended representations** of the **multi-Scale Optimized Neuronal Intramembrane Cavitation (SONIC) model [1]** to simulate the distributed electrical response of morphologically realistic neuron representations to acoustic stimuli, as predicted by the *intramembrane cavitation* hypothesis.
 
-This package expands features from the `PySONIC` package (https://c4science.ch/diffusion/4670/browse/master/PySONIC/).
+This package expands features from the `PySONIC` package (https://github.com/tjjlemaire/PySONIC).
 
 ## Content of repository
 
@@ -137,10 +137,10 @@ python
 
 ## PySONIC package
 
-- Download the PySONIC package (https://c4science.ch/diffusion/4670/browse/master/PySONIC/)
+- Download the PySONIC package (https://github.com/tjjlemaire/PySONIC)
 - Follow installation instruction written in the README file
 
-## ExSONIC package
+## MorphoSONIC package
 
 - Open a terminal.
 - Activate a Python3 environment if needed, e.g. on the tnesrv5 machine: `source /opt/apps/anaconda3/bin activate`
@@ -156,7 +156,7 @@ In order to use the package, you will need to compile a specific set of equation
 
 - In the folder named `NEURON 7.x x86_64` on your Desktop, run the `mknrndll` executable.
 
-- In the displayed window, select the directory containing the source files for the membrane mechanisms: *.../exsonic/ExSONIC/nmodl/*
+- In the displayed window, select the directory containing the source files for the membrane mechanisms: *.../MorphoSONIC/MorphoSONIC/nmodl/*
 
 - Click on "make nrnmech.dll"
 
@@ -166,7 +166,7 @@ In order to use the package, you will need to compile a specific set of equation
 
 - Open a terminal window and move to the directory containing the source files for the membrane mechanisms:
 
-```cd <path_to_exsonic_package/ExSONIC/nmodl/```
+```cd <path_to_MorphoSONIC_package/MorphoSONIC/nmodl/```
 
 - Run the *nrnivmodl* executable:
 
@@ -184,7 +184,7 @@ You can easily run simulations of any implemented point-neuron model under both 
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-14 11:40:11
+# @Last Modified time: 2021-07-27 17:45:54
 
 import logging
 import matplotlib.pyplot as plt
@@ -193,7 +193,7 @@ from PySONIC.core import PulsedProtocol, ElectricDrive, AcousticDrive
 from PySONIC.neurons import getPointNeuron
 from PySONIC.utils import logger
 from PySONIC.plt import GroupedTimeSeries
-from ExSONIC.models import Node
+from MorphoSONIC.models import Node
 
 # Set logging level
 logger.setLevel(logging.INFO)
@@ -239,7 +239,7 @@ Similarly, you can run simulations of myelinated and unmyelinated fiber models u
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-03-31 13:56:36
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-14 16:28:51
+# @Last Modified time: 2021-07-27 17:45:43
 
 import logging
 import matplotlib.pyplot as plt
@@ -247,9 +247,9 @@ import matplotlib.pyplot as plt
 from PySONIC.core import PulsedProtocol, BalancedPulsedProtocol
 from PySONIC.utils import logger
 
-from ExSONIC.models import SennFiber
-from ExSONIC.sources import *
-from ExSONIC.plt import SectionCompTimeSeries
+from MorphoSONIC.models import SennFiber
+from MorphoSONIC.sources import *
+from MorphoSONIC.plt import SectionCompTimeSeries
 
 # Set logging level
 logger.setLevel(logging.INFO)

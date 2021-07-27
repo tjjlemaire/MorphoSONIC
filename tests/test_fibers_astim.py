@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 19:30:19
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-14 16:59:50
+# @Last Modified time: 2021-07-27 17:46:37
 
 import os
 import numpy as np
@@ -12,11 +12,11 @@ import matplotlib.pyplot as plt
 from PySONIC.core import PulsedProtocol
 from PySONIC.utils import logger, si_format
 from PySONIC.plt import GroupedTimeSeries
-from ExSONIC.test import TestFiber
-from ExSONIC.models import SennFiber, UnmyelinatedFiber, MRGFiber, mrg_lkp
-from ExSONIC.sources import *
-from ExSONIC.plt import SectionCompTimeSeries, plotFieldDistribution, plotPassiveCurrents
-from ExSONIC.constants import MIN_FIBERL_FWHM_RATIO
+from MorphoSONIC.test import TestFiber
+from MorphoSONIC.models import SennFiber, UnmyelinatedFiber, MRGFiber, mrg_lkp
+from MorphoSONIC.sources import *
+from MorphoSONIC.plt import SectionCompTimeSeries, plotFieldDistribution, plotPassiveCurrents
+from MorphoSONIC.constants import MIN_FIBERL_FWHM_RATIO
 
 
 class TestFiberAstim(TestFiber):

@@ -3,14 +3,14 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2020-06-23 12:39:06
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-24 11:40:10
+# @Last Modified time: 2021-07-27 17:46:46
 
 import logging
 import matplotlib.pyplot as plt
 from PySONIC.utils import logger
 from PySONIC.core import PulsedProtocol, AcousticDrive
 from PySONIC.neurons import getPointNeuron
-from ExSONIC.plt import plotTimeseries0Dvs1D
+from MorphoSONIC.plt import plotTimeseries0Dvs1D
 
 logger.setLevel(logging.INFO)
 

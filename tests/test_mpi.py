@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2021-06-16 11:36:32
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-16 12:56:09
+# @Last Modified time: 2021-07-27 17:46:58
 
 import logging
 import numpy as np
@@ -12,9 +12,9 @@ from argparse import ArgumentParser
 
 from PySONIC.core import Batch, getPulseTrainProtocol
 from PySONIC.utils import logger
-from ExSONIC.models import SennFiber
-from ExSONIC.sources import GaussianAcousticSource
-from ExSONIC.plt import SectionCompTimeSeries
+from MorphoSONIC.models import SennFiber
+from MorphoSONIC.sources import GaussianAcousticSource
+from MorphoSONIC.plt import SectionCompTimeSeries
 
 ''' Small script showcasing multiprocessing possibilities for Python+NEURON simulations. '''
 

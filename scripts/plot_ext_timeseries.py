@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-19 07:03:20
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-06-22 15:14:47
+# @Last Modified time: 2021-07-27 17:46:55
 
 ''' Plot section-specific temporal profiles of specific simulation output variables
     for spatially-extended models. '''
@@ -11,8 +11,8 @@
 import matplotlib.pyplot as plt
 
 from PySONIC.utils import logger, loadData
-from ExSONIC.plt import SectionCompTimeSeries, SectionGroupedTimeSeries
-from ExSONIC.parsers import SpatiallyExtendedTimeSeriesParser
+from MorphoSONIC.plt import SectionCompTimeSeries, SectionGroupedTimeSeries
+from MorphoSONIC.parsers import SpatiallyExtendedTimeSeriesParser
 
 
 def main():

@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-09-27 14:28:52
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-06-24 12:00:13
+# @Last Modified time: 2021-07-27 17:46:54
 
 ''' Run simulations of an SENN SONIC fiber model with a specific point-neuron mechanism
     upon ultrasound stimulation at one onde. '''
@@ -11,8 +11,8 @@
 from PySONIC.core import Batch, NeuronalBilayerSonophore
 from PySONIC.utils import logger
 from PySONIC.parsers import AStimParser
-from ExSONIC.core import SectionAcousticSource
-from ExSONIC.parsers import SectionAStimFiberParser
+from MorphoSONIC.core import SectionAcousticSource
+from MorphoSONIC.parsers import SectionAStimFiberParser
 
 
 def main():

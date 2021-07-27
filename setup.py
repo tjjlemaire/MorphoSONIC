@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-06-04 18:26:42
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2020-04-21 11:50:10
+# @Last Modified time: 2021-07-27 17:53:23
 # -*- coding: utf-8 -*-
 # @Author: Theo Lemaire
 # @Date:   2017-06-13 09:40:02
@@ -43,11 +43,11 @@ def getFiles(path):
 
 
 setup(
-    name='ExSONIC',
+    name='MorphoSONIC',
     version='1.0',
     description=description(),
     long_description=readme(),
-    url='https://c4science.ch/diffusion/7145/',
+    url='https://github.com/tjjlemaire/MorphoSONIC',
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Science/Research',
@@ -60,7 +60,7 @@ setup(
     author='Théo Lemaire',
     author_email='theo.lemaire@epfl.ch',
     license='MIT',
-    packages=['ExSONIC'],
+    packages=['MorphoSONIC'],
     scripts=getFiles('scripts') + getFiles('tests') + getFiles('examples'),
     install_requires=[
         'numpy>=1.10',
