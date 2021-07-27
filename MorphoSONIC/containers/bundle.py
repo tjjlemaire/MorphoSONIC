@@ -3,7 +3,7 @@
 # @Email: andy.bonnetto@epfl.ch
 # @Date:   2021-05-21 08:30
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2021-07-08 11:14:36
+# @Last Modified time: 2021-07-27 18:55:11
 
 import os
 from tqdm import tqdm
@@ -532,21 +532,13 @@ class Bundle:
             for sk in ['top', 'right']:
                 ax.spines[sk].set_visible(False)
             ax.set_title('firing rate distributions per fiber type')
-            ax.set_xlabel('diameter (um)')
-            ax.set_ylabel('frequency')
+            ax.set_ylabel('firing rate (Hz)')
         else:
             fig = None
-        # fr_data = {k: [] for k in ['MY', 'UN']}
-        # for i, ((fk, _), fpath) in enumerate(zip(self.fibers[::-1], fpaths)):
-        #     k = {True: 'MY', False: 'UN'}[fk.is_myelinated]
-        #     data, _ = loadData(fpath)
-        #     fr_data[k].append(fk.getEndFiringRate(data))
-        # fr_data = {k: np.array(v) for k, v in fr_data.items()}
-        bins = 50
-        for k, v in fr_data.items():
-            c = {'MY': 'C1', 'UN': 'C0'}[k]
-            ax.hist(v, bins=bins, fc=c, ec='none', label=f'{k} (n = {len(v)})', alpha=0.7)
-            ax.hist(v, bins=bins, fc='none', ec='k')
+        means = [np.mean(fr) for fr in fr_data.values()]
+        stds = [np.std(fr) for fr in fr_data.values()]
+        colors = ['C1', 'C0']
+        ax.bar([1, 2], means, yerr=stds, align='center', color=colors, ec='k', capsize=10)
         if fig is not None:
             ax.legend(frameon=False)
         return fig
