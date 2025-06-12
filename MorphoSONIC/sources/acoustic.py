@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2023-04-04 13:01:23
+# @Last Modified time: 2025-06-12 14:35:39
 
 import numpy as np
 
@@ -138,7 +138,7 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
     '''
 
     conv_factor = 1e0
-    source_density = 217e6  # points/m2
+    λp_ratio = 5  # λ/pitch ratio 
     min_focus = 1e-4    # m
     MAX_COMBS = int(2e7)  # max number of source-target combinations for DPSM computations
 
@@ -220,11 +220,16 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
             value = self.checkFloat('u', value)
             self.checkPositiveOrNull('u', value)
         self._u = value
+    
+    @property
+    def λ(self):
+        ''' Wavelength in the medium (m) '''
+        return self.c / self.f
 
     @property
     def kf(self):
         ''' Angular wave number. '''
-        return 2 * np.pi * self.f / self.c
+        return 2 * np.pi / self.λ
 
     @property
     def xvar(self):
@@ -282,7 +287,7 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
     def getFocalDistance(self):
         ''' Get transducer focal distance, according to the equation of the normal axis amplitude.
         '''
-        d = self.f * self.r**2 / self.c - self.c / (4 * self.f)
+        d = self.r**2 / self.λ - self.λ / 4
         return max(d, self.min_focus)
 
     def getFocalWidth(self, xmax, n):
@@ -311,9 +316,30 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
         ''' Transducer surface area. '''
         return np.pi * self.r**2
     
+    def source_pitch(self, λp_ratio=None):
+        '''
+        Compute source pitch for a given λ/pitch ratio
+        
+        :param λp_ratio: λ/pitch ratio (default: self.λp_ratio)
+        :return: source pitch (m)
+        '''
+        if λp_ratio is None:
+            λp_ratio = self.λp_ratio
+        return self.λ / λp_ratio
+    
+    def source_density(self, **kwargs):
+        ''' 
+        Compute approximate source density based on the transducer area and source pitch.
+        
+        :param kwargs: keyword arguments passed to the source_pitch method
+        :return: source density (sources/m^2)
+        '''        
+        p = self.source_pitch(**kwargs)  # source pitch (m)
+        return 1 / p**2
+    
     def get_default_nsources(self):
-        ''' Get number of point sources based on radiating surface area and defautl source density '''
-        return int(np.ceil(self.source_density * self.area()))
+        ''' Get number of point sources based on radiating surface area and default source density '''
+        return int(np.ceil(self.source_density() * self.area()))
 
     def relNormalAxisAmp(self, z):
         ''' Compute the relative acoustic amplitude at a given coordinate along
@@ -505,7 +531,7 @@ class RingTransducerSource(PlanarDiskTransducerSource):
     @din.setter
     def din(self, value):
         value = self.checkFloat('din', value)
-        self.checkStrictlyPositive('din', value)
+        self.checkPositiveOrNull('din', value)
         self._din = value
     
     @property
@@ -518,6 +544,11 @@ class RingTransducerSource(PlanarDiskTransducerSource):
         self.checkStrictlyPositive('dout', value)
         self.checkStrictlyPositive('dout - din', value - self.din)
         self._dout = value
+    
+    @property
+    def r(self):
+        ''' Transducer radius is defined as the outer radius. '''
+        return self.dout / 2
 
     @staticmethod
     def inputs():
@@ -553,7 +584,7 @@ class RingTransducerSource(PlanarDiskTransducerSource):
             :param d: type of point sources distribution used
         '''
         if m is None:
-            m = int(np.ceil(self.source_density * self.outer_area()))
+            m = int(np.ceil(self.source_density() * self.outer_area()))
         x, y = getCircle2DGrid(self.dout / 2, m, d)
         isvalid = y**2 > self.din**2 / 4 - x**2
         return x[isvalid], y[isvalid]
