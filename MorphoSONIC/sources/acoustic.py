@@ -3,7 +3,7 @@
 # @Email: theo.lemaire@epfl.ch
 # @Date:   2019-08-23 09:43:18
 # @Last Modified by:   Theo Lemaire
-# @Last Modified time: 2025-06-12 14:35:39
+# @Last Modified time: 2025-06-14 16:56:00
 
 import numpy as np
 
@@ -372,23 +372,29 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
             m = self.get_default_nsources()
         return getCircle2DGrid(self.r, m, d)
 
-    def getAcousticPressure(self, dmat):
+    def getAcousticPressure(self, dmat, rel_amps=None, phi=None):
         ''' Compute the complex acoustic pressure field using the Rayleigh-Sommerfeld integral,
             given a source-target distance matrix.
 
             :param d: (nsource x ntargets) distance matrix
+            :param rel_amps (optional): optional relative amplitudes to apply to the sources (default: None)
             :return complex acoustic pressure
         '''
-        ds = self.area() / dmat.shape[0]  # surface associated at each point source
+        nsources, _ = dmat.shape
+        ds = self.area() / nsources       # surface associated at each point source
         j = complex(0, 1)                 # imaginary number
+        if rel_amps is None:
+            rel_amps = np.ones(nsources)
+        if phi is None:
+            phi = np.zeros(nsources)
         # Compute complex exponentials matrix
-        expmat = np.exp(j * self.kf * dmat) / dmat
-        # Sum along source dimension
+        expmat = rel_amps[:, np.newaxis] * np.exp(j * (self.kf * dmat + phi[:, np.newaxis])) / dmat
+        # Sum along source dimension and normalize by the surface associated at each point source
         expsum = np.sum(expmat, axis=0)
         # Return RSI output
         return -j * self.rho * self.f * ds * self.u * expsum
 
-    def DPSM_serialized(self, x, y, z, subcall=False, **kwargs):
+    def DPSM_serialized(self, x, y, z, xs, ys, subcall=False, **kwargs):
         ''' Compute acoustic amplitude the points (x,z), given the distribution of
             point sources used to approximate the transducer. It follows the
             Distributed Point Source Method (DPSM) from Yamada 2009 (eq. 15).
@@ -396,15 +402,14 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
             :param x: x coordinate of the point(s) for which compute the acoustic amplitude (m)
             :param y: y coordinate of the point(s) for which compute the acoustic amplitude (m)
             :param z: z coordinate of the point(s) for which compute the acoustic amplitude (m)
+            :param xs: x coordinates of the point sources (m)
+            :param ys: y coordinates of the point sources (m)
             :param m: number of point sources used
             :return: vector of complex acoustic amplitudes
         '''
         x, y, z = [np.atleast_1d(xx) for xx in [x, y, z]]
         if not x.size == y.size == z.size:
             raise ValueError('position vectors differ in size')
-
-        # Get point sources
-        xs, ys = self.getXYSources(**kwargs)
 
         # Ultimately system size is determined by number of source-target combinations
         npoints = x.size
@@ -436,7 +441,7 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
             queue = []
             for i in range(nslices):
                 inds = slice(i * nperslice, min((i + 1) * nperslice, npoints))
-                queue.append([i, inds, x[inds], y[inds], z[inds]])
+                queue.append([i, inds, x[inds], y[inds], z[inds], xs, ys])
             queue = [(x, kwargs) for x in queue]
             batch = Batch(runSlice, queue)
             return np.hstack(batch.run(mpi=True, loglevel=logger.getEffectiveLevel()))
@@ -448,19 +453,25 @@ class PlanarDiskTransducerSource(ExtracellularSource, AcousticSource):
         dmat = np.sqrt((XS - X)**2 + (YS - Y)**2 + (ZS - Z)**2)
 
         # Return complex acoustic pressure
-        return self.getAcousticPressure(dmat)
+        return self.getAcousticPressure(dmat, **kwargs)
 
-    def DPSM(self, x, y, z, **kwargs):
+    def DPSM(self, x, y, z, xysources=None, **kwargs):
         ''' Compute acoustic amplitude field for a collection of x, y and z coordinates.
 
             :param x: x-coordinates (m)
             :param y: y-coordinates (m)
             :param z: z-coordinates (m)
+            :param xysources: optional tuple of (xs, ys) coordinates of the point sources
+            :param kwargs: additional keyword arguments passed to DPSM_serialized (only used if xysources is None)
             :return: matrix of complex acoustic pressures
         '''
+        # Get point sources
+        if xysources is None:
+            xysources = self.getXYSources()
+        xs, ys = xysources
         x, y, z = [np.atleast_1d(xx) for xx in [x, y, z]]
         X, Y, Z = np.meshgrid(x, y, z)
-        Pac = self.DPSM_serialized(X.flatten(), Y.flatten(), Z.flatten(), **kwargs)
+        Pac = self.DPSM_serialized(X.flatten(), Y.flatten(), Z.flatten(), xs, ys, **kwargs)
         return np.squeeze(np.reshape(Pac, (x.size, y.size, z.size)))
 
     def DPSM_amps(self, *args, **kwargs):
